@@ -1,0 +1,5145 @@
+{
+  "loginHeading": "Finac Login",
+  "loginDescription": "Enter your credentials below to login to your account.",
+  "loginBtn": "Login",
+  "FromDate": "From Date",
+  "ToDate": "To Date",
+  "slno": "Customer Code",
+  "logoutBtn": "Logout",
+  "printAsPdfTitle":"Print as PDF",
+  "username": "Username",
+  "password": "Password",
+  "rememberMe": "Remember Me",
+  "showPassword": "Show Password",
+  "hidePassword": "Hide Password",
+  "listBtnTitle": "Go to List",
+  "searchBarPlaceholder": "Search Menus...",
+  "notfound": "Data not found",
+  "approveBtn": "Approve",
+  "ConfirmSaveTitle": "Confirm Save",
+  "ConfirmUpdateTitle": "Confirm Update",
+  "ConfirmCloseTitle": "Are you sure?",
+  "ConfirmSaveText": "Are you sure you want to save this record?",
+  "ConfirmUpdateText": "Are you sure you want to update this record?",
+  "ConfirmCloseText": "Any unsaved changes will be lost.",
+  "YesSave": "Yes, Save",
+  "YesUpdate": "Yes, Update",
+  "YesClose": "Yes, close",
+  "Cancel": "Cancel",
+  "SideBarHeading": "Finac ERP",
+  "submitBtn": "Save",
+  "loadingText": "Loading...",
+  "loadingDesc": "Please wait while we process your request.",
+  "updating": "Updating...",
+  "updateBtn": "Update",
+  "printBtn": "Print",
+  "printBarcode": "Print Barcode Labels",
+  "selectPrinter": "Select Printer",
+  "numberOfCopies": "Number of Copies",
+  "labelSize": "Label Size",
+  "noPrintersFound": "No printers found",
+  "printerFetchError": "Failed to fetch printers",
+  "noBarcodeData": "No barcode data available to print",
+  "printing": "Printing...",
+  "printError": "Failed to print barcode",
+  "noPrinters": "No printers available",
+  "choosePrinter": "Choose a printer...",
+  "barcodes": "Barcodes",
+  "printingOnA4": "All barcodes will be printed on a single A4 page (2×3 grid layout)",
+  "code": "Code",
+  "cancelBtn": "Cancel",
+  "deleteBtn": "Delete",
+  "createNewBtn": "Create New",
+  "search": "Search...",
+  "noImage": "No Image",
+  "deleteSuccess": "Deleted Successfully",
+  "updateSuccess": "Updated Successfully",
+  "DefaultDataMsg": "Default data cannot be deleted",
+  "saveSuccess": "Saved Successfully",
+  "ValidationError": "Validation Error",
+  "deleteError": "Error Deleting Record",
+  "requiredFieldsError": "This field is required",
+  "pleaseFillRequiredFieldMsg": "Please fill required fields or Fix the validation errors",
+  "updateError": "Error Updating Record",
+  "noPermission": "No Permission to Access this Page",
+  "deletePermission": "You do not have permission to delete this record",
+  "fetchError": "Error Fetching",
+  "active": "Active",
+  "inactive": "Inactive",
+  "foreeignKeyError": "This Data Is Already Used. Can't Delete This",
+  "clearBtn": "Clear",
+  "listBtn": "List",
+  "actions": "Actions",
+  "refreshBtn": "Refresh",
+  "closeBtn": "Close",
+  "clearSuccess": "Form cleared successfully",
+  "refreshSuccess": "Data refreshed successfully",
+  "saveError": "Error saving record",
+  "okBtn": "Ok",
+  "navbar":{
+    "refresh": "Refresh"
+  },
+  "AddNewLedgerModal": {
+    "title": {
+      "addCustomer": "Add Customer",
+      "addSupplier": "Add Supplier",
+      "editCustomer": "Edit Customer",
+      "editSupplier": "Edit Supplier"
+    },
+    "form": {
+      "customerName": {
+        "labelCustomer": "Customer Name",
+        "labelSupplier": "Supplier Name",
+        "placeholderCustomer": "Enter customer name",
+        "placeholderSupplier": "Enter supplier name",
+        "required": "Name is required"
+      },
+      "fullName": {
+        "label": "Full Name",
+        "placeholderCustomer": "Enter customer full name",
+        "placeholderSupplier": "Enter supplier full name"
+      },
+      "phoneNo": {
+        "label": "Phone Number",
+        "placeholderCustomer": "Enter customer phone number",
+        "placeholderSupplier": "Enter supplier phone number"
+      },
+      "vatNumber": {
+        "label": "VAT Number",
+        "placeholderCustomer": "Enter customer VAT number",
+        "placeholderSupplier": "Enter supplier VAT number"
+      },
+      "crNumber": {
+        "label": "CR Number",
+        "placeholderCustomer": "Enter customer CR number",
+        "placeholderSupplier": "Enter supplier CR number"
+      },
+      "buildingNo": {
+        "label": "Building No",
+        "placeholder": "Enter building number"
+      },
+      "streetName": {
+        "label": "Street Name",
+        "placeholder": "Enter street name"
+      },
+      "district": {
+        "label": "District",
+        "placeholder": "Enter district"
+      },
+      "cityName": {
+        "label": "City",
+        "placeholder": "Enter city name"
+      },
+      "country": {
+        "label": "Country",
+        "placeholder": "Enter country"
+      },
+      "postboxNo": {
+        "label": "P.O. Box",
+        "placeholder": "Enter P.O. Box"
+      },
+      "additionalNo": {
+        "label": "Additional No",
+        "placeholder": "Enter additional number"
+      }
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "submit": "Submit",
+      "update": "Update",
+      "submitting": "Submitting..."
+    },
+    "messages": {
+      "loading": "Loading...",
+      "customerSaveSuccess": "Customer saved successfully",
+      "supplierSaveSuccess": "Supplier saved successfully",
+      "customerUpdateSuccess": "Customer updated successfully",
+      "supplierUpdateSuccess": "Supplier updated successfully",
+      "saveFailed": "Failed to save",
+      "loadDataFailed": "Failed to load data"
+    },
+    "confirmations": {
+      "saveCustomerTitle": "Confirm Save Customer",
+      "saveSupplierTitle": "Confirm Save Supplier",
+      "saveCustomerText": "Are you sure you want to save this customer?",
+      "saveSupplierText": "Are you sure you want to save this supplier?",
+      "updateCustomerTitle": "Confirm Update Customer",
+      "updateSupplierTitle": "Confirm Update Supplier",
+      "updateCustomerText": "Are you sure you want to update this customer?",
+      "updateSupplierText": "Are you sure you want to update this supplier?",
+      "yesSave": "Yes, Save",
+      "yesUpdate": "Yes, Update",
+      "cancel": "Cancel"
+    }
+  },
+  "common": {
+    "addAddLedger":"Create Ledger",
+    "addAddCustomer":"Create New Customer",
+    "addAddSupplier":"Create New Supplier",
+    "editLedger":"Edit Ledger",
+    "fromDate": "From Date",
+    "toDate": "To Date",
+    "filter": "Show",
+    "reset": "Reset",
+    "search": "Search",
+    "or": "Or",
+    "datesIgnored": "Date filters ignored",
+    "show": "Show",
+    "total": "Total",
+    "records": "Records",
+    "yesUpdate": "Yes, Update it!",
+    "barcodePrinter": "Barcode Printer",
+    "noBarcodePrinterConfigured": "No barcode printer configured. Please set one in Printer Settings."
+    
+  },
+  "logout": {
+    "title": "Do You Want to Logout?",
+    "confirmButtonText": "Yes, Logout it!",
+    "cancelButtonText": "Cancel"
+  },
+  "noAccess": "You don't have permission to view Cost Center.",
+  "narration": "Narration",
+  "add": "Add",
+  "edit": "Edit",
+  "save": "Save",
+  "saving": "Saving...",
+  "delete": {
+    "title": "Are you sure?",
+    "text": "You won't be able to revert this action!",
+    "confirm": "Yes, delete it!",
+    "cancel": "Cancel",
+    "noPermission": "You do not have permission to delete this record",
+    "success": "Cost Center deleted successfully",
+    "error": "Error deleting record"
+  },
+  "saveData": {
+    "title": "Are you sure?",
+    "text": "Do you want to save the record?",
+    "confirm": "Yes, Save it!",
+    "cancel": "Cancel",
+    "noPermission": "You do not have permission to delete this record",
+    "success": "Cost Center saved successfully",
+    "error": "Error saving record"
+  },
+  "clearData": {
+    "title": "Are you sure?",
+    "text": "This will clear all the records",
+    "confirm": "Yes, Clear it!",
+    "cancel": "Cancel",
+    "noPermission": "You do not have permission to clear this record",
+    "success": "Cost Center cleared successfully",
+    "error": "Error clear record"
+  },
+  "editCompanyHeading": "Update Company Details",
+  "changeCompanyLogo": "Change Company Logo",
+  "cancelChange": "Cancel Change",
+  "breadcrumbDashboard": "Dashboard",
+  "breadcrumbUpdateCompany": "Update Company",
+  "companyName": "Company Name",
+  "companyNameFL": "Company Name (Foreign Language)",
+  "contactNumber": "Contact Number",
+  "altContactNumber": "Alternative Number",
+  "address": "Address",
+  "companyLogo": "Company Logo",
+  "companyNamePlaceholder": "Enter company name",
+  "companyNameFLPlaceholder": "Enter company name (Foreign Language)",
+  "primaryPhonePlaceholder": "Enter primary contact number",
+  "altPhonePlaceholder": "Enter alternative contact (optional)",
+  "addressPlaceholder": "Enter complete address",
+  "logoHelpText": "Upload PNG, JPG or SVG (Max 200KB)",
+  "companyUpdateSuccess": "Company updated successfully",
+  "companyUpdateFail": "Failed to update company",
+  "companyIdMissing": "Company ID is missing",
+  "fileSizeError": "File size must be 200KB or less. Please choose a smaller file.",
+  "homePage": {
+    "noAccess": "You don't have permission to view modules. Please contact your administrator.",
+    "heading": {
+      "transactions": "Transactions",
+      "inventory": "Inventory"
+    },
+    "cards": {
+      "salesInvoice": "Sales Invoice",
+      "salesReturn": "Sales Return",
+      "purchaseInvoice": "Purchase Invoice",
+      "purchaseReturn": "Purchase Return",
+      "recieptVoucher": "Reciept Voucher",
+      "paymentVoucher": "Payment Voucher"
+    }
+  },
+  "branches": {
+    "title": "Branches",
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "branch": "Branch",
+      "branchList": "Branch List"
+    },
+    "columns": {
+      "sno": "S.No",
+      "branchName": "Branch Name",
+      "cityName": "City Name",
+      "status": "Status"
+    },
+    "actions": {
+      "addBranch": "Add New Branch",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "alerts": {
+      "noPermission": "You don't have permission to view Branches",
+      "deleteConfirmTitle": "Are you sure?",
+      "deleteConfirmText": "You won't be able to revert this action!",
+      "deleteSuccess": "Branch Deleted",
+      "statusUpdated": "Branch status updated",
+      "deleteError": "Error deleting branch"
+    }
+  },
+  "addBranch": {
+    "title": "Add Branch",
+    "editTitle": "Edit Branch",
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "branch": "Branch",
+      "addBranch": "Add Branch",
+      "editBranch": "Edit Branch"
+    },
+    "sections": {
+      "fullAddress": "Full Address",
+      "branchDetails": "Branch Details"
+    },
+    "fields": {
+      "branchName": "Branch Name (atleast 5 char)",
+      "branchNameFL": "Branch Name (Arabic)",
+      "address": "Address",
+      "addressFL": "Address (Arabic)",
+      "streetName": "Street Name",
+      "streetNameFL": "Street Name (Arabic)",
+      "buildingNo": "Building Number",
+      "buildingNoFL": "Building Number (Arabic)",
+      "additionalNumber": "Additional Number",
+      "additionalNumberFL": "Additional Number (Arabic)",
+      "cityName": "City Name",
+      "cityNameFL": "City Name (Arabic)",
+      "district": "District",
+      "districtFL": "District (Arabic)",
+      "country": "Country",
+      "countryFL": "Country (Arabic)",
+      "postalCode": "Postal Code",
+      "postalCodeFL": "Postal Code (Arabic)",
+      "phoneNo": "Phone Number",
+      "mobile": "Mobile",
+      "email": "Email",
+      "web": "Website",
+      "fax": "Fax",
+      "taxNo": "Tax Number",
+      "panNo": "PAN Number",
+      "crNo": "CR Number",
+      "subscriptionNo": "Subscription Number",
+      "currency": "Currency",
+      "activeStatus": "Active Status",
+      "branchLogo": "Branch Logo"
+    },
+    "placeholders": {
+      "branchName": "Enter Branch Name",
+      "branchNameFL": "Enter Branch Name (Arabic)",
+      "address": "Enter address",
+      "addressFL": "Enter address (Arabic)",
+      "streetName": "Enter Street Name",
+      "streetNameFL": "Enter Street Name (Arabic)",
+      "buildingNo": "Enter Building Number",
+      "buildingNoFL": "Enter Building Number (Arabic)",
+      "additionalNumber": "Enter Additional Number",
+      "additionalNumberFL": "Enter Additional Number (Arabic)",
+      "cityName": "Enter City Name",
+      "cityNameFL": "City Name (Arabic)",
+      "district": "Enter District Name",
+      "districtFL": "District Name (Arabic)",
+      "country": "Enter Country Name",
+      "countryFL": "Country Name (Arabic)",
+      "postalCode": "Enter Postal Code",
+      "postalCodeFL": "Postal Code (Arabic)",
+      "phoneNo": "Enter Phone Number",
+      "mobile": "Enter Mobile Number",
+      "email": "Enter Email",
+      "web": "Enter Website URL",
+      "fax": "Enter Fax Number",
+      "taxNo": "Enter Tax Number",
+      "panNo": "Enter PAN Number",
+      "crNo": "Enter CR Number",
+      "subscriptionNo": "Enter Subscription Number",
+      "selectCurrency": "Select Currency",
+      "selectStatus": "Select Status"
+    },
+    "validation": {
+      "required": "is required",
+      "invalidEmail": "Please enter a valid email address",
+      "invalidUrl": "Please enter a valid URL",
+      "fillAllFields": "Please fill in all required fields and fix validation errors"
+    },
+    "messages": {
+      "branchSavedSuccess": "Branch saved successfully",
+      "branchUpdatedSuccess": "Branch updated successfully",
+      "branchSaveFailed": "Failed to save branch",
+      "branchUpdateFailed": "Failed to update branch",
+      "fetchDataFailed": "Failed to fetch branch data",
+      "fileSizeError": "File size must be 200KB or less. Please choose a smaller file.",
+      "logoHelpText": "Upload PNG, JPG, SVG (Max 200KB)"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "actions": {
+      "submit": "Submit",
+      "update": "Update",
+      "cancel": "Cancel",
+      "reset": "Reset",
+      "updating": "Updating...",
+      "adding": "Adding..."
+    }
+  },
+  "batch": {
+    "heading": "Batch Management",
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Batch"
+    },
+    "columns": {
+      "batchId": "Batch ID",
+      "batchName": "Batch Name",
+      "mfd": "Manufacturing Date"
+    },
+    "fields": {
+      "batchName": "Batch Name",
+      "mfd": "Manufacturing Date"
+    },
+    "placeholders": {
+      "batchName": "Enter batch name",
+      "mfd": "Select manufacturing date"
+    },
+    "modal": {
+      "titleCreate": "Create New Batch",
+      "titleEdit": "Edit Batch",
+      "save": "Save",
+      "update": "Update",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "updating": "Updating...",
+      "loading": "Loading..."
+    },
+    "validation": {
+      "batchNameRequired": "Batch name is required",
+      "mfdRequired": "Manufacturing date is required"
+    },
+    "alerts": {
+      "fetchError": "Error fetching batches",
+      "createSuccess": "Batch created successfully",
+      "updateSuccess": "Batch updated successfully",
+      "deleteSuccess": "Batch deleted successfully",
+      "deleteError": "Error deleting batch",
+      "saveError": "An error occurred while saving",
+      "loadError": "Error loading batch data",
+      "noAddPermission": "You do not have permission to add batches",
+      "noEditPermission": "You do not have permission to edit batches",
+      "noDeletePermission": "You do not have permission to delete batches"
+    }
+  },
+  "costCenter": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Cost Center"
+    },
+    "heading": "Cost Center",
+    "createNew": "Create New",
+    "noAccess": "You don't have permission to view Cost Center.",
+    "columns": {
+      "sno": "#",
+      "costCentre": "Cost Center",
+      "narration": "Narration"
+    },
+    "delete": {
+      "title": "Are you sure?",
+      "text": "You won't be able to revert this action!",
+      "confirm": "Yes, delete it!",
+      "cancel": "Cancel",
+      "noPermission": "You do not have permission to delete cost centers",
+      "success": "Cost Center deleted successfully",
+      "error": "Error deleting record"
+    }
+  },
+  "unit": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Unit"
+    },
+    "heading": "Unit",
+    "columns": {
+      "sno": "#",
+      "unit": "Unit",
+      "narration": "Narration"
+    }
+  },
+  "brand": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Brand"
+    },
+    "heading": "Brand",
+    "columns": {
+      "sno": "#",
+      "brand": "Brand",
+      "narration": "Narration"
+    }
+  },
+  "godown": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Godown"
+    },
+    "alert": {
+      "Confirmation": "Confirmation",
+      "title": "This will set this godown as the default for this branch. Continue?",
+      "cancelButtonText": "Cancel",
+      "confirmButtonText": "Yes"
+    },
+    "heading": "Godown",
+    "columns": {
+      "sno": "#",
+      "godown": "Godown",
+      "narration": "Narration"
+    }
+  },
+  "addGodown": "Add Godown",
+  "editGodown": "Edit Godown",
+  "setAsDefault": "Set as Default Godown",
+  "default": "Default",
+  "cannotUnsetDefault": "Cannot unset default. Please select another godown as default from the list.",
+  "setAsDefaultTitle": "Set as Default?",
+  "setAsDefaultText": "This will set this godown as the default for this branch. Continue?",
+  "defaultSetSuccess": "Default godown updated successfully",
+  "defaultSetError": "Failed to set default godown",
+  "cannotDeleteDefault": "Cannot delete the default godown. Please set another godown as default first.",
+  "defaultGodownInfo": "This will be set as the default godown for the selected branch. Any existing default godown will be unset.",
+  "defaultGodownWarning": "This is the default godown. To change the default, please select another godown as default from the list.",
+  "selectBranch": "-- Select Branch --",
+  "branch": "Branch",
+  "yes": "Yes",
+  "pricingLevel": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Pricing Level"
+    },
+    "heading": "Pricing Level",
+    "columns": {
+      "sno": "#",
+      "pricingLevel": "Pricing Level",
+      "narration": "Narration"
+    }
+  },
+  "route": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Route"
+    },
+    "heading": "Route",
+    "columns": {
+      "sno": "#",
+      "route": "Route",
+      "narration": "Narration"
+    }
+  },
+  "area": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Area"
+    },
+    "heading": "Area",
+    "columns": {
+      "sno": "#",
+      "area": "Area",
+      "narration": "Narration"
+    }
+  },
+  "market": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Market"
+    },
+    "heading": "Market",
+    "columns": {
+      "sno": "#",
+      "market": "Market",
+      "narration": "Narration"
+    }
+  },
+  "accountGroups": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Account Groups"
+    },
+    "heading": "Account Groups",
+    "search": {
+      "placeholder": "Search account groups by Group Name,Group Code and Group Under..."
+    },
+    "columns": {
+      "sno": "#",
+      "code": "Group Code",
+      "name": "Account Group Name",
+      "groupUnder": "Group Under"
+    }
+  },
+  "accountGroupsModal": {
+    "title": {
+      "create": "Create Account Group",
+      "edit": "Edit Account Group"
+    },
+    "fields": {
+      "code": "Group Code",
+      "name": "Account Group Name",
+      "groupUnder": "Group Under",
+      "narration": "Narration",
+      "ledgerNextNo": "Ledger Next No"
+    },
+    "placeholders": {
+      "code": "Enter Group Code",
+      "name": "Enter Group Name",
+      "groupUnder": "Select Group",
+      "searchGroup": "Search groups...",
+      "narration": "Enter narration",
+      "ledgerNextNo": "Enter Ledger Number"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "save": "Save",
+      "update": "Update",
+      "saving": "Saving...",
+      "updating": "Updating..."
+    },
+    "alerts": {
+      "createSuccess": "Account Group Created Successfully",
+      "updateSuccess": "Account Group Updated Successfully"
+    },
+    "loading": "Loading..."
+  },
+  "currency": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Currency"
+    },
+    "heading": "Currency",
+    "columns": {
+      "sno": "#",
+      "currencySymbol": "Currency Symbol",
+      "currencyName": "Currency Name",
+      "subunitName": "Subunit Name",
+      "noOfDecimalPlace": "No. of Decimal Places",
+      "narration": "Narration"
+    },
+    "createNewBtn": "Create New",
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "deleteConfirm": {
+      "title": "Are you sure you want to delete this currency?"
+    }
+  },
+  "currencyForm": {
+    "modal": {
+      "addTitle": "Add Currency",
+      "editTitle": "Edit Currency"
+    },
+    "form": {
+      "currencySymbol": "Currency Symbol",
+      "currencySymbolPlaceholder": "e.g. $",
+      "currencyName": "Currency Name",
+      "currencyNamePlaceholder": "e.g. US Dollar",
+      "subunitName": "Subunit Name",
+      "subunitNamePlaceholder": "e.g. Cents",
+      "noOfDecimalPlace": "No. of Decimal Places",
+      "noOfDecimalPlacePlaceholder": "e.g. 2",
+      "narration": "Narration",
+      "narrationPlaceholder": "Enter narration",
+      "cancelBtn": "Cancel",
+      "saveBtn": "Save",
+      "updateBtn": "Update",
+      "saving": "Saving..."
+    },
+    "alert": {
+      "createSuccess": "Currency Created Successfully",
+      "updateSuccess": "Currency Updated Successfully"
+    }
+  },
+  "productGroup": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Product Group"
+    },
+    "heading": "Product Group",
+    "columns": {
+      "sno": "#",
+      "category": "Category",
+      "groupName": "Group Name",
+      "narration": "Narration"
+    },
+    "filter": {
+      "label": "Filter by Category",
+      "all": "All Categories",
+      "category1": "Category 1",
+      "category2": "Category 2",
+      "category3": "Category 3",
+      "category4": "Category 4",
+      "showing": "Showing",
+      "items": "items",
+      "clearFilter": "Clear Filter"
+    },
+    "alert": {
+      "fetchError": "Error fetching product groups",
+      "deletePermission": "You do not have permission to delete product groups",
+      "deleteSuccess": "Product group deleted successfully.",
+      "deleteError": "Error deleting product group. Please try again."
+    },
+    "form": {
+      "addTitle": "Add Product Group",
+      "editTitle": "Edit Product Group",
+      "category": "Category",
+      "selectCategory": "Select Category",
+      "groupName": "Group Name",
+      "enterGroupName": "Enter Group Name",
+      "narration": "Narration",
+      "enterNarration": "Enter narration",
+      "loading": "Loading...",
+      "cancel": "Cancel",
+      "save": "Save",
+      "update": "Update"
+    }
+  },
+  "taxMaster": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Tax Master"
+    },
+    "heading": "Tax Master",
+    "columns": {
+      "sno": "#",
+      "taxName": "Tax Name",
+      "rate": "Rate",
+      "calculatingMode": "Calculating Mode",
+      "narration": "Narration"
+    },
+    "actions": {
+      "createNew": "Create New",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "alerts": {
+      "fetchError": "Failed to fetch Tax Master data",
+      "deletePermission": "You do not have permission to delete tax",
+      "editPermission": "You do not have permission to edit",
+      "deleteSuccess": "Tax deleted successfully",
+      "deleteError": "Error deleting tax",
+      "createSuccess": "Tax added successfully",
+      "updateSuccess": "Tax updated successfully",
+      "createError": "Failed to create tax",
+      "updateError": "Failed to update tax"
+    },
+    "deleteConfirm": {
+      "title": "Are you sure?",
+      "text": "You won't be able to revert this action!",
+      "confirm": "Yes, delete it!",
+      "cancel": "Cancel"
+    },
+    "form": {
+      "title": {
+        "add": "Add Tax Master",
+        "edit": "Edit Tax Master"
+      },
+      "fields": {
+        "taxName": {
+          "label": "Tax Name",
+          "placeholder": "Enter Tax Name"
+        },
+        "rate": {
+          "label": "Rate (%)",
+          "placeholder": "e.g. 18"
+        },
+        "calculatingMode": {
+          "label": "Calculating Mode",
+          "placeholder": "Select Calculating Mode",
+          "options": {
+            "product": "Product",
+            "bill": "Bill"
+          }
+        },
+        "active": "Active",
+        "narration": {
+          "label": "Narration",
+          "placeholder": "Enter Narration"
+        }
+      },
+      "buttons": {
+        "save": "Save",
+        "update": "Update",
+        "cancel": "Cancel"
+      }
+    }
+  },
+  "productMainGroup": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Product Main Group"
+    },
+    "heading": "Product Main Group",
+    "columns": {
+      "sno": "#",
+      "groupCode": "Group Code",
+      "groupName": "Group Name",
+      "productCodeLength": "Product Code Length",
+      "nextNumber": "Next Number"
+    },
+    "actions": {
+      "createNew": "Create New",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "alerts": {
+      "fetchError": "Error fetching Product Main Groups",
+      "deletePermission": "You do not have permission to delete product main group",
+      "editPermission": "You do not have permission to edit",
+      "deleteSuccess": "Deleted successfully",
+      "deleteError": "Error deleting product main group",
+      "fetchSingleError": "Failed to fetch data",
+      "saveError": "Failed to save product main group",
+      "generalError": "Something went wrong",
+      "updateSuccess": "Product Main Group Updated Successfully",
+      "createSuccess": "Product Main Group Created Successfully",
+      "groupCodeInUse": "Group Code is in use by products. Cannot be changed.",
+      "duplicateGroupCode": "Group Code already exists."
+    },
+    "deleteConfirm": {
+      "title": "Are you sure?",
+      "text": "You won't be able to revert this action!",
+      "confirm": "Yes, delete it!",
+      "cancel": "Cancel"
+    },
+    "form": {
+      "title": {
+        "add": "Add Product Main Group",
+        "edit": "Edit Product Main Group"
+      },
+      "loading": "Loading...",
+      "fields": {
+        "groupCode": {
+          "label": "Group Code",
+          "placeholder": "Enter Group Code"
+        },
+        "groupName": {
+          "label": "Group Name",
+          "placeholder": "Enter Group Name"
+        },
+        "productCodeLength": {
+          "label": "Product Code Length",
+          "placeholder": "Enter Product Code Length",
+          "error": "Product code length must be greater than group code length"
+        },
+        "nextNumber": {
+          "label": "Next Number",
+          "placeholder": "Enter Next Number"
+        },
+        "scaleGroup": "Scale Group"
+      },
+      "buttons": {
+        "cancel": "Cancel",
+        "save": "Save",
+        "update": "Update",
+        "saving": "Saving...",
+        "updating": "Updating..."
+      }
+    }
+  },
+  "accountLedger": {
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Account Ledger"
+    },
+    "heading": "Account Ledger",
+    "noAccess": "You don't have permission to view Account Ledger",
+    "columns": {
+      "sno": "#",
+      "ledgerCode": "Ledger Code",
+      "ledgerName": "Account Ledger Name",
+      "groupId": "Group ID",
+      "openingBalance": "Opening Balance"
+    },
+    "delete": {
+      "success": "Account Ledger deleted successfully"
+    },
+    "form": {
+      "nameArbPlaceholder":"Enter Arabic Name",
+      "branches": "Branches",
+      "branch": "Branch",
+      "title": "Add Account Ledger",
+      "editTitle": "Edit Account Ledger",
+      "ledgerCode": "Ledger Code",
+      "ledgerCodePlaceholder": "Enter Ledger Code",
+      "ledgerName": "Ledger Name",
+      "ledgerNamePlaceholder": "Enter Ledger Name",
+      "group": "Group",
+      "selectGroup": "Select Group",
+      "searchGroup": "Search Group...",
+      "openingBalance": "Opening Balance",
+      "openingBalancePlaceholder": "Enter Opening Balance",
+      "creditOrDebit": "Credit or Debit",
+      "selectCrDr": "Select Cr/Dr",
+      "credit": "Cr",
+      "debit": "Dr",
+      "narrationPlaceholder": "Enter Narration",
+      "branchRequired": "Please select at least one branch"
+    }
+  },
+  "bank": {
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Bank"
+    },
+    "heading": "Bank",
+    "columns": {
+      "sno": "#",
+      "ledgerCode": "Ledger Code",
+      "bankName": "Bank Name",
+      "bankBranchName": "Bank Branch Name"
+    },
+    "delete": {
+      "success": "Bank deleted successfully"
+    },
+    "form": {
+      "breadcrumb": {
+        "master": "Master",
+        "bank": "Bank",
+        "title": "Add Bank",
+        "edit": {
+          "title": "Edit Bank"
+        }
+      },
+      "ledgerCode": "Ledger Code",
+      "ledgerCodePlaceholder": "Enter Ledger Code",
+      "bankName": "Bank Name",
+      "ledgerName": "Ledger Name",
+      "bankNamePlaceholder": "Enter Bank Name",
+      "group": "Group",
+      "selectGroup": "Select Group",
+      "searchGroup": "Search Group...",
+      "openingBalance": "Opening Balance",
+      "openingBalancePlaceholder": "Enter Opening Balance",
+      "creditOrDebit": "Credit or Debit",
+      "selectOption": "Select Option",
+      "search": "Search...",
+      "credit": "Credit",
+      "debit": "Debit",
+      "accountNumber": "Account Number",
+      "accountNumberPlaceholder": "Enter Account Number",
+      "bankAccountName": "Bank Account Name",
+      "bankAccountNamePlaceholder": "Enter Bank Account Name",
+      "ibanNumber": "IBAN Number",
+      "ibanNumberPlaceholder": "Enter IBAN Number",
+      "bankBranchName": "Bank Branch Name",
+      "bankBranchNamePlaceholder": "Enter Branch Name",
+      "swiftCode": "SWIFT Code",
+      "swiftCodePlaceholder": "Enter SWIFT Code"
+    }
+  },
+  "customer": {
+    "noAccess": "You don't have permission to view Customers",
+    "noContactInfo": "No contact info",
+    "heading": "Customer",
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Customer"
+    },
+    "delete": {
+      "success": "Customer Deleted"
+    },
+    "columns": {
+      "sno": "#",
+      "code": "Code",
+      "name": "Name",
+      "type": "Type",
+      "group": "Group",
+      "openingBalance": "Opening Balance",
+      "crOrDr": "Cr/Dr",
+      "contact": "Contact",
+      "vatNumber": "VAT Number",
+      "crNumber": "CR Number",
+      "tinNumber":"Vat No"
+    },
+    "form": {
+      "breadcrumb": {
+        "master": "Master",
+        "title": "Customer",
+        "addCustomer": "Add Customer",
+        "editCustomer": "Edit Customer"
+      },
+      "customerNameRequired": "Customer name is required",
+      "additionalDocuments": "Additional Documents",
+      "documentName": "Document Name",
+      "documentNamePlaceholder": "Enter Document Name",
+      "basicInformation": "Basic Information",
+      "customerName": "Name",
+      "customerNamePlaceholder": "Enter customer name",
+      "nameFL": "Name (Arabic)",
+      "nameFLPlaceholder": "Enter name in Arabic",
+      "ledgerCode": "Ledger Code",
+      "ledgerCodePlaceholder": "Enter ledger code",
+      "customerCode": "Customer Code",
+      "supplierCode": "Supplier Code",
+      "ledgerType": "Ledger Type",
+      "ledgerTypePlaceholder": "Select ledger type",
+      "customerOption": "Customer",
+      "buildingNo": "Building No",
+      "buildingNoPlaceholder": "Enter Building Number",
+      "additionalNo": "Additional No",
+      "additionalNoPlaceholder": "Enter Additional Number",
+      "postboxNo": "Post Box No",
+      "postboxNoPlaceholder": "Enter Post Box Number",
+      "district": "District",
+      "districtPlaceholder": "Enter District",
+      "StreetName": "Street Name",
+      "StreetNamePlaceholder": "Enter Street Name",
+      "supplierOption": "Supplier",
+      "customerandsupplieroption": "Customer & Supplier",
+      "group": "Group",
+      "groupPlaceholder": "Select group",
+      "tradeReceivables": "Trade Receivables",
+      "tradePayables": "Trade Payables",
+      "openingBalance": "Opening Balance",
+      "openingBalancePlaceholder": "Enter opening balance",
+      "crOrDr": "Cr/Dr",
+      "crOrDrPlaceholder": "Select Cr or Dr",
+      "credit": "Cr",
+      "debit": "Dr",
+      "address": "Address",
+      "country": "Country",
+      "countryPlaceholder": "Enter country",
+      "cityName": "City Name",
+      "cityNamePlaceholder": "Enter city",
+      "addressPlaceholder": "Enter address",
+      "arabicAddressDetails": "Arabic Address Details",
+      "streetNameArabic": "Street Name (Arabic)",
+      "streetNameArabicPlaceholder": "أدخل اسم الشارع",
+      "buildingNoArabic": "Building No (Arabic)",
+      "buildingNoArabicPlaceholder": "أدخل رقم المبنى",
+      "additionalNoArabic": "Additional No (Arabic)",
+      "additionalNoArabicPlaceholder": "أدخل الرقم الإضافي",
+      "postboxNoArabic": "Post Box No (Arabic)",
+      "postboxNoArabicPlaceholder": "أدخل صندوق البريد",
+      "cityNameArabic": "City Name (Arabic)",
+      "cityNameArabicPlaceholder": "أدخل اسم المدينة",
+      "districtArabic": "District (Arabic)",
+      "districtArabicPlaceholder": "أدخل المنطقة",
+      "countryArabic": "Country (Arabic)",
+      "countryArabicPlaceholder": "أدخل الدولة",
+      "fullAddressArabic": "Full Address (Arabic)",
+      "fullAddressArabicPlaceholder": "أدخل العنوان الكامل",
+      "contactDetails": "Contact Details",
+      "phoneNo": "Phone No",
+      "phoneNoPlaceholder": "Enter phone number",
+      "faxNo": "Fax No",
+      "faxNoPlaceholder": "Enter fax number",
+      "email": "Email",
+      "emailPlaceholder": "Enter email address",
+      "registrationDetails": "Registration Details",
+      "creditPeriod": "Credit Period (Days)",
+      "creditPeriodPlaceholder": "Enter credit period",
+      "creditLimit": "Credit Limit",
+      "creditLimitPlaceholder": "Enter credit limit",
+      "creditLimitStatus": "Credit Limit Status",
+      "creditLimitStatusPlaceholder": "Select credit limit status",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "affectInventory": "Bill By Bill",
+      "affectInventoryPlaceholder": "Select Bill By Bill",
+      "yes": "Yes",
+      "no": "No",
+      "pricingLevel": "Pricing Level",
+      "pricingLevelPlaceholder": "Select pricing level",
+      "level1": "Level 1",
+      "level2": "Level 2",
+      "currency": "Currency",
+      "currencyPlaceholder": "Select currency",
+      "vatNumber": "VAT Number",
+      "vatNumberPlaceholder": "Enter VAT number",
+      "crNumber": "CR Number",
+      "crNumberPlaceholder": "Enter CR number",
+      "shippingAdderess": "Shipping Address",
+      "address1": "Address Line One",
+      "address2": "Address Line Two",
+      "address3": "Address Line Three",
+      "address4": "Address Line Four",
+      "Isdefault": "Default",
+      "opening": "Opening",
+      "openingDetails": "Opening Details"
+    }
+  },
+  "userList": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "user": "User",
+      "title": "Users List"
+    },
+    "heading": "User List",
+    "columns": {
+      "sno": "#",
+      "userName": "Username",
+      "contact": "Contact",
+      "narration": "Narration",
+      "role": "Role",
+      "status": "Status",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "actions": {
+      "addNew": "Add New User",
+      "edit": "Edit",
+      "delete": "Delete",
+      "changePassword": "Change Password"
+    },
+    "alerts": {
+      "fetchError": "Error fetching users",
+      "deletePermission": "You do not have permission to delete user",
+      "deleteSuccess": "User deleted successfully",
+      "deleteError": "Failed to delete user",
+      "saveSuccess": "User saved successfully!",
+      "updateSuccess": "User updated successfully!",
+      "saveError": "Failed to save user"
+    },
+    "deleteConfirm": {
+      "title": "Are you sure?",
+      "text": "You won't be able to revert this action!",
+      "confirm": "Yes, delete it!",
+      "cancel": "Cancel"
+    },
+    "form": {
+      "title": "Add User",
+      "editTitle": "Edit User",
+      "form": {
+        "activeStatus": "Active Status",
+        "active": "Active",
+        "inactive": "Inactive",
+        "userName": "Username",
+        "password": "Password",
+        "phoneNo": "Phone Number",
+        "email": "Email",
+        "narration": "Narration",
+        "branches": "Branches",
+        "userRole": "User Role",
+        "profilePhoto": "Profile Photo",
+        "profilePhotoHelp": "Upload PNG, JPG, JPEG, SVG (Max 200KB)",
+        "keepCurrentPhoto": "Leave empty to keep current photo",
+        "placeholders": {
+          "userName": "Enter Username",
+          "password": "Enter Password",
+          "phoneNo": "Enter Phone Number",
+          "email": "Enter Email",
+          "narration": "Enter Narration",
+          "branches": "Select Branches",
+          "userRole": "Select Role"
+        },
+        "errors": {
+          "userName": "Username is required",
+          "userNameInvalid": "Username must be 3-20 characters long and contain only letters, numbers, and underscores",
+          "password": "Password is required",
+          "passwordInvalid": "Password must be at least 6 characters long",
+          "phoneNo": "Phone number is required",
+          "phoneNoInvalid": "Please enter a valid phone number (10-15 digits)",
+          "email": "Email is required",
+          "emailInvalid": "Please enter a valid email address",
+          "userRole": "User role is required",
+          "branches": "At least one branch must be selected",
+          "imageSizeLimit": "Image size must be 200KB or less",
+          "imageTypeLimit": "Only PNG, JPG, JPEG, and SVG files are allowed",
+          "validationError": "Please fix the validation errors before submitting"
+        }
+      },
+      "actions": {
+        "submit": "Submit",
+        "update": "Update",
+        "cancel": "Cancel",
+        "reset": "Reset",
+        "saving": "Saving...",
+        "updating": "Updating..."
+      }
+    }
+  },
+  "userGroup": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "title": "User Group"
+    },
+    "heading": "User Group",
+    "columns": {
+      "sno": "#",
+      "userGroup": "User Group",
+      "status": "Status"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "actions": {
+      "createNew": "Create New",
+      "edit": "Edit",
+      "delete": "Delete",
+      "setPrivileges": "Set privileges"
+    },
+    "alerts": {
+      "noPermissionView": "You don't have permission to view User Groups",
+      "deletePermission": "You do not have permission to delete user group",
+      "deleteSuccess": "User Group Deleted",
+      "deleteError": "Error deleting User Group",
+      "fetchError": "Failed to fetch user group details",
+      "saveSuccess": "User group added successfully!",
+      "updateSuccess": "User group updated successfully!",
+      "saveError": "Failed to save user group. Please try again.",
+      "alreadyExists": "Item Already Exist"
+    },
+    "deleteConfirm": {
+      "title": "Are you sure?",
+      "text": "You won't be able to revert this action!",
+      "confirm": "Yes, delete it!",
+      "cancel": "Cancel"
+    },
+    "form": {
+      "title": "Add User Group",
+      "editTitle": "Edit User Group",
+      "groupName": "User Group Name",
+      "status": "Status",
+      "placeholders": {
+        "groupName": "Enter group name",
+        "status": "Select status"
+      },
+      "errors": {
+        "groupNameRequired": "Please enter a group name"
+      },
+      "actions": {
+        "save": "Save",
+        "update": "Update",
+        "cancel": "Cancel",
+        "saving": "Saving..."
+      }
+    }
+  },
+  "transactionBatch": {
+    "heading": "Transaction Batch",
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Transaction Batch"
+    },
+    "columns": {
+      "transactionBatchId": "Batch ID",
+      "voucherType": "Voucher Type",
+      "batch": "Batch",
+      "batchName": "Transaction Batch Name"
+    },
+    "fields": {
+      "voucherType": "Voucher Type",
+      "batch": "Batch",
+      "batchName": "Transaction Batch Name"
+    },
+    "placeholders": {
+      "voucherType": "Select voucher type",
+      "batch": "Select batch",
+      "batchName": "Enter transaction batch name",
+      "loadingBatches": "Loading batches..."
+    },
+    "validation": {
+      "voucherTypeRequired": "Voucher type is required",
+      "batchRequired": "Batch is required",
+      "batchNameRequired": "Transaction batch name is required"
+    },
+    "voucherTypes": {
+      "salesInvoice": "Sales Invoice",
+      "salesQuotation": "Sales Quotation",
+      "proformaInvoice": "Proforma Invoice",
+      "salesOrder": "Sales Order",
+      "salesReturn": "Sales Return",
+      "purchaseQuotation": "Purchase Quotation",
+      "purchaseOrder": "Purchase Order",
+      "purchaseInvoice": "Purchase Invoice",
+      "purchaseReturn": "Purchase Return",
+      "materialReceipt": "Material Receipt",
+      "deliveryNote":"Delivery Note"
+    },
+    "modal": {
+      "titleCreate": "Create Transaction Batch",
+      "titleEdit": "Edit Transaction Batch",
+      "save": "Save",
+      "update": "Update",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "updating": "Updating...",
+      "loading": "Loading..."
+    },
+    "alerts": {
+      "fetchError": "Failed to fetch transaction batches",
+      "loadError": "Failed to load transaction batch data",
+      "batchLoadError": "Failed to load batches",
+      "saveError": "Failed to save transaction batch",
+      "createSuccess": "Transaction batch created successfully",
+      "updateSuccess": "Transaction batch updated successfully",
+      "deleteSuccess": "Transaction batch deleted successfully",
+      "deleteError": "Failed to delete transaction batch",
+      "noAddPermission": "You don't have permission to add transaction batch",
+      "noEditPermission": "You don't have permission to edit transaction batch",
+      "noDeletePermission": "You don't have permission to delete transaction batch"
+    }
+  },
+  "product": {
+    "list": {
+      "ExportLabel": "Export Products",
+      "breadcrumb": {
+        "master": "Master",
+        "title": "Product",
+        "productList": "Product List"
+      },
+      "columns": {
+        "sno": "#",
+        "productCode": "Product Code",
+        "productName": "Product Name",
+        "barcode": "Barcode",
+        "purchaseRate": "Purchase Rate",
+        "salesPrice": "Sales Price",
+        "purchaseTax": "Purchase Tax",
+        "salesTax": "Sales Tax",
+        "unitName": "Unit",
+        "productImage": "Image",
+        "status": "Status",
+        "groupCode": "Group Code",
+        "group1Name": "Sub Group 1",
+        "group2Name": "Sub Group 2",
+        "group3Name": "Sub Group 3",
+        "group4Name": "Sub Group 4",
+        "brand": "Brand",
+        "taxName": "Tax",
+        "partnumber": "Part No",
+        "location": "Location"
+      },
+      "searchPlaceholder": "Search by product name, code, or barcode..."
+    },
+    "veiw": {
+      "breadcrumb": {
+        "master": "Master",
+        "title": "Product",
+        "productList": "Product List",
+        "productDetails": "Product Details"
+      }
+    },
+    "form": {
+      "breadcrumb": {
+        "master": "Master",
+        "title": "Product",
+        "productcreate": "Create Product",
+        "productedit": "Edit Product",
+        "productview": "View Product"
+      },
+      "productCode": "Product Code",
+      "productName": "Product Name",
+      "productNameFL": "Product Name FL",
+      "enableSales": "Enable Sales",
+      "enablePurchase": "Enable Purchase",
+      "enableInventory": "Enable Inventory",
+      "mainGroup": "Main Group",
+      "subGroup1": "Sub Group 1",
+      "subGroup2": "Sub Group 2",
+      "subGroup3": "Sub Group 3",
+      "subGroup4": "Sub Group 4",
+      "brand": "Brand",
+      "baseUnit": "Base Unit",
+      "costPrice": "Cost Price",
+      "tax": "Tax",
+      "minimumStock": "Min Stock",
+      "maximumStock": "Max Stock",
+      "reorderLevel": "Reorder Level",
+      "logo": "Add Logo",
+      "active": "Active",
+      "partNumber": "Part Number",
+      "category": "Category",
+      "openingStock": "Opening Stock",
+      "narration": "Narration",
+      "location": "Location",
+      "alternateNo": "Alternate Number",
+      "bom": "BOM",
+      "showReminder": "Show Reminder",
+      "ShowExpiry": "Show Expiry",
+      "NutritionFact": "Nutrition Fact",
+      "Ingredients": "Ingredients",
+      "NutritionName": "Nutrition Name",
+      "PurchaseRatePer": "Purchase Rate %",
+      "taxType": "Tax Type",
+      "favourite": "Favourate",
+      "pointOfSale": "Point Of Sale",
+      "CustomerLeadTime": "Customer lead time",
+      "salesTax": "Sales Tax",
+      "purchaseTax": "Purchase Tax"
+    },
+    "messages": {
+      "requiredFields": "Please Fill Required Fields",
+      "addSuccess": "Product Created",
+      "updateSuccess": "Product Updated",
+      "error": "Something went wrong",
+      "stockValidation": "Min stock should less than maximum stock",
+      "barcodeRequired": "At least one barcode is required",
+      "deleteSuccess": "Deleted successfully",
+      "duplicateBranchUnit": "Duplicate Branch and Unit combination is not allowed"
+    },
+    "placeholders": {
+      "productCode": "Enter product code",
+      "productName": "Enter product name",
+      "productNameFL": "Enter product name in foreign language",
+      "mainGroup": "Select main group",
+      "subGroup": "Select sub group",
+      "brand": "Select brand",
+      "baseUnit": "Select base unit",
+      "costPrice": "Enter cost price",
+      "tax": "Select tax rate",
+      "minimumStock": "Min stock",
+      "maximumStock": "Max stock",
+      "reorderLevel": "Reorder level",
+      "conversion": "Conversion",
+      "barcode": "Barcode",
+      "mrp": "Max Selling Price",
+      "discPercent": "Disc %",
+      "discAmount": "Amount",
+      "salesPrice": "Sales Price",
+      "partNumber": "Part Number",
+      "category": "Category",
+      "openingStock": "Opening Stock (Qty)",
+      "narration": "Narration",
+      "location": "Location",
+      "alternateNo": "Alternate Number",
+      "bom": "BOM",
+      "showReminder": "Show Reminder",
+      "rawMaterial": "Raw Material",
+      "qty": "Qty",
+      "ExpiryDays": "Expiry Days",
+      "NutritionName": "NutritionName",
+      "taxType": "Tax Type",
+      "ingredients": "Ingredients"
+    },
+    "buttons": {
+      "addMainGroup": "Add new main group",
+      "addSubGroup": "Add new sub group",
+      "addBrand": "Add new brand",
+      "addUnit": "Add new unit",
+      "addTax": "Add new tax rate",
+      "chooseFile": "Choose File",
+      "addRow": "Add Row"
+    },
+    "tables": {
+      "barcode": "Barcode",
+      "salePrice": "Sale Price",
+      "unit": "Unit",
+      "conversion": "Conversion",
+      "barcodeLabel": "Barcode",
+      "pricingLevel": "Pricing Level",
+      "mrp": "Max Selling Price",
+      "discPercent": "Disc %",
+      "discAmount": "Disc Amt",
+      "salesPrice": "Sales Price",
+      "action": "Action",
+      "rawMaterial": "Raw Material",
+      "qty": "Qty",
+      "NutritionName": "Name",
+      "NutritionValue": "Value",
+      "branch": "Branch",
+      "selectBranch": "Select Branch"
+    }
+  },
+  "financialYear": {
+    "breadcrumb": {
+      "dashboard": "Dashboard",
+      "master": "Master",
+      "title": "Financial Year"
+    },
+    "form": {
+      "editTitle": "Edit Financial Year",
+      "title": "Add Financial Year",
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "status": "Status",
+      "save": "Save",
+      "update": "Update",
+      "cancel": "Cancel",
+      "closed": "Is Closed",
+      "placeholders": {
+        "fromDate": "Select From Date",
+        "toDate": "Select To Date",
+        "status": "Select Status"
+      }
+    },
+    "heading": "Financial Year",
+    "columns": {
+      "sno": "#",
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "status": "Status"
+    }
+  },
+  "currencyConversion": {
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Exchange Rate"
+    },
+    "columns": {
+      "date": "Date",
+      "rate": "Rate"
+    },
+    "form": {
+      "editTitle": "Edit Exchange Rate",
+      "title": "Add Exchange Rate",
+      "date": "Date",
+      "rate": "Rate",
+      "currency": "Currency",
+      "narration": "Narration",
+      "save": "Save",
+      "update": "Update",
+      "cancel": "Cancel"
+    },
+    "heading": "Exchange Rate"
+  },
+  "designation": {
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Designation"
+    },
+    "columns": {
+      "sno": "#",
+      "designationName": "Designation Name",
+      "narration": "Narration",
+      "leaveDays": "Leave Days"
+    },
+    "form": {
+      "editTitle": "Edit Designation",
+      "title": "Add Designation",
+      "designationName": "Designation Name",
+      "designationNamePlaceholder": "Enter Designation Name",
+      "narration": "Narration",
+      "narrationPlaceholder": "Enter Narration",
+      "leaveDays": "Leave Days",
+      "leaveDaysPlaceholder": "Enter Leave Days",
+      "advancePercentage": " Advance Percentage",
+      "save": "Save",
+      "update": "Update",
+      "cancel": "Cancel"
+    },
+    "heading": "Designation"
+  },
+  "department": {
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Department"
+    },
+    "columns": {
+      "sno": "#",
+      "departmentName": "Department Name",
+      "narration": "Narration"
+    },
+    "form": {
+      "editTitle": "Edit Department",
+      "title": "Add Department",
+      "departmentName": "Department Name",
+      "departmentNamePlaceholder": "Enter Department Name",
+      "narration": "Narration",
+      "narrationPlaceholder": "Enter Narration",
+      "save": "Save",
+      "update": "Update",
+      "cancel": "Cancel"
+    },
+    "heading": "Department"
+  },
+  "worklocation": {
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Work Location"
+    },
+    "columns": {
+      "workLocationName": "Location Name"
+    },
+    "form": {
+      "editTitle": "Edit Work Location",
+      "title": "Add Work Location",
+      "locationName": "Location Name",
+      "locationNamePlaceholder": "Enter Location Name",
+      "save": "Save",
+      "update": "Update",
+      "cancel": "Cancel"
+    },
+    "heading": "Work Location"
+  },
+  "suffixPrefix": {
+    "breadcrumb": {
+      "settings": "Setting & Tools",
+      "title": "Suffix & Prefix"
+    },
+    "heading": "Suffix & Prefix",
+    "form": {
+      "title": "Set Suffix & Prefix",
+      "fromDate": "From Date",
+      "fromDatePlaceholder": "Select From Date",
+      "toDate": "To Date",
+      "toDatePlaceholder": "Select To Date",
+      "voucherType": "Voucher Type",
+      "voucherTypeSearch": "Search Voucher Type",
+      "startIndex": "Start Index",
+      "startIndexPlaceholder": "Enter Start Index",
+      "prefix": "Prefix",
+      "prefixPlaceholder": "Enter Prefix",
+      "suffix": "Suffix",
+      "suffixPlaceholder": "Enter Suffix",
+      "addWithZero": "Add With Zero",
+      "noOfZeros": "No. of Digits",
+      "noOfZerosPlaceholder": "Enter number of zeros"
+    }
+  },
+  "employee": {
+    "breadcrumb": {
+      "payroll": "Payroll",
+      "title": "Employee",
+      "addnew": "Add New Employee",
+      "edit": "Edit Employee"
+    },
+    "employeeForm": {
+      "headings": {
+        "basicInfo": "Basic Information",
+        "personalInfo": "Personal Information",
+        "contactInfo": "Contact Information",
+        "employmentInfo": "Employment & Location Details",
+        "documentInfo": "Document & Card Details",
+        "bankingInfo": "Banking Details"
+      },
+      "labels": {
+        "documentuploadOptionNeeded": "Document Upload Option Needed",
+        "employeephoto": "Photo",
+        "otHourlyAmount": "Ot Hourly Amount",
+        "employeeCode": "Employee Code",
+        "employeeName": "Employee Name",
+        "designationId": "Designation",
+        "departmentId": "Department",
+        "workLocationId": "Work Location",
+        "dob": "Date of Birth",
+        "maritalStatus": "Marital Status",
+        "gender": "Gender",
+        "qualification": "Qualification",
+        "permanentAddress": "Permanent Address",
+        "currentAddress": "Current Address",
+        "nationality": "Nationality",
+        "bloodGroup": "Blood Group",
+        "whatsAppNumber": "WhatsApp Number",
+        "phoneNo": "Phone Number",
+        "mobileNo": "Mobile Number",
+        "email": "Email",
+        "emergencyContactName": "Emergency Contact Name",
+        "emergencyContactNumber": "Emergency Contact Number",
+        "joiningDate": "Joining Date",
+        "terminationDate": "Termination Date",
+        "narration": "Narration",
+        "routeId": "Route",
+        "areaId": "Area",
+        "marketId": "Market",
+        "passportNo": "Passport Number",
+        "passportIssueDate": "Passport Issue Date",
+        "passportExpDate": "Passport Expiry Date",
+        "visaType": "Visa Type",
+        "labourCardNo": "Labour Card Number",
+        "labourCardIssueDate": "Labour Card Issue Date",
+        "labourCardExpDate": "Labour Card Expiry Date",
+        "visaNo": "Visa Number",
+        "visaExpDate": "Visa Expiry Date",
+        "qidHours": "QID Hours Amount",
+        "insuranceNumber": "Insurance Number",
+        "insuranceExpiryDate": "Insurance Expiry Date",
+        "molContractNumber": "MOL Contract Number",
+        "sponsorName": "Sponsor Name",
+        "gosi": "GOSI/SSO Number",
+        "wpsCompliance": "WPS Compliance",
+        "bankName": "Bank Name",
+        "bankAccountNo": "Bank Account Number",
+        "iban": "IBAN",
+        "swiftCode": "Swift Code",
+        "bankBranch": "Bank Branch"
+      },
+      "placeholders": {
+        "employeeCode": "Enter employee code",
+        "employeeName": "Enter employee name",
+        "otHourlyAmount": "Enter Ot Hourly Amount",
+        "designationId": "Select designation",
+        "departmentId": "Select department",
+        "workLocationId": "Select work location",
+        "dob": "Select date of birth",
+        "maritalStatus": "Select marital status",
+        "gender": "Select gender",
+        "qualification": "Enter qualification",
+        "permanentAddress": "Enter permanent address",
+        "currentAddress": "Enter current address",
+        "nationality": "Enter nationality",
+        "bloodGroup": "Select blood group",
+        "whatsAppNumber": "Enter WhatsApp number",
+        "phoneNo": "Enter phone number",
+        "mobileNo": "Enter mobile number",
+        "email": "Enter email address",
+        "emergencyContactName": "Enter emergency contact name",
+        "emergencyContactNumber": "Enter emergency contact number",
+        "joiningDate": "Select joining date",
+        "terminationDate": "Select termination date",
+        "narration": "Enter narration",
+        "routeId": "Select route",
+        "areaId": "Select area",
+        "marketId": "Select market",
+        "passportNo": "Enter passport number",
+        "passportIssueDate": "Select passport issue date",
+        "passportExpDate": "Select passport expiry date",
+        "visaType": "Enter visa type",
+        "labourCardNo": "Enter labour card number",
+        "labourCardIssueDate": "Select labour card issue date",
+        "labourCardExpDate": "Select labour card expiry date",
+        "visaNo": "Enter visa number",
+        "visaExpDate": "Select visa expiry date",
+        "qidHours": "Enter QID hours amount",
+        "insuranceNumber": "Enter insurance number",
+        "insuranceExpiryDate": "Select insurance expiry date",
+        "molContractNumber": "Enter MOL contract number",
+        "sponsorName": "Enter sponsor name",
+        "gosi": "Enter GOSI/SSO number",
+        "wpsCompliance": "Enter WPS compliance",
+        "bankName": "Enter bank name",
+        "bankAccountNo": "Enter bank account number",
+        "iban": "Enter IBAN",
+        "swiftCode": "Enter swift code",
+        "bankBranch": "Enter bank branch"
+      }
+    },
+    "columns": {
+      "employeeCode": "Employee Code",
+      "employeeName": "Employee Name",
+      "contact": "Contact"
+    }
+  },
+  "salesInvoice": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Sales Invoice"
+    },
+    "print": {
+      "title": "Sales Invoice",
+      "printBtn": "Print"
+    },
+    "form": {
+      "productPurchaseHistoryModal":{
+        "title":"Product Purchase History",
+        "amount":"Amount"
+      },
+      "additionalFields": {
+        "title": "Additional Fields"
+      },
+      "label": {
+        "formHeaderSection": {
+          "invoiceNo": "Invoice No",
+          "QuotationNo":"Quotation No",
+          "proformaNo":"Proforma No",
+          "OrderNo":"Order No",
+          "deliveryNotNo":"Delivery Not No",
+          "orderNo": "Order No",
+          "taxtype":"Tax Type",
+          "InvoiceNoForReturn":"Invoice no for return",
+          "ReturnNo": "Return No",
+          "date": "Date",
+          "salesMan": "Sales Man",
+          "costCentreId": "Cost Centre",
+          "RefNo": "Reference Number",
+          "refDate": "Reference Date",
+          "BatchId": "Batch",
+          "orderRefNo": "LPO Number",
+          "orderRefDate": "LPO Date",
+          "pricingLevelId": "Pricing Level",
+          "ledgerId": "Select Customer",
+          "AgainstNo": "Sales Mode",
+          "GodownId": "Godown",
+          "billingAddressHeading": "Billing Address",
+          "vatLabel": "Vat",
+          "balanceLabel": "Balance",
+          "shippingAddressHeading": "Shipping Address",
+          "creditPeriod": "Credit Period (Days)",
+          "dueDate": "Due Date",
+          "deliveryDate": "Delivery Date",
+          "salesAcLabel": "Sales Account",
+          "currencyLabel": "Currency",
+          "selectCustomerMsg": "Please Select Customer to View Address",
+          "selectSupplierMsg": "Please Select Supplier to View Address",
+          "lrNo": "LR No",
+          "status": "Status",
+          "selecteQuotation": "Select Quotation",
+          "selecteProforma": "Select Proforma",
+          "selecteOrder": "Select Order",
+          "selecteDlvryNote": "Select Delivery Note",
+          "creditLimitLabel": "Credit Limit"
+        }
+      },
+      "placeholders": {
+        "formHeaderSection": {
+          "lrNo": "Enter LR No",
+          "salesMan": "Sales Man",
+          "costCentreId": "Select Cost Center",
+          "RefNo": "Enter Ref No",
+          "BatchId": "Select batch",
+          "orderRefNo": "LPO Number",
+          "pricingLevelId": "Select Pricing Level",
+          "ledgerId": "Choose a customer",
+          "ledgerIdSupplier": "Choose a supplier",
+          "AgainstNo": "Select Sales Mode",
+          "GodownId": "Select Godown",
+          "creditPeriod": "Credit Period",
+          "invoiceNo": "Invoice",
+          "status": "Select Status"
+        }
+      },
+      "gridSection": {
+        "alert": {
+          "barcodeNotFound": "Product not found",
+          "description": "No product found with barcode: ",
+          "skippedRowError": "Cannot skip rows! Please fill the highlighted rows or delete them.",
+          "incompleteRowError": "Please fill the incomplete row"
+        },
+        "productLoadingMsg": " Loading products... Please wait.",
+        "barcodePlaceholder": "Enter Barcode",
+        "columns": {
+          "SN": "SN",
+          "bom":"Bom",
+          "barcode": "Barcode",
+          "ProdName": "Product Name",
+          "qty": "Qty",
+          "freeQty": "Free Qty",
+          "unit": "Unit",
+          "salesRate": "Inclusive Rate",
+          "disc%": "Disc %",
+          "discAmt": "Disc Amt",
+          "netValue": "Net Value",
+          "tax%": "Tax %",
+          "amount": "Amount",
+          "action": "Action",
+          "size": "Size",
+          "taxAmt": "Tax Amt",
+          "grossAmount": "Gross Amt",
+          "receivedQuantity": "Received Qty",
+          "beforeTax":"Rate",
+          "discWithTax":"Disc W/Tax"
+        },
+        "prodDetailsLabels": {
+          "productCode": "Product Code",
+          "barcodeLabels": "Barcode",
+          "partNo": "PartNo",
+          "mrp": "MRP",
+          "unit": "Unit",
+          "purchase": "Purchase",
+          "brand": "Brand",
+          "desc": "NB",
+          "amount": "Amt",
+          "enterPrdNamePlaceHolder": "Enter Product Name"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        }
+      },
+      "footerSection": {
+        "tabs": {
+          "paymentMode": "Payment Mode",
+          "selectBank": "Select Bank",
+          "selectCash": "Select Cash",
+          "retention": "Retention",
+          "additionCost": "Addition Cost",
+          "otherDetails": "Other Details"
+        },
+       
+        "otherChargeLedger": {
+          "title": "Select Other Charge Ledger",
+          "searchPlaceholder": "Search Ledger",
+          "selectLedger": "Selected Ledger"
+        },
+        "paymentModeSection": {
+          "cashLabel": "Cash",
+          "paydAmt": "Paid Amount",
+          "bankLabel": "Bank",
+          "bankAmtLabel": "Bank Amount",
+          "cashAmtLabel": "Cash Amount",
+          "balanceLabel": "Balance",
+          
+          "remark": "Remark"
+        },
+        "productHistory": {
+          "title": "History",
+          "loading": "Loading...",
+          "slNo": "Sl No",
+          "date": "Date",
+          "time":"Time",
+          "billNo": "Bill No",
+          "customer": "Party",
+          "qty": "Qty",
+          "unit": "Unit",
+          "rate": "Rate",
+          "type": "Type",
+          "supplier": "Supplier"
+        },
+        "retentionSection": {
+          "label": {
+            "RetentionType": "Retention Type",
+            "retention%": "Retention %",
+            "RetentionAmount": "Retention Amount",
+            "RetentionDueDate": "Due Date"
+          },
+          "placeholders": {
+            "RetentionType": "Enter Retention Type",
+            "retention%": "Enter Retention %",
+            "RetentionAmount": "Enter Retention Amount"
+          }
+        },
+        "otherDetails": {
+          "label": {
+            "transportCompany": "Transportation Company",
+            "lrNo": "LR No",
+            "narration": "Narration",
+            "reason": "Reason",
+            "printAfterSave": "Direct Print",
+            "printType": "Print Type",
+            "formType": "Form Type"
+          },
+          "placeholders": {
+            "transportCompany": "Transportation Company",
+            "lrNo": "LR No",
+            "narration": "Reason",
+            "reason": "Reason"
+          }
+        },
+        "paymentSummery": {
+          "totalAmt": "Total Amount",
+          "additionalCost": "Additional Cost",
+          "billDescount": "Bill Discount",
+          "totalTax": "Total Tax",
+          "otherCharge": "Other Charge",
+          "amntPlaceholder": "Amount",
+          "remarkPlaceHolder": "Remark",
+          "roundOff": "Round Off",
+          "grandTotal": "Grand Total"
+        }
+      }
+    },
+    "list": {
+      "columns": {
+        "sno": "SNo",
+        "invoiceNo": "Invoice No",
+        "quotationNo": " Quotation No",
+        "date": "Date",
+        "cashParty": "Cash Party",
+        "customerName": "Customer Name",
+        "totalAmt": "Total Amount",
+        "partyName":"Party Name"
+      }
+    },
+    "alert": {
+      "skippedRowValidation": "Cannot skip rows! Please fill all rows or delete empty rows between filled rows.",
+      "billBalanceAmtError": "Bill Balance Amount Exceeds Total Amount",
+      "creditPaymentModeError": "Bill balance amount cannot be zero in credit payment mode",
+      "invalidSalesRatetitle": "Invalid Sales Rate",
+      "invalidSalesRatetext": "Please enter a valid sales rate greater than 0",
+      "cashAmountRequired": "Cash amount is required when cash payment mode is selected",
+      "bankAmountRequired": "Bank/Card amount is required when card payment mode is selected",
+
+      "duplicateProduct":{
+          "title":"Product Already Selected",
+          "text":"This product is already in the invoice. What would you like to do?",
+          "addQty":"Add to Quantity",
+          "addNew":"Add New Row"
+      },
+      "creditLimit": {
+        "warnTitle": "Credit Limit Exceeded",
+        "warnText": "The customer has exceeded their credit limit. Do you want to proceed?",
+        "proceedBtn": "Proceed",
+        "blockTitle": "Credit Limit Exceeded",
+        "blockText": "The customer has exceeded their credit limit. You cannot proceed with this invoice."
+      },
+      "addRowAfter": {
+        "title": "Are you sure?",
+        "text": "This action changes the order of SINo.",
+        "confirm": "Yes Add It!"
+      }
+    }
+  },
+  "salesReturn": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Sales Return",
+      "editTitle": "Edit Sales Return"
+    },
+    "list": {
+      "columns": {
+        "sno": "SNo",
+        "invoiceNo": "Invoice No",
+        "date": "Date",
+        "cashParty": "Cash Party",
+        "customerName": "Customer Name",
+        "totalAmt": "Total Amount"
+      }
+    },
+    "alert": {
+      "billBalanceAmtError": "Bill Balance Amount Exceeds Total Amount",
+      "addRowAfter": {
+        "title": "Are you sure?",
+        "text": "This action changes the order of SINo.",
+        "confirm": "Yes Add It!"
+      }
+    }
+  },
+  "recieptVoucher": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Receipt Voucher"
+    },
+    "againstModal": {
+  "title": "Bill-by-Bill Against",
+  "noData": "No pending bills found.",
+  "total": "Total",
+  "confirm": "Confirm",
+  "addRow":"Add Row",
+  "columns": {
+    "type": "Type",
+    "voucherType": "Voucher Type",
+    "voucherNo": "Voucher No",
+    "voucherDate": "Date",
+    "billAmount": "Bill Amount",
+    "amountToPay": "Amount to Pay",
+    "currency": "Currency",
+    "amount": "Amount"
+  }
+},
+    "form": {
+      "breadcrumb": {
+        "parent": "Receipt Voucher",
+        "title": "New Receipt Voucher",
+        "edit": {
+          "title": "Edit Receipt Voucher"
+        }
+      },
+      "label": {
+        "RecieptNo": "Receipt No",
+        "date": "Date",
+        "bankOrCash": "Bank/Cash",
+        "ReferenceNo": "Reference No",
+        "ReferenceDate": "Reference Date",
+        "employeeId": "Sales Man",
+        "printAfterSave": "Print After Save",
+        "printType": "Print Type",
+        "curremcy": "Currency",
+        "ledgerBalance": "Ledger Balance",
+        "totalAmount": "Total Amount"
+      },
+      "placeholders": {
+        "bankOrCash": "Select Bank/Cash",
+        "ReferenceNo": "Enter Reference No",
+        "employeeId": "Select Sales Man",
+        "selectLedger": "Select Ledger",
+        "chequeNo": "Enter Cheque No",
+        "chequeDate": "Select Cheque Date",
+        "narration": "Enter Narration",
+        "printType": "Select Print Type",
+        "currency": "Currency"
+      },
+      "table": {
+        "columns": {
+          "slNo": "Sl No",
+          "ledgerName": "Ledger Name",
+          "narration": "Narration",
+          "amount": "Amount",
+          "action": "Action",
+          "addRow": "Add Row",
+          "chequeNo": "Cheque No",
+          "chequeDate": "Cheque Date",
+          "against": "Against",
+          "currency": "Currency"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        }
+      },
+      "messages": {
+        "selectLedgerInAllRows": "Please select ledger in all rows"
+      }
+    },
+    "list": {
+      "columns": {
+        "receiptNo": "Reciept No",
+        "date": "Date",
+        "ledgerName": "Bank / Cash",
+        "narration": "Narration",
+        "totalAmt": "Total Amount"
+      }
+    }
+  },
+  "paymentVoucher": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Payment Voucher"
+    },
+    "form": {
+      "breadcrumb": {
+        "parent": "Payment Voucher",
+        "title": "New Payment Voucher",
+        "edit": {
+          "title": "Edit Payment Voucher"
+        }
+      },
+      "label": {
+        "PaymentNo": "Payment No",
+        "date": "Date",
+        "bankOrCash": "Bank/Cash",
+        "ReferenceNo": "Reference No",
+        "ReferenceDate": "Reference Date",
+        "currentBalance": "Current Balance",
+        "totalAmount": "Total Amount",
+        "ledgerBalance": "Ledger Balance"
+      },
+      "placeholders": {
+        "bankOrCash": "Select Bank/Cash",
+        "ReferenceNo": "Enter Reference No",
+        "selectLedger": "Select Ledger",
+        "chequeNo": "Enter Cheque No",
+        "chequeDate": "Select Cheque Date",
+        "narration": "Enter Narration",
+        "currency": "Currency"
+      },
+      "table": {
+        "columns": {
+          "slNo": "Sl No",
+          "ledgerName": "Ledger Name",
+          "narration": "Narration",
+          "amount": "Amount",
+          "action": "Action",
+          "chequeNo": "Cheque No",
+          "chequeDate": "Cheque Date",
+          "against": "Against",
+          "currency": "Currency"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        }
+      },
+      "messages": {
+        "selectLedgerInAllRows": "Please select ledger in all rows",
+        "cannotDeleteLastRow": "Cannot delete the last row",
+        "negativeCashBlockTitle": "Negative Cash Balance",
+        "negativeCashWarnTitle": "Negative Cash Balance Warning",
+        "negativeCashWarnText": "This payment will result in a negative cash balance. Do you want to proceed?"
+      }
+    },
+    "list": {
+      "columns": {
+        "paymentNo": "Payment No",
+        "date": "Date",
+        "ledgerName": "Bank Cash",
+        "narration": "Narration",
+        "totalAmt": "Total Amount"
+      }
+    }
+  },
+  "contraVoucher": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Contra Voucher"
+    },
+    "form": {
+      "breadcrumb": {
+        "parent": "Contra Voucher",
+        "title": "New Contra Voucher",
+        "edit": {
+          "title": "Edit Contra Voucher"
+        }
+      },
+      "label": {
+        "ContraNo": "Contra No",
+        "type": "Type",
+        "deposit": "Deposit",
+        "withdrawal": "Withdrawal",
+        "date": "Date",
+        "bankAccount": "Bank Account",
+        "ReferenceNo": "Reference No",
+        "ReferenceDate": "Reference Date",
+        "currentBalance": "Current Balance",
+        "totalAmount": "Total Amount",
+        "ledgerBalance": "Ledger Balance"
+      },
+      "placeholders": {
+        "bankAccount": "Select Bank Account",
+        "ReferenceNo": "Enter Reference No",
+        "selectLedger": "Select Ledger",
+        "chequeNo": "Enter Cheque No",
+        "chequeDate": "Select Cheque Date",
+        "narration": "Enter Narration",
+        "currency": "Currency"
+      },
+      "table": {
+        "columns": {
+          "slNo": "Sl No",
+          "ledgerName": "Ledger Name",
+          "narration": "Narration",
+          "amount": "Amount",
+          "action": "Action",
+          "chequeNo": "Cheque No",
+          "chequeDate": "Cheque Date",
+          "currency": "Currency"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        }
+      },
+      "messages": {
+        "selectLedgerInAllRows": "Please select ledger in all rows",
+        "cannotDeleteLastRow": "Cannot delete the last row",
+        "negativeCashWarnTitle": "Negative Cash Balance Warning"
+      }
+    },
+    "list": {
+      "columns": {
+        "contraNo": "Contra No",
+        "date": "Date",
+        "type": "Type",
+        "ledgerName": "Bank Account",
+        "narration": "Narration",
+        "totalAmt": "Total Amount"
+      }
+    }
+  },
+  "journalVoucher": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Journal Voucher"
+    },
+    "form": {
+      "breadcrumb": {
+        "parent": "Journal Voucher",
+        "title": "New Journal Voucher",
+        "edit": {
+          "title": "Edit Journal Voucher"
+        }
+      },
+      "label": {
+        "JournalNo": "Journal No",
+        "date": "Date",
+        "ReferenceNo": "Reference No",
+        "ReferenceDate": "Reference Date",
+        "debitTotal": "Debit Total",
+        "creditTotal": "Credit Total",
+        "difference": "Difference",
+        "currentBalance": "Current Balance",
+        "ledgerBalance": "Ledger Balance"
+      },
+      "placeholders": {
+        "ReferenceNo": "Enter Reference No",
+        "selectLedger": "Select Ledger",
+        "narration": "Enter Narration",
+        "referenceNo": "Enter Ref No",
+        "costCentre": "Select Cost Centre",
+        "currency": "Currency"
+      },
+      "table": {
+        "columns": {
+          "slNo": "Sl No",
+          "ledgerName": "Ledger Name",
+          "debit": "Debit",
+          "credit": "Credit",
+          "narration": "Narration",
+          "referenceNo": "Ref No",
+          "costCentre": "Cost Centre",
+          "currency": "Currency",
+          "action": "Action",
+          "branch": "Branch"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        },
+        "total": "Total"
+      },
+      "messages": {
+        "selectLedgerInAllRows": "Please select ledger in all rows",
+        "cannotDeleteLastRow": "Cannot delete the last row",
+        "debitCreditMismatch": "Debit and Credit totals must be equal"
+      }
+    },
+    "list": {
+      "columns": {
+        "journalNo": "Journal No",
+        "date": "Date",
+        "narration": "Narration",
+        "total": "Total Amount",
+        "creditTotal": "Credit Total"
+      }
+    }
+  },
+  "materialReceipt": {
+    "breadcrumb": {
+      "master": "Transactions",
+      "title": "Material Receipt",
+      "editTitle": "Edit Material Receipt"
+    },
+    "form": {
+      "label": {
+        "receiptNo": "Receipt No",
+        "orderNumber": "Order Number",
+        "formHeaderSection": {
+          "date": "Date",
+          "employee": "Employee",
+          "costCentreId": "Cost Centre",
+          "RefNo": "Ref No",
+          "refDate": "Ref Date",
+          "BatchId": "Batch",
+          "orderRefNo": "Order Ref No",
+          "orderRefDate": "Order Ref Date",
+          "pricingLevelId": "Pricing Level",
+          "ledgerId": "Supplier",
+          "AgainstNo": "Against",
+          "GodownId": "Godown",
+          "billingAddressHeading": "Address",
+          "shippingAddressHeading": "Shipping Address",
+          "vatLabel": "VAT",
+          "balanceLabel": "Balance",
+          "creditPeriod": "Credit Period",
+          "dueDate": "Due Date",
+          "deliveryDate": "Delivery Date",
+          "purchaseAcLabel": "Purchase Account",
+          "currencyLabel": "Currency",
+          "selectSupplierMsg": "Please select a supplier"
+        }
+      },
+      "placeholders": {
+        "orderNumber": "Select Order Number",
+        "formHeaderSection": {
+          "employee": "Select Employee",
+          "costCentreId": "Select Cost Centre",
+          "RefNo": "Enter Ref No",
+          "BatchId": "Select Batch",
+          "orderRefNo": "Enter Order Ref No",
+          "pricingLevelId": "Select Pricing Level",
+          "ledgerId": "Select Supplier",
+          "AgainstNo": "Select",
+          "GodownId": "Select Godown",
+          "creditPeriod": "Enter Credit Period"
+        }
+      },
+      "gridSection": {
+        "productLoadingMsg": "Loading products...",
+        "columns": {
+          "SN": "S.No",
+          "ProdName": "Product Name",
+          "qty": "Qty",
+          "freeQty": "Free Qty",
+          "unit": "Unit",
+          "purchaseRate": "Purchase Rate",
+          "disc%": "Disc %",
+          "discAmt": "Disc Amt",
+          "netValue": "Net Value",
+          "tax%": "Tax %",
+          "amount": "Amount",
+          "action": "Action",
+          "taxAmt": "Tax Amt"
+        },
+        "prodDetailsLabels": {
+          "enterPrdNamePlaceHolder": "Enter product name",
+          "barcodeLabels": "Barcode",
+          "partNo": "Part No",
+          "mrp": "MRP",
+          "unit": "Unit",
+          "purchase": "Purchase",
+          "brand": "Brand",
+          "desc": "Description"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        }
+      },
+      "footerSection": {
+        "tabs": {
+          "paymentMode": "Payment Mode",
+          "retention": "Retention",
+          "additionCost": "Additional Cost",
+          "otherDetails": "Other Details"
+        },
+        "paymentModeSection": {
+          "cashLabel": "Cash",
+          "bankLabel": "Bank",
+          "paydAmt": "Paid Amt"
+        },
+        "paymentSummery": {
+          "totalAmt": "Total Amount",
+          "additionalCost": "Additional Cost",
+          "billDescount": "Bill Discount",
+          "totalTax": "Total Tax",
+          "otherCharge": "Other Charge",
+          "remarkPlaceHolder": "Remark",
+          "amntPlaceholder": "Amount",
+          "roundOff": "Round Off",
+          "grandTotal": "Grand Total"
+        },
+        "retentionSection": {
+          "label": {
+            "RetentionType": "Retention Type",
+            "retention%": "Retention %",
+            "RetentionAmount": "Retention Amount",
+            "RetentionDueDate": "Retention Due Date"
+          },
+          "placeholders": {
+            "retention%": "Enter %",
+            "RetentionAmount": "Enter Amount"
+          }
+        },
+        "otherDetails": {
+          "label": {
+            "transportCompany": "Transport Company",
+            "lrNo": "LR No",
+            "narration": "Narration"
+          },
+          "placeholders": {
+            "transportCompany": "Enter company name",
+            "lrNo": "Enter LR No",
+            "narration": "Enter narration"
+          }
+        }
+      }
+    },
+    "list": {
+      "columns": {
+        "sno": "S.No",
+        "receiptNo": "Receipt No",
+        "orderNumber": "Order Number",
+        "date": "Date",
+        "prtyName": "Cash Party",
+        "voucherNo": "Voucher No",
+        "totalAmt": "Total Amount"
+      }
+    },
+    "alert": {
+      "billBalanceAmtError": "Bill balance amount cannot be negative",
+      "addRowAfter": {
+        "title": "Add New Row?",
+        "text": "Do you want to add a new row?",
+        "confirm": "Yes, Add"
+      }
+    }
+  },
+  "payableVoucher": {
+    "breadcrumb": {
+      "master": "Transactions",
+      "title": "Payable Voucher",
+      "editTitle": "Edit Payable Voucher"
+    },
+    "form": {
+      "label": {
+        "payableNo": "Payable No",
+        "formHeaderSection": {
+          "date": "Date",
+          "employee": "Employee",
+          "costCentreId": "Cost Centre",
+          "RefNo": "Ref No",
+          "refDate": "Ref Date",
+          "ledgerId": "Supplier",
+          "billingAddressHeading": "Billing Address",
+          "shippingAddressHeading": "Shipping Address",
+          "vatLabel": "VAT",
+          "balanceLabel": "Balance",
+          "creditPeriod": "Credit Period",
+          "dueDate": "Due Date",
+          "deliveryDate": "Delivery Date",
+          "purchaseAcLabel": "Purchase Account",
+          "currencyLabel": "Currency",
+          "selectSupplierMsg": "Please select a supplier",
+          "taxType": "Tax Type"
+        }
+      },
+      "placeholders": {
+        "formHeaderSection": {
+          "employee": "Select Employee",
+          "costCentreId": "Select Cost Centre",
+          "RefNo": "Enter Ref No",
+          "ledgerId": "Select Supplier",
+          "creditPeriod": "Enter Credit Period"
+        }
+      },
+      "gridSection": {
+        "columns": {
+          "SN": "S.No",
+          "ledgerName": "Ledger Name",
+          "amount": "Amt",
+          "discPerc": "Disc %",
+          "discAmt": "Disc Amt",
+          "netAmount": "Net Amt",
+          "tax": "Tax",
+          "taxType": "Tax Type",
+          "taxAmount": "Tax Amt",
+          "chequeNo": "Cheque No",
+          "chequeDate": "Cheque Date",
+          "narration": "Narration",
+          "totalAmount": "Total Amt",
+          "action": "Action"
+        },
+        "placeholders": {
+          "ledgerName": "Select Ledger",
+          "chequeNo": "Enter Cheque No",
+          "narration": "Enter Narration"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        }
+      },
+      "footerSection": {
+        "tabs": {
+          "paymentMode": "Payment Mode",
+          "retention": "Retention",
+          "additionCost": "Additional Cost",
+          "otherDetails": "Other Details"
+        },
+        "paymentModeSection": {
+          "cashLabel": "Cash",
+          "bankLabel": "Bank",
+          "paydAmt": "Paid Amt"
+        },
+        "paymentSummery": {
+          "totalAmt": "Total Amount",
+          "additionalCost": "Additional Cost",
+          "billDescount": "Bill Discount",
+          "totalTax": "Total Tax",
+          "otherCharge": "Other Charge",
+          "remarkPlaceHolder": "Remark",
+          "amntPlaceholder": "Amount",
+          "roundOff": "Round Off",
+          "grandTotal": "Grand Total"
+        },
+        "retentionSection": {
+          "label": {
+            "RetentionType": "Retention Type",
+            "retention%": "Retention %",
+            "RetentionAmount": "Retention Amount",
+            "RetentionDueDate": "Retention Due Date"
+          },
+          "placeholders": {
+            "retention%": "Enter %",
+            "RetentionAmount": "Enter Amount"
+          }
+        },
+        "otherDetails": {
+          "label": {
+            "transportCompany": "Transport Company",
+            "lrNo": "LR No",
+            "narration": "Narration"
+          },
+          "placeholders": {
+            "transportCompany": "Enter company name",
+            "lrNo": "Enter LR No",
+            "narration": "Enter narration"
+          }
+        }
+      }
+    },
+    "list": {
+      "columns": {
+        "sno": "S.No",
+        "voucherNo": "Voucher No",
+        "date": "Date",
+        "supplier": "Supplier",
+        "totalAmt": "Total Amount"
+      }
+    },
+    "alert": {
+      "billBalanceAmtError": "Bill balance amount cannot be negative"
+    }
+  },
+  "receivableVoucher": {
+    "breadcrumb": {
+      "master": "Transactions",
+      "title": "Receivable Voucher",
+      "editTitle": "Edit Receivable Voucher"
+    },
+    "form": {
+      "label": {
+        "receivableNo": "Receivable No",
+        "formHeaderSection": {
+          "date": "Date",
+          "employee": "Employee",
+          "costCentreId": "Cost Centre",
+          "RefNo": "Ref No",
+          "refDate": "Ref Date",
+          "ledgerId": "Customer",
+          "billingAddressHeading": "Billing Address",
+          "shippingAddressHeading": "Shipping Address",
+          "vatLabel": "VAT",
+          "balanceLabel": "Balance",
+          "creditPeriod": "Credit Period",
+          "dueDate": "Due Date",
+          "deliveryDate": "Delivery Date",
+          "salesAcLabel": "Sales Account",
+          "currencyLabel": "Currency",
+          "selectCustomerMsg": "Please select a customer"
+        }
+      },
+      "placeholders": {
+        "formHeaderSection": {
+          "employee": "Select Employee",
+          "costCentreId": "Select Cost Centre",
+          "RefNo": "Enter Ref No",
+          "ledgerId": "Select Customer",
+          "creditPeriod": "Enter Credit Period"
+        }
+      },
+      "gridSection": {
+        "columns": {
+          "SN": "S.No",
+          "ledgerName": "Ledger Name",
+          "amount": "Amount",
+          "discPerc": "Disc %",
+          "discAmt": "Disc Amt",
+          "netAmount": "Net Amount",
+          "tax": "Tax",
+          "taxType": "Tax Type",
+          "taxAmount": "Tax Amount",
+          "chequeNo": "Cheque No",
+          "chequeDate": "Cheque Date",
+          "narration": "Narration",
+          "totalAmount": "Total Amount",
+          "action": "Action"
+        },
+        "placeholders": {
+          "ledgerName": "Select Ledger",
+          "chequeNo": "Enter Cheque No",
+          "narration": "Enter Narration"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        },
+        "editModal": {
+          "title": "Edit Ledger Details",
+          "ledgerName": "Ledger Name",
+          "chequeNo": "Cheque Number",
+          "chequeNoPlaceholder": "Enter Cheque Number",
+          "chequeDate": "Cheque Date",
+          "chequeDatePlaceholder": "Select Date",
+          "narration": "Narration",
+          "narrationPlaceholder": "Enter Narration"
+        }
+      },
+      "footerSection": {
+        "tabs": {
+          "paymentMode": "Payment Mode",
+          "retention": "Retention",
+          "additionCost": "Additional Cost",
+          "otherDetails": "Other Details"
+        },
+        "paymentModeSection": {
+          "cashLabel": "Cash",
+          "bankLabel": "Bank",
+          "receivedAmt": "Received Amt"
+        },
+        "paymentSummery": {
+          "totalAmt": "Total Amount",
+          "additionalCost": "Additional Cost",
+          "billDescount": "Bill Discount",
+          "totalTax": "Total Tax",
+          "otherCharge": "Other Charge",
+          "remarkPlaceHolder": "Remark",
+          "amntPlaceholder": "Amount",
+          "roundOff": "Round Off",
+          "grandTotal": "Grand Total"
+        },
+        "retentionSection": {
+          "label": {
+            "RetentionType": "Retention Type",
+            "retention%": "Retention %",
+            "RetentionAmount": "Retention Amount",
+            "RetentionDueDate": "Retention Due Date"
+          },
+          "placeholders": {
+            "retention%": "Enter %",
+            "RetentionAmount": "Enter Amount"
+          }
+        },
+        "otherDetails": {
+          "label": {
+            "transportCompany": "Transport Company",
+            "lrNo": "LR No",
+            "narration": "Narration"
+          },
+          "placeholders": {
+            "transportCompany": "Enter company name",
+            "lrNo": "Enter LR No",
+            "narration": "Enter narration"
+          }
+        }
+      }
+    },
+    "list": {
+      "columns": {
+        "sno": "S.No",
+        "voucherNo": "Voucher No",
+        "date": "Date",
+        "customer": "Customer",
+        "totalAmt": "Total Amount"
+      }
+    },
+    "alert": {
+      "billBalanceAmtError": "Bill balance amount cannot be negative"
+    }
+  },
+  "physicalStock": {
+    "breadcrumb": {
+      "master": "Transactions",
+      "title": "Physical Stock",
+      "editTitle": "Edit Physical Stock"
+    },
+    "form": {
+      "label": {
+        "voucherNo": "Voucher No",
+        "date": "Date",
+        "unposted": "Unposted",
+        "RefNo": "Ref No",
+        "refDate": "Ref Date",
+        "employee": "Van Executive"
+      },
+      "placeholders": {
+        "RefNo": "Enter Reference No",
+        "employee": "Select Van Executive"
+      },
+      "gridSection": {
+        "columns": {
+          "SN": "S.No",
+          "barcode": "Barcode",
+          "partNo": "Part No",
+          "productName": "Product Name",
+          "productDescription": "Product Description",
+          "productCode": "Product Code",
+          "godown": "Godown",
+          "rack": "Rack",
+          "quantity": "Quantity",
+          "unit": "Unit",
+          "rate": "Rate",
+          "amount": "Amount",
+          "action": "Action",
+          "purchaseRate": "Purchase Rate",
+          "currentStock": "Current Stock"
+        },
+        "placeholders": {
+          "productName": "Select Product"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        }
+      },
+      "footerSection": {
+        "label": {
+          "narration": "Narration",
+          "totalAmount": "Total Amount"
+        },
+        "placeholders": {
+          "narration": "Enter narration"
+        }
+      }
+    },
+    "list": {
+      "columns": {
+        "sno": "S.No",
+        "physicalStockNo": "Physical Stock No",
+        "date": "Date",
+        "employee": "Van Executive",
+        "totalAmt": "Total Amount"
+      }
+    }
+  },
+  "damageStock": {
+    "breadcrumb": {
+      "master": "Transactions",
+      "title": "Damage Stock",
+      "editTitle": "Edit Damage Stock"
+    },
+    "form": {
+      "label": {
+        "voucherNo": "Voucher No",
+        "date": "Date",
+        "unposted": "Unposted",
+        "RefNo": "Ref No",
+        "refDate": "Ref Date",
+        "employee": "Van Executive"
+      },
+      "placeholders": {
+        "RefNo": "Enter Reference No",
+        "employee": "Select Van Executive"
+      },
+      "gridSection": {
+        "columns": {
+          "SN": "S.No",
+          "barcode": "Barcode",
+          "partNo": "Part No",
+          "productName": "Product Name",
+          "productDescription": "Product Description",
+          "productCode": "Product Code",
+          "godown": "Godown",
+          "rack": "Rack",
+          "quantity": "Quantity",
+          "unit": "Unit",
+          "rate": "Rate",
+          "amount": "Amount",
+          "action": "Action"
+        },
+        "placeholders": {
+          "productName": "Select Product"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        }
+      },
+      "footerSection": {
+        "label": {
+          "narration": "Narration",
+          "totalAmount": "Total Amount"
+        },
+        "placeholders": {
+          "narration": "Enter narration"
+        }
+      }
+    },
+    "list": {
+      "columns": {
+        "sno": "S.No",
+        "damagestockno": "Damage Stock No",
+        "date": "Date",
+        "employee": "Van Executive",
+        "totalAmt": "Total Amount"
+      }
+    }
+  },
+  "usedStock": {
+    "breadcrumb": {
+      "master": "Transactions",
+      "title": "Used Stock",
+      "editTitle": "Edit Used Stock"
+    },
+    "form": {
+      "label": {
+        "voucherNo": "Voucher No",
+        "date": "Date",
+        "unposted": "Unposted",
+        "RefNo": "Ref No",
+        "refDate": "Ref Date",
+        "employee": "Employee"
+      },
+      "placeholders": {
+        "RefNo": "Enter Reference No",
+        "employee": "Select Employee"
+      },
+      "gridSection": {
+        "columns": {
+          "SN": "S.No",
+          "barcode": "Barcode",
+          "partNo": "Part No",
+          "productName": "Product Name",
+          "productDescription": "Product Description",
+          "productCode": "Product Code",
+          "godown": "Godown",
+          "rack": "Rack",
+          "quantity": "Quantity",
+          "unit": "Unit",
+          "rate": "Rate",
+          "amount": "Amount",
+          "action": "Action"
+        },
+        "placeholders": {
+          "productName": "Select Product"
+        },
+        "buttons": {
+          "addRow": "Add Row"
+        }
+      },
+      "footerSection": {
+        "label": {
+          "narration": "Narration",
+          "totalAmount": "Total Amount"
+        },
+        "placeholders": {
+          "narration": "Enter narration"
+        }
+      }
+    },
+    "list": {
+      "columns": {
+        "sno": "S.No",
+        "usedstockno": "Used Stock No",
+        "date": "Date",
+        "employee": "Employee",
+        "totalAmt": "Total Amount"
+      }
+    }
+  },
+  "supplier": {
+    "breadcrumb": {
+      "master": "Master",
+      "title": "Supplier",
+      "addSupplier": "Add New Supplier",
+      "editSupplier": "Edit Supplier"
+    },
+    "columns": {
+      "code": "Code",
+      "name": "Supplier Name",
+      "group": "Group",
+      "openingBalance": "Opening Balance",
+      "crOrDr": "Cr/Dr",
+      "contact": "Contact"
+    },
+    "form": {
+      "breadcrumb": {
+        "master": "Master",
+        "title": "Supplier",
+        "addSupplier": "Add New Supplier",
+        "editSupplier": "Edit Supplier"
+      },
+      "supplierName": "Supplier Name",
+      "supplierNamePlaceholder": "Enter supplier name",
+      "nameFL": "Full Name",
+      "nameFLPlaceholder": "Enter full name",
+      "phoneNo": "Phone Number",
+      "phoneNoPlaceholder": "Enter phone number",
+      "vatNumber": "VAT Number",
+      "vatNumberPlaceholder": "Enter VAT number",
+      "crNumber": "CR Number",
+      "crNumberPlaceholder": "Enter CR number"
+    }
+  },
+  "salesQuotation": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Sales Quotation",
+      "editTitle": "Edit Sales Quotation"
+    },
+    "form": {
+      "footerSection": {
+        "label": {
+          "contactperson": "Contact Person",
+          "contactno": "Contact No",
+          "quatationvalidity": "Quotation Validity",
+          "DeliveryTerms": "Delivery Terms",
+          "deliveredwithin": "Delivery Within",
+          "deliverysite": "Delivery Site",
+          "paymentterms": "Payment Terms",
+          "IncoTerms": "Inco Terms",
+          "narrtaion": "Narration",
+          "Certificate": "Certificates",
+          "approved": "Approved"
+        },
+        "placeholders": {
+          "contactperson": "Enter Contact Person",
+          "contactno": "Enter Contact No",
+          "quatationvalidity": "Enter Quotation Validity",
+          "DeliveryTerms": "Enter Delivery Terms",
+          "deliveredwithin": "Enter Delivery Within",
+          "deliverysite": "Enter Delivery Site",
+          "paymentterms": "Enter Payment Terms",
+          "IncoTerms": "Enter Inco Terms",
+          "narrtaion": "Enter Narration",
+          "Certificate": "Enter Certificates"
+        }
+      }
+    }
+  },
+  "proformaInvoice": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Proforma Invoice",
+      "editTitle": "Edit Proforma Invoice"
+    },
+    "form": {
+      "label": {
+        "LPONO": "LPO No",
+        "LPODate": "LPO Date",
+        "DeliveryTerms": "Delivery Terms",
+        "PaymentTerms": "Payment Terms",
+        "quotationNo": " Quotation No",
+        "transportCompany": "Transportation Company",
+        "lrNo": "LR No"
+      },
+      "placeholders": {
+        "LPONO": "Enter LPO No",
+        "LPODate": "Select LPO Date",
+        "DeliveryTerms": "Enter Delivery Terms",
+        "PaymentTerms": "Enter Payment Terms",
+        "quotationNo": "Select Quotation No"
+      }
+    }
+  },
+"orderSummeryReport": {
+  "breadcrumb": {
+    "master": "Transaction",
+    "title": "Order Summary Report",
+    "veiwtitle": "Order Details"
+  },
+  "header": {
+    "orderNo": "Order No",
+    "voucher": "Voucher",
+    "date": "Date",
+    "lpoNo": "LPO No",
+    "customer": "Customer",
+    "employee": "Employee",
+    "total": "Total",
+    "status": "Status"
+  },
+  "table": {
+    "sno": "S.No",
+    "code": "Code",
+    "product": "Product",
+    "productAr": "Product (AR)",
+    "description": "Description",
+    "qty": "Qty",
+    "unit": "Unit",
+    "action": "Action",
+    "convert": "Convert",
+    "noData": "No order details found.",
+    "grandTotal": "Total"
+  }
+},
+  "salesOrder": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Sales Order",
+      "editTitle": "Edit Sales Order"
+    }
+  },
+  "deliveryNote": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Delivery Note",
+      "editTitle": "Edit Delivery Note"
+    },
+    "form": {
+      "label": {
+        "deliveryLocation": "Delivery Location",
+        "driverName": "Driver Name",
+        "deliveryVehicleNo": "Vehicle No",
+        "contactNo": "Contact No",
+        "deliveryMode": "Delivery Mode",
+        "remark": "Remark"
+      }
+    },
+    "list": {
+      "columns": {
+        "DlvryNoteNo": "Delivery Note No"
+      }
+    }
+  },
+  "purchaseCart": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Purchase Cart",
+      "editTitle": "Edit Purchase Cart"
+    },
+    "list": {
+      "columns": {
+        "orderNo": "Order No"
+      }
+    },
+    "form": {
+      "label": {
+        "purchaseCartNo": "Purchase Cart No",
+        "selectCustomer": "Select Customer",
+        "addressHeading": "Address",
+        "DeliveryTerms": "Delivery Terms",
+        "Certificate": "Certificate",
+        "transportCompany": "Transportation Company",
+        "cancelled": "Cancelled",
+        "narration": "Narration",
+        "PaymentTerms": "Payment Terms",
+        "selectSupplierMsg": "Please select a supplier to view address",
+        "customerPhone": "Customer Phone",
+        "customerName": "Customer Name",
+        "date":"Date",
+        "narrtaion": "Narration"
+      },
+      "gridSection": {
+        "columns": {
+          "expectedPrice": "Expected Price",
+          "manualItemName": "Manual Item Name",
+          "manualItemDescription": "Manual Item Description",
+          "Priority": "Priority",
+          "Status": "Status",
+          "itemName": "Item Name",
+          "description": "Description",
+          "priority": "Priority",
+          "status": "Status",
+          "searchOrTypeItem": "Search or type item name",
+          "descriptionPlaceholder": "Enter Description"
+        }
+      }
+    }
+  },
+  "purchaseOrder": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Purchase Order",
+      "editTitle": "Edit Purchase Order"
+    },
+    "list": {
+      "columns": {
+        "orderNo": "Order No"
+      }
+    },
+    "form": {
+      "label": {
+        "purchaseOrderNo": "Purchase Order No",
+        "selectSupplier": "Select Supplier",
+        "addressHeading": "Address",
+        "DeliveryTerms": "Delivery Terms",
+        "Certificate": "Certificate",
+        "transportCompany": "Transportation Company",
+        "cancelled": "Cancelled",
+        "narration": "Narration",
+        "PaymentTerms": "Payment Terms",
+        "selectSupplierMsg": "Please select a supplier to view address"
+      },
+      "gridSection": {
+        "columns": {
+          "rate": "Rate"
+        }
+      }
+    }
+  },
+  "purchaseInvoice": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Purchase Invoice",
+      "editTitle": "Edit Purchase Invoice"
+    },
+    "form": {
+      "label": {
+        "AgainstNo": "Purchase Mode",
+        "AddressHeading": "Address",
+        "ledgerId": "Select Supplier",
+        "vendorInvoiceNo": "Vendor Invoice No",
+        "invoiceDate": "Invoice Date",
+        "purchaseNo":"Purchase No",
+        "againstReceipt":"Against Receipt",
+        "againstOrder":"Against Order"
+      
+      },
+      "gridSection": {
+        "columns": {
+          "purchaseRate": "Purchase Rate"
+        }
+      },
+        "messages":{
+          "negativeCashBlockTitle":"Transaction Blocked",
+          "negativeCashWarnTitle":"Low Balance Warning"
+        },
+        "footerSection":{
+          "productHistory":{
+            "title":"History"
+          }
+        }
+    },
+    "list": {
+      "columns": {
+        "invoiceNo": "Invoice No"
+      }
+    }
+  },
+  "purchaseReturn": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Purchase Return",
+      "editTitle": "Edit Purchase Return"
+    },
+    "form": {
+      "label": {
+        "purchaseReturnNo": "Purchase Return No",
+        "purchaseInvoiceNo": "Purchase Invoice No"
+      }
+    },
+    "list": {
+      "columns": {
+        "returnNo": "Return No"
+      }
+    }
+  },
+  "theme": {
+    "light": "Switch to Light Mode",
+    "dark": "Switch to Dark Mode"
+  },
+  "unsavedChanges": {
+    "title": "Unsaved Changes",
+    "text": "You have unsaved changes. Do you want to discard them?",
+    "discard": "Discard Changes",
+    "keepWriting": "Keep Writing"
+  },
+  "reportFilters": {
+    "fromDate": "From Date",
+    "toDate": "To Date",
+    "selectCostCentre": "Select Cost Centre",
+    "selectAccountPosting": "Select Account Posting",
+    "selectLedger": "Select Ledger",
+    "selectGroup": "Select Group",
+    "generateReportBtn": "Generate Report",
+    "resetBtn": "Reset",
+    "selectUser": "Select User",
+    "condition": "Condition",
+    "conditionAll": "All",
+    "conditionDeposit": "Deposit",
+    "conditionWithdraw": "Withdraw",
+    "detailedReport": "Detailed",
+    "postedLabel": "Posted"
+  },
+  "acLedgerReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Ledger Report"
+    },
+    "grid": {
+      "columns": {
+        "SINO": "Sl No",
+        "Date": "Date",
+        "voucherType": "Voucher Type",
+        "voucherNo": "Voucher No",
+        "ledgerCode": "Ledger Code",
+        "Narration": "Narration",
+        "Debit": "Debit",
+        "Credit": "Credit",
+        "CostCentre": "Cost Centre",
+        "balance": "Balance"
+      }
+    }
+  },
+  "acGrpReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Account Ledger Report"
+    },
+    "grid": {
+      "columns": {
+        "SINO": "SlNo",
+        "ledgerName": "Ledger Name",
+        "opening": "Opening",
+        "credit": "Credit",
+        "debit": "Debit",
+        "balance": "Balance"
+      }
+    }
+  },
+  "custAndSupplrRprt": {
+    "breadcrumb": {
+      "group": "Reports",
+      "cusTitle": "Party Balance",
+      "suppTitle": "Supplier Report"
+    }
+  },
+  "cstAndSupStatementRprt": {
+    "breadcrumb": {
+      "group": "Reports",
+      "cusTitle": "Customer Statement",
+      "supTitle": "Supplier Statement"
+    }
+  },
+  "cashAndbank": {
+    "breadcrumb": {
+      "group": "Reports",
+      "cashTitle": "Cash Book",
+      "bankTitle": "Bank Book"
+    }
+  },
+  "contraReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Contra Report",
+      "detailedTitle": "Contra Detailed Report"
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "Ledger": "Ledger",
+      "Narration": "Narration",
+      "DoneBy": "Done By",
+      "CostCentre": "Cost Centre",
+      "Amount": "Amount",
+      "ToLedger": "To Ledger"
+    }
+  },
+  "receivableReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Receivable Voucher Report",
+      "detailedTitle": "Receivable Voucher Detailed Report"
+    },
+    "columns": {
+      "SNo": "#",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "Ledger": "A/C Ledger",
+      "FromLedger": "From Ledger",
+      "ToLedger": "To Ledger",
+      "Amount": "Amount",
+      "ReceivedAmount": "Received Amount",
+      "Narration": "Narration",
+      "PaymentMode": "Payment Mode",
+      "CostCentre": "Cost Centre",
+      "DoneBy": "Done By"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "selectLedger": "Select Ledger",
+      "selectCostCentre": "Select Cost Centre",
+      "selectUser": "Select User",
+      "paymentMode": "Payment Mode",
+      "summary": "Summary",
+      "detailed": "Detailed",
+      "generateReport": "Generate Report",
+      "reset": "Reset"
+    }
+  },
+   "damageStockReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Damage Stock Report",
+      "detailedTitle": "Damage Stock Detailed Report"
+    },
+    "columns": {
+      "SNo": "#",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "ProductCode": "Product Code",
+      "Barcode": "Barcode",
+      "Description": "Description",
+      "Quantity": "Quantity",
+      "Unit": "Unit",
+      "Rate": "Rate",
+      "Amount": "Amount",
+      "TotalAmount": "Total Amount",
+      "Narration": "Narration"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "selectUser": "Select User",
+      "summary": "Summary",
+      "detailed": "Detailed",
+      "generateReport": "Generate Report",
+      "reset": "Reset"
+    }
+  },
+  "usedStockReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Used Stock Report",
+      "detailedTitle": "Used Stock Detailed Report"
+    },
+    "columns": {
+      "SNo": "#",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "ProductCode": "Product Code",
+      "Barcode": "Barcode",
+      "Quantity": "Quantity",
+      "Unit": "Unit",
+      "Rate": "Rate",
+      "Amount": "Amount",
+      "TotalAmount": "Total Amount",
+      "Narration": "Narration"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "selectUser": "Select User",
+      "summary": "Summary",
+      "detailed": "Detailed",
+      "generateReport": "Generate Report",
+      "reset": "Reset"
+    }
+  },
+  "godownTransferReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Stock Transfer Report",
+      "detailedTitle": "Stock Transfer Detailed Report"
+    },
+    "columns": {
+      "SNo": "#",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "BranchFrom": "From Branch",
+      "BranchTo": "To Branch",
+      "GodownFrom": "From Godown",
+      "GodownTo": "To Godown",
+      "ProductCode": "Product Code",
+      "Barcode": "Barcode",
+      "Quantity": "Quantity",
+      "ReceivedQuantity": "Received Qty",
+      "Unit": "Unit",
+      "Rate": "Rate",
+      "Amount": "Amount",
+      "GrandTotal": "Grand Total",
+      "Status": "Status",
+      "TransportCompany": "Transport Company"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "selectApprovalStatus": "Approval Status",
+      "selectUser": "Select User",
+      "summary": "Summary",
+      "detailed": "Detailed",
+      "generateReport": "Generate Report",
+      "reset": "Reset"
+    }
+  },
+   "billBalanceReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Bill Balance Report"
+    },
+    "columns": {
+      "SNo": "#",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "VoucherType": "Voucher Type",
+      "LedgerName": "Ledger",
+      "LedgerCode": "Code",
+      "Description": "Description",
+      "OpeningBalance": "Opening Balance",
+      "DebitAmount": "Debit",
+      "CreditAmount": "Credit",
+      "ClosingBalance": "Closing Balance"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "selectGroup": "Select Group",
+      "selectLedger": "Select Ledger",
+      "selectCostCentre": "Select Cost Centre",
+      "mainGroup": "Main Group Only",
+      "showOpeningBalance": "Show Opening Balance",
+      "summary": "Summary",
+      "detailed": "Detailed",
+      "generateReport": "Generate Report",
+      "reset": "Reset"
+    }
+  },
+  "journalReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Journal Report"
+    },
+    "filters": {
+      "allCostCentres": "All Cost Centres"
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "Ledger": "Ledger",
+      "Narration": "Narration",
+      "DoneBy": "Done By",
+      "CostCentre": "Cost Centre",
+      "Debit": "Debit",
+      "Credit": "Credit"
+    }
+  },
+  "detailedledgerReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Detailed Ledger Report"
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Date": "Date",
+      "voucherType": "Voucher Type",
+      "ledgerCode": "Ledger",
+      "Narration": "Narration",
+      "CostCentre": "Cost Centre",
+      "Debit": "Dr Amount",
+      "Credit": "Cr Amount",
+      "BalanceLabel": "Balance"
+    }
+  },
+  "paymentReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Payment Report",
+      "detailedTitle": "Payment Detailed Report"
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "Ledger": "Ledger",
+      "Narration": "Narration",
+      "DoneBy": "Done By",
+      "CostCentre": "Cost Centre",
+      "Amount": "Amount",
+      "FromLedger": "From Ledger",
+      "ToLedger": "To Ledger",
+      "TotalAmount": "Total Amount"
+    }
+  },
+  "receiptReport": {
+    "filters": {
+      "selectEmployee": "Select Employee"
+    },
+    "export":{
+      "label": "Export"
+    },
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Receipt Report",
+      "detailedTitle": "Receipt Detailed Report"
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "BankCash": "Bank Cash",
+      "Narration": "Narration",
+      "DoneBy": "Done By",
+      "CostCentre": "Cost Centre",
+      "Amount": "Amount",
+      "ToLedger": "To Ledger",
+      "FromLedger": "From Ledger",
+      "TotalAmount": "Total Amount"
+    }
+  },
+  "dayBookReport": {
+    "filters": {
+      "format": "Format",
+      "formatOptions": {
+        "Detailed": "Detailed",
+        "Condensed": "Condensed"
+      }
+    },
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Day Book Report"
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "date": "Date",
+      "voucherType": "Voucher Type",
+      "voucherNo": "Voucher No",
+      "productLedger": "Product/Ledger",
+      "debit": "Debit",
+      "credit": "Credit"
+    }
+  },
+  "cusSuppAddressBook": {
+    "breadcrumb": {
+      "group": "Reports",
+      "custtitle": "Customer Address Book",
+      "supptitle": "Supplier Address Book"
+    },
+    "labels": {
+      "selectColumns": "Columns"
+    },
+    "filters": {
+      "name": "Name",
+      "address": "Address",
+      "phone": "Phone",
+      "email": "Email"
+    },
+    "columns": {
+      "ledgerCode": "Code",
+      "ledgerName": "Name",
+      "nameArb": "Arabic Name",
+      "ledgerType": "Type",
+      "source": "Source",
+      "phoneNo": "Phone",
+      "faxNo": "Fax",
+      "email": "Email",
+      "address": "Address",
+      "AddressArabic": "Address (Arabic)",
+      "BuildingNo": "Building No",
+      "StreetName": "Street",
+      "District": "District",
+      "CityName": "City",
+      "Country": "Country",
+      "PostboxNo": "P.O. Box",
+      "AdditionalNo": "Additional No",
+      "tinNumber": "TIN No",
+      "panNumber": "PAN No",
+      "cstNumber": "CST No",
+      "accountNo": "Account No",
+      "creditLimit": "Credit Limit",
+      "creditPeriod": "Credit Days",
+      "creditLimitStatus": "Credit Status",
+      "openingBalance": "Opening Balance",
+      "crOrDr": "Cr / Dr",
+      "bankname": "Bank",
+      "bankBranchName": "Bank Branch",
+      "bankaccname": "Bank Account Name",
+      "ibanno": "IBAN",
+      "bankSwiftCode": "Swift Code",
+      "pricingLevelId": "Price Level",
+      "currencyId": "Currency",
+      "routeId": "Route",
+      "areaId": "Area",
+      "marketId": "Market",
+      "narration": "Narration"
+    }
+  },
+  "taxSummeryReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Tax Summary Report"
+    },
+    "filters": {
+      "tax": "Tax",
+      "taxType": "Type",
+      "formType": "Form Type",
+      "input": "Input",
+      "optional": "Optional"
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Date": "Date",
+      "VoucherNo": "Voucher No",
+      "VoucherType": "Voucher Type",
+      "TaxAmount": "Tax Amount",
+      "BillAmount": "Bill Amount"
+    }
+  },
+  "taxDetailedReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Tax Detailed Report"
+    },
+    "filters": {
+      "VoucherType": "Voucher Type",
+      "Cash/Party": "Cash/Party",
+      "Ledger": "Ledger",
+      "tax": "Tax"
+    },
+    "columns": {
+      "Date": "Date",
+      "VoucherType": "Voucher Type",
+      "VoucherNo": "Voucher No",
+      "BillTime": "Time",
+      "PartyName": "Party Name",
+      "VATNo": "VAT No",
+      "VendorInvoiceNo": "Vendor Invoice",
+      "TaxableAmount": "Taxable Amount",
+      "TaxAmount": "Tax Amount",
+      "NetAmount": "Net Amount",
+      "Adjust": "Adjust",
+      "GrandTotal": "Grand Total",
+      "InputOrOutput": "In / Out"
+    }
+  },
+  "stockTransfer": {
+    "breadCrumb": {
+      "master": "Transactions",
+      "title": "Stock Transfer",
+      "editTitle": "Edit Stock Transfer"
+    },
+    "form": {
+      "label": {
+        "fromBranch": "From Branch",
+        "toBranch": "To Branch",
+        "transferFrom": "Transfer From",
+        "transferTo": "Transfer To",
+        "fromGodown": "From Godown",
+        "toGodown": "To Godown",
+        "voucherNo": "Voucher No",
+        "transportCompany": "Transport Company"
+      }
+    },
+    "list": {
+      "columns": {
+        "sno": "SNo",
+        "transferNo": "Transfer No",
+        "godownFrom": "Godown From",
+        "godownTo": "Godown To",
+        "date": "Date",
+        "amount": "Amount",
+        "status": "Status"
+      }
+    }
+  },
+  "stockValueReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Stock Value Report"
+    },
+    "filters": {
+      "Product Group": "Product Group",
+      "Product": "Product",
+      "Brand": "Brand",
+      "Tax": "Tax",
+      "Tax Type": "Tax Type",
+      "Godown": "Godown",
+      "Rack": "Rack",
+      "Zero Stock": "Zero Stock",
+      "Negative Stock": "Negative Stock",
+      "All": "All",
+      "Search...": "Search...",
+      "Search product...": "Search product...",
+      "Generate Report": "Generate Report",
+      "Reset": "Reset",
+      "Loading...": "Loading..."
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Product Code": "Product Code",
+      "Product Name": "Product Name",
+      "Group": "Group",
+      "Brand": "Brand",
+      "Unit": "Unit",
+      "Godown": "Godown",
+      "Rack": "Rack",
+      "Stock Qty": "Stock Qty",
+      "Rate": "Rate",
+      "Stock Value": "Stock Value",
+      "Purchase Rate": "Purchase Rate",
+      "Sales Rate": "Sales Rate",
+      "MRP": "MRP",
+      "Total": "Total"
+    },
+    "inclusive": "Inclusive",
+    "exclusive": "Exclusive"
+  },
+  "stockReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Stock Report"
+    },
+    "filters": {
+      "Criteria": "Criteria",
+      "Select Criteria": "Select Criteria",
+      "Date Wise": "Date Wise",
+      "From Date": "From Date",
+      "To Date": "To Date",
+      "Active Only": "Active Only",
+      "Generate Report": "Generate Report",
+      "Reset": "Reset",
+      "Loading...": "Loading..."
+    },
+    "criteria": {
+      "SlowMoving": "Slow Moving",
+      "FastMoving": "Fast Moving",
+      "NonMoving": "Non Moving",
+      "All": "All"
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Product Code": "Product Code",
+      "Product Name": "Product Name",
+      "Stock Qty": "Stock Qty",
+      "Rate": "Rate",
+      "Value": "Value"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters"
+    },
+    "yes": "Yes",
+    "no": "No",
+    "total": "Total"
+  },
+  "profitAndLossAnalysis": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Profit & Loss Analysis"
+    },
+    "filters": {
+      "From Date": "From Date",
+      "To Date": "To Date",
+      "Generate Report": "Generate Report",
+      "Reset": "Reset",
+      "Loading...": "Loading..."
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Particulars": "Particulars",
+      "Amount": "Amount",
+      "Total": "Total"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters"
+    },
+    "summaryLabels": {
+      "GrossSales": "Gross Sales",
+      "SalesReturn": "Sales Return",
+      "NetSales": "Net Sales",
+      "OpeningStock": "Opening Stock",
+      "Purchases": "Purchases",
+      "PurchaseReturn": "Purchase Return",
+      "NetPurchases": "Net Purchases",
+      "ClosingStock": "Closing Stock",
+      "CostOfGoodsSold": "Cost of Goods Sold",
+      "GrossProfit": "Gross Profit",
+      "GrossLoss": "Gross Loss",
+      "OperatingExpenses": "Operating Expenses",
+      "NetProfit": "Net Profit",
+      "NetLoss": "Net Loss"
+    }
+  },
+  "productMovementReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Product Movement Report"
+    },
+    "filters": {
+      "From Date": "From Date",
+      "To Date": "To Date",
+      "Product": "Product",
+      "Select Product": "Select Product",
+      "Voucher Type": "Voucher Type",
+      "Godown": "Godown",
+      "Party": "Party",
+      "All": "All",
+      "All Parties": "All Parties",
+      "Search...": "Search...",
+      "Search product...": "Search product...",
+      "Search party...": "Search party...",
+      "Generate Report": "Generate Report",
+      "Reset": "Reset",
+      "Loading...": "Loading...",
+      "Please select a product": "Please select a product"
+    },
+    "voucherTypes": {
+      "Sales Invoice": "Sales Invoice",
+      "Sales Return": "Sales Return",
+      "Purchase Invoice": "Purchase Invoice",
+      "Purchase Return": "Purchase Return",
+      "Stock Journal": "Stock Journal",
+      "Opening Stock": "Opening Stock",
+      "All": "All"
+    },
+    "columns": {
+      "SNo": "Sl No",
+      "Date": "Date",
+      "Voucher Type": "Voucher Type",
+      "Voucher No": "Voucher No",
+      "Party": "Party",
+      "Inward Qty": "Inward Qty",
+      "Outward Qty": "Outward Qty",
+      "Balance": "Balance",
+      "Total": "Total"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters"
+    }
+  },
+  "myAccount": {
+    "breadcrumb": {
+      "group": "My Account",
+      "title": "My Account"
+    }
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "statCard": {
+      "totalSales": "Total Sales",
+      "totalPurchases": "Total Purchases",
+      "bankBalance": "Bank Balance",
+      "cashBalance": "Cash Balance",
+      "allBranchBankBalance": "All Branch Bank Balance",
+      "allBranchCashBalance": "All Branch Cash Balance"
+    },
+    "tableColumns": {
+      "branchCode": "Branch",
+      "ledgerName": "Ledger Name",
+      "balance": "Balance"
+    }
+  },
+  "purchaseDayReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Purchase Day Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "createdUser": "Created User",
+      "allUsers": "All Users",
+      "searchUser": "Search user...",
+      "accountsPosting": "Accounts Posting",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Purchase Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "date": "Date",
+        "invoiceNo": "Invoice No",
+        "vendorInvoiceNo": "Vendor Invoice",
+        "supplier": "Supplier",
+        "totalAmount": "Total Amount",
+        "taxAmount": "Tax Amount",
+        "netAmount": "Net Amount",
+        "cashAmount": "Cash",
+        "bankAmount": "Bank",
+        "creditAmount": "Credit",
+        "createdBy": "Created By"
+      },
+      "summary": {
+        "records": "Records",
+        "totalTax": "Total Tax",
+        "cash": "Cash",
+        "bank": "Bank",
+        "credit": "Credit",
+        "grandTotal": "Grand Total"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "costeCentreReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "heading": "Cost Centre Report"
+    },
+    "grid": {
+      "columns": {
+        "date": "Date",
+        "voucherType": "Voucher Type",
+        "voucherNo": "Voucher No",
+        "ledgername": "Ledger Name",
+        "debit": "Debit",
+        "credit": "Credit",
+        "Narration": "Narration",
+        "balance": "Balance"
+      }
+    }
+  },
+  "payableReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Payable Voucher Report"
+    }
+  },
+ "physicalStockReport": {
+  "breadcrumb": {
+    "group": "Reports",
+    "title": "Physical Stock Report",
+    "detailedTitle": "Physical Stock Detailed Report",
+    "summaryTitle": "Physical Stock Summary Report"
+  },
+  "messages": {
+    "noDataFound": "No data found for the selected filters.",
+    "noDataToExport": "No data to export."
+  },
+  "export": {
+    "label": "Export Report"
+  },
+  "columns": {
+    "voucherAmount": "Voucher Amt",
+    "productCode": "Product Code",
+    "barcode": "Barcode",
+    "qty": "Qty",
+    "rate": "Rate",
+    "amount": "Amount"
+  }
+},
+  "salesReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Sales Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "customer": "Customer",
+      "allCustomers": "All Customers",
+      "searchCustomer": "Search customer...",
+      "costCentre": "Cost Centre",
+      "allCostCentres": "All Cost Centres",
+      "batch": "Batch",
+      "allBatches": "All Batches",
+      "taxType": "Tax Type",
+      "selectTaxType": "Select Tax Type",
+      "condition": "Condition",
+      "selectCondition": "Select Condition",
+      "conditionAll": "All",
+      "conditionCash": "Cash",
+      "conditionCredit": "Credit",
+      "conditionBank": "Bank",
+      "paymentMode": "Payment Mode",
+      "allPaymentModes": "All Payment Modes",
+      "paymentModeAll": "All",
+      "paymentModeCash": "Cash",
+      "paymentModeBank": "Bank",
+      "paymentModeCredit": "Credit",
+      "dueOn": "Due On",
+      "search": "Search...",
+      "accountsPosting": "Accounts Posting",
+      "optional": "Optional",
+      "package": "Package",
+      "accountsOnly": "Accounts Only",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading...",
+      "summary": "Summary",
+      "detailed": "Detailed"
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Sales Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "date": "Date",
+        "invoiceNo": "Invoice No",
+        "customer": "Customer",
+        "product": "Product",
+        "unit": "Unit",
+        "qty": "Qty",
+        "rate": "Rate",
+        "grossAmount": "Gross Amt",
+        "discount": "Discount",
+        "taxableAmount": "Taxable Amt",
+        "taxAmount": "Tax Amt",
+        "amount": "Amount"
+      },
+      "summary": {
+        "records": "Records",
+        "totalQty": "Total Qty",
+        "totalDiscount": "Total Discount",
+        "totalTax": "Total Tax",
+        "grandTotal": "Grand Total"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "salesSummaryReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Sales Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "reportType": "Report Type",
+      "selectReportType": "Select Report Type",
+      "reportTypeAll": "All",
+      "reportTypeCash": "Cash",
+      "reportTypeCredit": "Credit",
+      "reportTypeBank": "Bank",
+      "customer": "Customer",
+      "allCustomers": "All Customers",
+      "searchCustomer": "Search customer...",
+      "salesman": "Salesman",
+      "allSalesmen": "All Salesmen",
+      "finacUser": "Finac User",
+      "posUser": "POS User",
+      "allUsers": "All Users",
+      "currency": "Currency",
+      "selectCurrency": "Select Currency",
+      "search": "Search...",
+      "accountsPosting": "Accounts Posting",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Sales Summary Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "date": "Date",
+        "invoiceNo": "Invoice No",
+        "type": "Type",
+        "party": "Party",
+        "salesman": "Salesman",
+        "totalAmount": "Total Amt",
+        "discount": "Discount",
+        "taxableAmount": "Taxable Amt",
+        "taxAmount": "Tax Amt",
+        "billAmount": "Bill Amt",
+        "cash": "Cash",
+        "bank": "Bank",
+        "credit": "Credit",
+        "doneBy": "Done By"
+      },
+      "summary": {
+        "records": "Records",
+        "totalTax": "Total Tax",
+        "cash": "Cash",
+        "bank": "Bank",
+        "credit": "Credit",
+        "billAmount": "Bill Amount"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "purchaseReturnReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Purchase Return Report",
+      "detailedTitle": "Purchase Return Report",
+      "summaryTitle": "Purchase Return Summary Report"
+    },
+    "filters": {
+      "reportType": "Report Type",
+      "detailed": "Detailed",
+      "summary": "Summary",
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "supplier": "Supplier",
+      "allSuppliers": "All Suppliers",
+      "searchSupplier": "Search supplier...",
+      "costCentre": "Cost Centre",
+      "allCostCentres": "All Cost Centres",
+      "purchaseInvoice": "Purchase Invoice",
+      "allInvoices": "All Invoices",
+      "currency": "Currency",
+      "selectCurrency": "Select Currency",
+      "user": "User",
+      "allUsers": "All Users",
+      "search": "Search...",
+      "accountsPosting": "Accounts Posting",
+      "optional": "Optional",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Purchase Return Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "date": "Date",
+        "invoiceNo":"Invoice No",
+        "narration": "Narration",
+        "returnNo": "Return No",
+        "supplier": "Supplier",
+        "acLedger": "A/C Ledger",
+        "product": "Product",
+        "costCentre": "Cost Centre",
+        "unit": "Unit",
+        "qty": "Qty",
+        "rate": "Rate",
+        "grossAmount": "Gross Amt",
+        "discount": "Discount",
+        "taxableAmount": "Taxable Amt",
+        "taxAmount": "Tax Amt",
+        "amount": "Amount",
+        "totalAmount": "Total Amt",
+        "otherCharge": "Other Charge",
+        "roundOff": "Round Off",
+        "doneBy": "Done By"
+      },
+      "summary": {
+        "records": "Records",
+        "totalQty": "Total Qty",
+        "totalTax": "Total Tax",
+        "grandTotal": "Grand Total",
+        "totalAmount": "Total Amount",
+        "amount": "Amount"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "salesDayReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Sales Day Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "accountsPosting": "Accounts Posting",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Sales Day Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "days",
+      "columns": {
+        "date": "Date",
+        "totalAmount": "Total Amount",
+        "totalCost": "Total Cost",
+        "totalTax": "Total Tax",
+        "totalProfit": "Total Profit"
+      },
+      "summary": {
+        "days": "Days",
+        "totalSales": "Total Sales",
+        "totalCost": "Total Cost",
+        "totalTax": "Total Tax",
+        "totalProfit": "Total Profit"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "salesQuotationReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Sales Quotation Report"
+    },
+    "filters": {
+      "reportMode": "Report Mode",
+      "modeSummary": "Summary",
+      "modeDetailed": "Detailed",
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "customer": "Customer",
+      "allCustomers": "All Customers",
+      "currency": "Currency",
+      "salesman": "Salesman",
+      "costCentre": "Cost Centre",
+      "condition": "Condition",
+      "conditionAll": "All",
+      "conditionCash": "Cash",
+      "conditionCredit": "Credit",
+      "conditionBank": "Bank",
+      "partyName": "Party Name",
+      "user": "User",
+      "all": "All",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "columns": {
+        "date": "Date",
+        "quotationNo": "Quotation No",
+        "type": "Type",
+        "party": "Party",
+        "salesman": "Salesman",
+        "customer": "Customer",
+        "product": "Product",
+        "unit": "Unit",
+        "qty": "Qty",
+        "rate": "Rate",
+        "grossAmount": "Gross Amount",
+        "discount": "Discount",
+        "taxableAmount": "Taxable Amt",
+        "taxAmount": "Tax Amount",
+        "amount": "Amount",
+        "totalAmount": "Total Amount",
+        "grandAmount": "Grand Amount",
+        "approved": "Approved",
+        "doneBy": "Done By"
+      },
+      "total": "Total"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters.",
+      "noDataToExport": "No data available to export."
+    },
+    "export": {
+      "label": "Export"
+    }
+  },
+  "salesQuotationSummaryReport": {
+    "breadcrumb": {
+      "title": "Sales Quotation Summary Report"
+    },
+    "grid": {
+      "columns": {
+        "date": "Date",
+        "quotationNo": "Quotation No",
+        "type": "Type",
+        "party": "Party",
+        "salesman": "Salesman",
+        "totalAmount": "Total Amount",
+        "discount": "Discount",
+        "taxableAmount": "Taxable Amt",
+        "taxAmount": "Total Tax",
+        "grandAmount": "Grand Amount",
+        "approved": "Approved",
+        "doneBy": "Done By"
+      },
+      "total": "Total"
+    }
+  },
+  "salesmanWiseSalesReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Salesman Wise Sales Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "salesman": "Salesman",
+      "allSalesmen": "All Salesmen",
+      "mode": "Mode",
+      "selectMode": "Select Mode",
+      "voucherWise": "Voucher Wise",
+      "productWise": "Product Wise",
+      "salesmanWise": "Salesman Wise",
+      "currency": "Currency",
+      "brand": "Brand",
+      "all": "All",
+      "search": "Search...",
+      "accountsPosting": "Accounts Posting",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "slNo": "#",
+        "date": "Date",
+        "voucherNo": "Voucher No",
+        "invoiceNo": "Invoice No",
+        "customer": "Customer",
+        "doneBy": "Done By",
+        "code": "Code",
+        "item": "Item",
+        "product": "Product",
+        "qty": "Qty",
+        "free": "Free",
+        "rate": "Rate",
+        "amount": "Amount",
+        "billAmount": "Bill Amount",
+        "salesman": "Salesman",
+        "totalAmount": "Total Amt",
+        "taxAmount": "Tax Amt"
+      },
+      "summary": {
+        "records": "Records",
+        "totalQty": "Total Qty",
+        "totalFree": "Total Free",
+        "totalAmount": "Total Amount",
+        "totalTax": "Total Tax",
+        "billAmount": "Bill Amount"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "salesmanWiseSalesOrderReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Salesman Wise Sales Order Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "salesman": "Salesman",
+      "allSalesmen": "All Salesmen",
+      "mode": "Mode",
+      "voucherWise": "Voucher Wise",
+      "productWise": "Product Wise",
+      "salesmanWise": "Salesman Wise",
+      "currency": "Currency",
+      "brand": "Brand",
+      "all": "All",
+      "search": "Search...",
+      "accountsPosting": "Accounts Posting",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "id": "#",
+        "slNo": "#",
+        "date": "Date",
+        "voucherNo": "Voucher No",
+        "orderNo": "Order No",
+        "code": "Code",
+        "item": "Item",
+        "qty": "Qty",
+        "free": "Free",
+        "rate": "Rate",
+        "amount": "Amount",
+        "doneBy": "Done By",
+        "salesman": "Salesman",
+        "customer": "Customer",
+        "totalAmount": "Total Amt",
+        "taxAmount": "Tax Amt",
+        "billAmount": "Bill Amt"
+      },
+      "summary": {
+        "records": "Records",
+        "totalQty": "Total Qty",
+        "totalFree": "Total Free",
+        "totalAmount": "Total Amount"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "salesmanWiseBillsPending": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Salesman Wise Bills Pending"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "status": "Report Type",
+      "statusLedger": "Ledger Wise",
+      "statusBill": "Bill Wise",
+      "salesman": "Salesman",
+      "customer": "Customer",
+      "currency": "Currency",
+      "selectCurrency": "Select Currency",
+      "all": "All",
+      "optional": "Optional",
+      "accountsPosting": "Accounts Posting",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Pending Bills Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "slNo": "#",
+        "accountLedger": "Account Ledger",
+        "voucherType": "Voucher Type",
+        "voucherNo": "Voucher No",
+        "date": "Date",
+        "narration": "Narration",
+        "amount": "Amount",
+        "invoiceNo": "Invoice No",
+        "salesman": "Salesman",
+        "customer": "Customer",
+        "billAmount": "Bill Amt",
+        "paidAmount": "Paid Amt",
+        "pendingAmount": "Pending Amt"
+      },
+      "summary": {
+        "records": "Records",
+        "totalPending": "Total Pending"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "areaWiseSalesReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Area Wise Sales Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "mode": "Mode",
+      "voucherWise": "Voucher Wise",
+      "productWise": "Product Wise",
+      "areaWise": "Area Wise",
+      "area": "Area",
+      "route": "Route",
+      "market": "Market",
+      "salesman": "Salesman",
+      "currency": "Currency",
+      "brand": "Brand",
+      "all": "All",
+      "optional": "Optional",
+      "accountsPosting": "Accounts Posting",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "slNo": "#",
+        "date": "Date",
+        "invoiceNo": "Invoice No",
+        "productCode": "Code",
+        "productName": "Product",
+        "salesman": "Salesman",
+        "qty": "Qty",
+        "freeQty": "Free",
+        "rate": "Rate",
+        "discount": "Discount",
+        "grossAmount": "Gross Amt"
+      },
+      "summary": {
+        "records": "Records",
+        "totalQty": "Total Qty",
+        "totalFreeQty": "Total Free",
+        "totalDiscount": "Total Discount",
+        "grossAmount": "Gross Amount"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "productVsSalesManReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Product Vs Salesman Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "mode": "Mode",
+      "detailed": "Detailed",
+      "summary": "Summary",
+      "productGroup": "Product Group",
+      "product": "Product",
+      "brand": "Brand",
+      "all": "All",
+      "accountsPosting": "Accounts Posting",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "slNo": "#",
+        "date": "Date",
+        "voucherNo": "Voucher No",
+        "partNo": "Part No",
+        "item": "Item",
+        "salesman": "Salesman",
+        "qty": "Qty",
+        "free": "Free",
+        "rate": "Rate",
+        "amount": "Amount"
+      },
+      "summary": {
+        "records": "Records",
+        "totalQty": "Total Qty",
+        "totalFree": "Total Free",
+        "totalAmount": "Total Amount"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "productWiseSalesmanReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Product Wise Salesman Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "salesman": "Salesman",
+      "mode": "Mode",
+      "detailed": "Detailed",
+      "summary": "Summary",
+      "all": "All",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "slNo": "#",
+        "date": "Date",
+        "billNo": "Bill No",
+        "productCode": "Code",
+        "productName": "Product",
+        "customer": "Customer",
+        "salesman": "Salesman",
+        "qty": "Qty",
+        "rate": "Rate",
+        "amount": "Amount"
+      },
+      "summary": {
+        "records": "Records",
+        "totalQty": "Total Qty",
+        "totalAmount": "Total Amount"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "productWiseSalesSummaryReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Product Wise Sales Summary"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "category": "Category",
+      "all": "All",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "loading": "Loading...",
+      "noDataTitle": "No Data Found",
+      "noDataSubtitle": "Select filters and click \"Show\" to view data.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "slNo": "#",
+        "productCode": "Code",
+        "productName": "Product",
+        "category": "Category",
+        "qty": "Qty",
+        "sales": "Sales",
+        "tax": "Tax",
+        "total": "Total"
+      },
+      "summary": {
+        "records": "Records",
+        "totalQty": "Total Qty",
+        "totalSales": "Total Sales",
+        "grandTotal": "Grand Total"
+      }
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "productSearchVoucherWise": {
+    "breadcrumb": {
+      "group": "Search",
+      "title": "Product Search (Voucher Wise)"
+    },
+    "filters": {
+      "startDate": "Start Date",
+      "endDate": "End Date",
+      "voucherType": "Voucher Type",
+      "productGroup": "Product Group",
+      "product": "Product",
+      "party": "Party",
+      "salesman": "Salesman",
+      "searchText": "Search Text",
+      "searchPlaceholder": "Search by product name, code, voucher no...",
+      "all": "All",
+      "salesInvoice": "Sales Invoice",
+      "salesReturn": "Sales Return",
+      "purchaseInvoice": "Purchase Invoice",
+      "purchaseReturn": "Purchase Return",
+      "deliveryNote": "Delivery Note",
+      "salesOrder": "Sales Order",
+      "purchaseOrder": "Purchase Order",
+      "materialReceipt": "Material Receipt",
+      "search": "Search",
+      "reset": "Reset",
+      "searching": "Searching..."
+    },
+    "grid": {
+      "loading": "Searching...",
+      "noDataTitle": "No Results Found",
+      "noDataSubtitle": "Enter search criteria and click \"Search\" to find products.",
+      "total": "Total",
+      "records": "records",
+      "columns": {
+        "slNo": "#",
+        "date": "Date",
+        "voucherType": "Voucher Type",
+        "voucherNo": "Voucher No",
+        "productCode": "Code",
+        "productName": "Product",
+        "party": "Party",
+        "qty": "Qty",
+        "rate": "Rate",
+        "amount": "Amount"
+      },
+      "summary": {
+        "records": "Records",
+        "totalQty": "Total Qty",
+        "totalAmount": "Total Amount"
+      }
+    },
+    "export": {
+      "label": "Export"
+    },
+    "messages": {
+      "noDataFound": "No products found for the search criteria",
+      "noDataToExport": "No data to export"
+    }
+  },
+  "trialBalance": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Trial Balance"
+    },
+    "reportType": "Report Type",
+    "condensed": "Condensed",
+    "detailed": "Detailed",
+    "columns": {
+      "sNo": "#",
+      "ledgerCode": "Code",
+      "ledgerName": "Ledger Name",
+      "groupName": "Group",
+      "debit": "Debit",
+      "credit": "Credit",
+      "difference": "Difference"
+    },
+    "noData": "No data available. Please generate a report.",
+    "exportFileName": "Trial_Balance_Report"
+  },
+  "reportFileSettings": {
+    "breadcrumb": {
+      "settings": "Settings",
+      "title": "Report File Settings"
+    },
+    "heading": "Report File Settings",
+    "columns": {
+      "sno": "#",
+      "reportName": "Report Name",
+      "fileName": "File Name",
+      "filePath": "File Path",
+      "description": "Description",
+      "status": "Status",
+      "formName": "Form Name",
+      "formType": "Form Type",
+      "printType": "Print Type"
+    },
+    "actions": {
+      "addNew": "Add New Report File Setting",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "alerts": {
+      "fetchError": "Error fetching report file settings",
+      "deletePermission": "You do not have permission to delete report file setting",
+      "deleteSuccess": "Report file setting deleted successfully",
+      "deleteError": "Error deleting report file setting",
+      "saveSuccess": "Report file setting saved successfully",
+      "updateSuccess": "Report file setting updated successfully",
+      "saveError": "Error saving report file setting"
+    },
+    "form": {
+      "title": "Add Report File Setting",
+      "editTitle": "Edit Report File Setting",
+      "fields": {
+        "formName": "Form Name",
+        "formType": "Form Type",
+        "reportName": "Report Name",
+        "printType": "Print Type",
+        "ReportFormat": "Report Format",
+        "extraDate": "Extra Date",
+        "extra1": "Extra Information",
+        "isDefault": "Is Default",
+        "isActive": "Is Active"
+      },
+      "placeholders": {
+        "formName": "Enter form name",
+        "formType": "Enter form type",
+        "reportName": "Enter report name",
+        "printType": "Enter print type",
+        "extraDate": "Select date",
+        "extra1": "Enter extra information"
+      },
+      "buttons": {
+        "save": "Save",
+        "update": "Update",
+        "cancel": "Cancel"
+      }
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    }
+  },
+  "settings": {
+    "breadcrumb": {
+      "settings": "Settings"
+    }
+  },
+  "Total": "Total",
+  "Export Report": "Export Report",
+  "No data to export": "No data to export",
+  "purchaseQuotation":{
+    "breadcrumb": {
+      "group": "Purchase",
+      "title": "Purchase Quotation",
+      "editTitle": "Edit Purchase Quotation"
+    },
+    "form":{
+      "label":{
+        "purchaseQuotationNo":"Purchase Quotation No",
+        "dueDate":"Due Date",
+        "refNo":"Reference No",
+        "DeliveryTerms":"Delivery Terms",
+        "CertificateNo":"Certificate",
+        "PaymentTerms":"Payment Terms",
+        "cancelled":"Cancelled"
+      }
+    }
+  },
+   "acGroupReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Account Group Report"
+    },
+    "grid": {
+      "columns": {
+        "GroupName": "Group Name",
+        "Opening": "Opening Balance",
+        "Debit": "Debit",
+        "Credit": "Credit",
+        "ClosingBalance": "Closing Balance"
+      }
+    }
+  },
+   "manufacturingJournal": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Manufacturing Journal",
+      "editTitle": "Edit Manufacturing Journal"
+    },
+    "list": {
+      "columns": {
+        "sno": "S.No",
+        "journalNo": "Journal No",
+        "date": "Date",
+        "productName": "Product",
+        "quantity": "Quantity",
+        "unit": "Unit",
+        "detailCount": "Raw Materials"
+      },
+      "searchPlaceholder": "Search by Journal No, Product..."
+    },
+    "form": {
+      "label": {
+        "voucherNo": "Voucher No",
+        "date": "Date",
+        "RefNo": "Ref No",
+        "refDate": "Ref Date",
+        "product": "Product (BOM)",
+        "quantity": "Output Quantity",
+        "formHeaderSection": {
+          "GodownId": "Godown"
+        }
+      },
+      "placeholders": {
+        "RefNo": "Enter reference number",
+        "product": "Select BOM Product",
+        "formHeaderSection": {
+          "GodownId": "Select Godown"
+        }
+      },
+      "gridSection": {
+        "productCode": "Product Code",
+        "rawMaterial": "Finished Goods"
+      }
+    },
+    "validation": {
+      "dateRequired": "Date is required",
+      "productRequired": "At least one raw material is required"
+    }
+  },
+   "againstModal": {
+    "title": "Bill-by-Bill Against",
+    "noData": "No pending bills found.",
+    "refresh": "Refresh",
+    "total": "Total",
+    "confirm": "Confirm",
+    "addRow": "Add Row",
+    "columns": {
+      "type": "Type",
+      "voucherType": "Voucher Type",
+      "voucherNo": "Voucher No",
+      "voucherDate": "Date",
+      "billAmount": "Bill Amount",
+      "amountToPay": "Amount to Pay",
+      "currency": "Currency",
+      "amount": "Amount"
+    }
+  },
+  "purchaseCartReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Purchase Cart Report"
+    },
+    "filters": {
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "status": "Status",
+      "selectStatus": "Select Status",
+      "statusAll": "All",
+      "statusPending": "Pending",
+      "statusCompleted": "Completed",
+      "statusCancelled": "Cancelled",
+      "customerName": "Customer Name",
+      "customerNamePlaceholder": "Enter customer name or 'All'",
+      "mode": "Report Mode",
+      "selectMode": "Select Mode",
+      "modeSummary": "Summary",
+      "modeDetailed": "Detailed",
+      "show": "Show Report",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "columns": {
+        "date": "Date",
+        "cartNo": "Cart No",
+        "voucherNo": "Voucher No",
+        "customer": "Customer",
+        "phone": "Phone",
+        "status": "Status",
+        "narration": "Narration",
+        "doneBy": "Done By",
+        "productCode": "Product Code",
+        "barcode": "Barcode",
+        "itemName": "Item Name",
+        "description": "Description",
+        "qty": "Quantity",
+        "expectedPrice": "Expected Price",
+        "priority": "Priority",
+        "itemStatus": "Item Status"
+      },
+      "total": "Total"
+    },
+    "messages": {
+      "noDataFound": "No purchase cart data found for the selected filters",
+      "noDataToExport": "No data available to export",
+      "success": "Report generated successfully"
+    },
+    "export": {
+      "label": "Export"
+    }
+  },
+  "salesReturnReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Sales Return Report",
+      "detailedTitle": "Sales Return Detailed Report",
+      "summaryTitle": "Sales Return Summary Report"
+    },
+    "filters": {
+      "reportType": "Report Type",
+      "modeDetailed": "Detailed",
+      "modeSummary": "Summary",
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "customer": "Customer",
+      "allCustomers": "All Customers",
+      "salesman": "Salesman",
+      "costCentre": "Cost Centre",
+      "taxType": "Tax Type",
+      "isAccountsPosting": "Accounts Posting",
+      "isPosted": "Posted",
+      "isCancelled": "Cancelled",
+      "all": "All",
+      "show": "Show",
+      "reset": "Reset",
+      "loading": "Loading..."
+    },
+    "grid": {
+      "columns": {
+        "date": "Date",
+        "voucherNo": "Voucher No",
+        "type": "Type",
+        "party": "Party",
+        "salesman": "Salesman",
+        "customer": "Customer",
+        "product": "Product",
+        "unit": "Unit",
+        "qty": "Qty",
+        "rate": "Rate",
+        "grossAmount": "Gross Amount",
+        "taxableAmount": "Taxable Amt",
+        "taxAmount": "Tax Amount",
+        "amount": "Amount",
+        "totalAmount": "Total Amount",
+        "discount": "Discount",
+        "billAmount": "Bill Amount",
+        "cash": "Cash",
+        "bank": "Bank",
+        "credit": "Credit",
+        "doneBy": "Done By"
+      },
+      "total": "Total"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters.",
+      "noDataToExport": "No data available to export."
+    },
+    "export": {
+      "label": "Export"
+    }
+  },
+   "payHead": {
+    "addPayhead": "Add Payhead",
+    "editPayhead": "Edit Payhead",
+    "payheadNameLabel": "Payhead Name",
+    "payheadNameRequired": "Payhead name is required",
+    "typeLabel": "Type",
+    "typeRequired": "Type is required",
+    "narrationLabel": "Narration",
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "saveBtn": "Save",
+    "updateBtn": "Update",
+    "cancelBtn": "Cancel",
+    "payheadSaveSuccess": "Payhead saved successfully",
+    "payheadUpdateSuccess": "Payhead updated successfully",
+    "ConfirmSaveTitle": "Confirm Save",
+    "ConfirmSaveText": "Are you sure you want to save this payhead?",
+    "ConfirmUpdateTitle": "Confirm Update",
+    "ConfirmUpdateText": "Are you sure you want to update this payhead?",
+    "ConfirmCloseTitle": "Close Form?",
+    "ConfirmCloseText": "Any unsaved changes will be lost. Do you want to continue?",
+    "YesSave": "Yes, Save",
+    "YesUpdate": "Yes, Update",
+    "YesClose": "Yes, Close",
+    "Cancel": "Cancel"
+  },
+   "salarySettings": {
+    "addTitle": "Add Salary Settings",
+    "editTitle": "Edit Salary Settings",
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "saveBtn": "Save",
+    "updateBtn": "Update",
+    "cancelBtn": "Cancel",
+    
+    "employeeLabel": "Employee",
+    "employeeRequired": "Employee is required",
+    "selectEmployee": "Select Employee",
+    "dateLabel": "Date",
+    "dateRequired": "Date is required",
+    
+    "detailsLabel": "Payhead Details",
+    "addRow": "Add Row",
+    
+    "payheadLabel": "Payhead",
+    "payheadRequired": "Payhead is required",
+    "selectPayhead": "-- Select Payhead --",
+    
+    "amtOrPerLabel": "Amt / Per",
+    "amtOrPerRequired": "Amt/Per is required",
+    "amtOrPerPlaceholder": "e.g. amt",
+    
+    "amountLabel": "Amount",
+    "amountRequired": "Amount is required",
+    
+    "payheadOfLabel": "Of",
+    "payheadOfTooltip": "Payhead Of (optional)",
+    
+    "saveSuccess": "Salary settings saved successfully",
+    "updateSuccess": "Salary settings updated successfully",
+    
+    "ConfirmSaveTitle": "Confirm Save",
+    "ConfirmSaveText": "Are you sure you want to save these salary settings?",
+    "ConfirmUpdateTitle": "Confirm Update",
+    "ConfirmUpdateText": "Are you sure you want to update these salary settings?",
+    "ConfirmCloseTitle": "Close Form?",
+    "ConfirmCloseText": "Any unsaved changes will be lost. Do you want to continue?",
+    
+    "YesSave": "Yes, Save",
+    "YesUpdate": "Yes, Update",
+    "YesClose": "Yes, Close",
+    "Cancel": "Cancel"
+  }
+}

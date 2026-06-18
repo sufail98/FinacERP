@@ -1,0 +1,486 @@
+import AlertBox from '@/components/common/AlertBox'
+import BreadCrumb from '@/components/common/BreadCrumb'
+import Preloader from '@/components/common/Preloader'
+import axiosInstance from '@/lib/axiosConfig'
+import usePrivileges from '@/lib/hooks/usePrivileges'
+import { Edit, Plus, ReceiptText, Trash2 } from 'lucide-react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useSelector } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
+import Swal from 'sweetalert2'
+import DateFilterSection from '../../Components/DateFilterSection'
+import ContentTable from '@/components/common/ContentTable'
+import useAuth from '@/redux/hook/auth/useAuth'
+
+const SalesOrderList = () => {
+    const [alert, setAlert] = useState(null);
+    const [salesData, setSalesData] = useState([])
+    const [filteredSalesData, setFilteredSalesData] = useState([]) // For client-side filtering
+    const [voucherCode, setVoucherCode] = useState('') // Single search field
+    const [customerSearch, setCustomerSearch] = useState('') // New customer search state
+    const navigate = useNavigate()
+    const { t } = useTranslation();
+    const [fetchLoading, setFetchLoading] = useState(false)
+    const { generalSettings } = useSelector((state) => state.settings)
+    const { selectedBranchId } = useAuth()
+
+    const { privileges, loading: privilegeLoading } = usePrivileges("Sales Order");
+
+    // Debounce timer refs
+    const debounceTimerRef = useRef(null);
+    const customerDebounceTimerRef = useRef(null);
+
+    // Get today's date in YYYY-MM-DD format
+    const getTodayDate = () => {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    };
+
+    // Date filter states - default to today's date
+    const [fromDate, setFromDate] = useState(getTodayDate());
+    const [toDate, setToDate] = useState(getTodayDate());
+
+    // Server-side pagination states
+    const [limit, setLimit] = useState(80);
+    const [page, setPage] = useState(1);
+    const [meta, setMeta] = useState({
+        total: 0,
+        page: 1,
+        limit: 80,
+        total_pages: 1
+    });
+
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+
+        const date = new Date(dateString);
+        const dd = String(date.getDate()).padStart(2, '0');
+        const MM = String(date.getMonth() + 1).padStart(2, '0');
+        const yyyy = date.getFullYear();
+
+        const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+        return format
+            .replace('dd', dd)
+            .replace('MM', MM)
+            .replace('yyyy', yyyy);
+    };
+
+    // Client-side filtering function for customer name
+    const filterByCustomerName = useCallback((data, searchTerm) => {
+        if (!searchTerm || searchTerm.trim() === '') {
+            return data;
+        }
+
+        const lowerSearchTerm = searchTerm.toLowerCase().trim();
+
+        return data.filter(item => {
+            const ledgerName = (item.ledgerName || '').toLowerCase();
+
+            return ledgerName.includes(lowerSearchTerm);
+        });
+    }, []);
+
+    // Main fetch function
+    const fetchAllSales = useCallback(async (params = {}) => {
+        setFetchLoading(true);
+        try {
+            const currentVoucherCode = params.voucherCode !== undefined ? params.voucherCode : voucherCode;
+            const currentFromDate = params.fromDate !== undefined ? params.fromDate : fromDate;
+            const currentToDate = params.toDate !== undefined ? params.toDate : toDate;
+            const currentLimit = params.limit !== undefined ? params.limit : limit;
+            const currentPage = params.page !== undefined ? params.page : page;
+
+            // Build payload - if voucherCode has value, set dates to null
+            const payload = {
+                fromDate: currentVoucherCode?.trim() ? null : currentFromDate,
+                toDate: currentVoucherCode?.trim() ? null : currentToDate,
+                limits: currentLimit,
+                page: currentPage,
+                branchId: selectedBranchId,
+                vouchercode: currentVoucherCode?.trim() || null,
+                status: null
+            };
+
+            const res = await axiosInstance.post('sales-orders', payload);
+
+            const formattedData = res.data.data.map((item, index) => ({
+                ...item,
+                SNo: ((currentPage - 1) * currentLimit) + index + 1,
+                date: formatDate(item.date),
+            }));
+
+            setSalesData(formattedData);
+
+            // Apply customer name filter if exists
+            const filtered = filterByCustomerName(formattedData, customerSearch);
+            setFilteredSalesData(filtered);
+
+            if (res.data.meta) {
+                setMeta({
+                    total: res.data.meta.total || 0,
+                    page: res.data.meta.page || currentPage,
+                    limit: res.data.meta.limit || currentLimit,
+                    total_pages: res.data.meta.total_pages || 1
+                });
+            }
+        } catch (error) {
+            console.error('Error Fetching Sales Order Data', error);
+            setAlert({
+                id: Date.now(),
+                type: "error",
+                message: error.response?.data?.message || "Error fetching sales orders",
+            });
+        } finally {
+            setFetchLoading(false);
+        }
+    }, [voucherCode, fromDate, toDate, limit, page, selectedBranchId, generalSettings, customerSearch, filterByCustomerName]);
+
+    // Apply customer filter when data changes
+    useEffect(() => {
+        const filtered = filterByCustomerName(salesData, customerSearch);
+        setFilteredSalesData(filtered);
+    }, [salesData, customerSearch, filterByCustomerName]);
+
+    const footerData = useMemo(() => {
+        if (!filteredSalesData || filteredSalesData.length === 0) return null;
+
+        const grandTotal = filteredSalesData.reduce((sum, item) => {
+            return sum + (Number(item.totalAmount) || 0);
+        }, 0);
+
+        return {
+            SNo: "",
+            orderNo: "",
+            date: "",
+            ledgerName: t("Grand Total"),
+            totalAmount: grandTotal.toFixed(generalSettings?.decimalPart || 2),
+        };
+    }, [filteredSalesData, generalSettings?.decimalPart, t]);
+
+    // Initial load with today's date
+    useEffect(() => {
+        fetchAllSales();
+    }, []);
+
+    // Fetch when page or limit changes
+    useEffect(() => {
+        // Skip initial render
+        if (page === 1 && limit === 80) return;
+
+        fetchAllSales();
+    }, [page, limit]);
+
+    // Debounced search for voucher code
+    const handleVoucherCodeChange = (e) => {
+        const value = e.target.value;
+        setVoucherCode(value);
+        setPage(1); // Reset to first page
+
+        // Clear existing timer
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        // Set new debounce timer (300ms delay)
+        debounceTimerRef.current = setTimeout(() => {
+            fetchAllSales({ voucherCode: value, page: 1 });
+        }, 300);
+    };
+
+    // Debounced search for customer name (client-side only)
+    const handleCustomerSearchChange = (e) => {
+        const value = e.target.value;
+        setCustomerSearch(value);
+
+        // Clear existing timer
+        if (customerDebounceTimerRef.current) {
+            clearTimeout(customerDebounceTimerRef.current);
+        }
+
+        // Set new debounce timer (300ms delay)
+        customerDebounceTimerRef.current = setTimeout(() => {
+            const filtered = filterByCustomerName(salesData, value);
+            setFilteredSalesData(filtered);
+        }, 300);
+    };
+
+    // Clear customer search
+    const clearCustomerSearch = () => {
+        setCustomerSearch('');
+
+        // Clear debounce timer
+        if (customerDebounceTimerRef.current) {
+            clearTimeout(customerDebounceTimerRef.current);
+        }
+
+        // Show all data
+        setFilteredSalesData(salesData);
+    };
+
+    // Clear voucher code and fetch with dates
+    const clearVoucherCode = () => {
+        setVoucherCode('');
+
+        // Clear debounce timer
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        // Fetch with current date filters
+        setPage(1);
+        fetchAllSales({ voucherCode: '', page: 1 });
+    };
+
+    // Filter button click - only for date filtering
+    const handleFilter = () => {
+        if (voucherCode?.trim()) {
+            // If voucher code exists, just search by voucher code
+            setPage(1);
+            fetchAllSales({ page: 1 });
+            return;
+        }
+
+        // Validate dates
+        if (fromDate > toDate) {
+            setAlert({
+                id: Date.now(),
+                type: "error",
+                message: "From Date cannot be greater than To Date",
+            });
+            return;
+        }
+
+        setPage(1);
+        fetchAllSales({ page: 1 });
+    };
+
+    // Reset everything
+    const handleReset = async () => {
+        const today = getTodayDate();
+
+        // Clear debounce timers
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+        if (customerDebounceTimerRef.current) {
+            clearTimeout(customerDebounceTimerRef.current);
+        }
+
+        setFromDate(today);
+        setToDate(today);
+        setPage(1);
+        setLimit(80);
+        setVoucherCode('');
+        setCustomerSearch('');
+
+        await fetchAllSales({
+            fromDate: today,
+            toDate: today,
+            limit: 80,
+            page: 1,
+            voucherCode: ''
+        });
+    };
+
+    const handlePageChange = (newPage) => {
+        setPage(newPage);
+        fetchAllSales({ page: newPage });
+    };
+
+    const handleItemsPerPageChange = (newLimit) => {
+        setLimit(newLimit);
+        setPage(1);
+        fetchAllSales({ limit: newLimit, page: 1 });
+    };
+
+    const handleDelete = async (id) => {
+        if (!privileges?.can_delete) return;
+
+        const result = await Swal.fire({
+            title: t("delete.title"),
+            text: t("delete.text"),
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#3085d6",
+            cancelButtonColor: "#d33",
+            confirmButtonText: t("delete.confirm"),
+            cancelButtonText: t("delete.cancel"),
+        });
+
+        if (!result.isConfirmed) return;
+
+        try {
+            const res = await axiosInstance.get(`delete-sales-order/${id}`);
+            if (!res.data.error) {
+                setAlert({ id: Date.now(), type: "success", message: t("deleteSuccess") });
+
+                if (filteredSalesData.length === 1 && page > 1) {
+                    const newPage = page - 1;
+                    setPage(newPage);
+                    fetchAllSales({ page: newPage });
+                } else {
+                    fetchAllSales();
+                }
+            }
+        } catch (error) {
+            const errorMessage = error.response?.data?.message || "Error deleting Sales Order";
+            const finalMessage = errorMessage.toLowerCase().includes("foreign key violation")
+                ? t("foreeignKeyError")
+                : errorMessage;
+
+            setAlert({
+                id: Date.now(),
+                type: "error",
+                message: finalMessage,
+            });
+            console.error(error);
+        }
+    };
+
+    // Cleanup debounce timers on unmount
+    useEffect(() => {
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+            if (customerDebounceTimerRef.current) {
+                clearTimeout(customerDebounceTimerRef.current);
+            }
+        };
+    }, []);
+
+    const columns = [
+        { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "right", width: "80px" },
+        { key: "orderNo", label: t("salesInvoice.list.columns.invoiceNo"), sortable: true, align: "left", width: "120px" },
+        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "center", width: "120px" },
+        { key: "ledgerName", label: t("salesInvoice.list.columns.cashParty"), sortable: true, align: "left", width: "180px" },
+        { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right", width: "150px" },
+    ];
+
+    const renderCell = (key, row) => {
+        if (key === "totalAmount") {
+            return (
+                <div className="text-sm">
+                    <div className="flex items-center justify-end gap-1">
+                        <span>{Number(row.totalAmount).toFixed(generalSettings?.decimalPart || 2)}</span>
+                    </div>
+                </div>
+            );
+        }
+
+        return row[key] ?? "-";
+    };
+
+    const actions = [];
+    if (privileges?.can_edit) {
+        actions.push({
+            icon: <Edit className="h-4 w-4" />,
+            onClick: (row) => navigate(`/transaction/sales-order/edit-sales-order/${row.orderMasterId}`),
+            className: "text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300",
+            tooltip: "Edit",
+        });
+    }
+    if (privileges?.can_delete) {
+        actions.push({
+            icon: <Trash2 className="h-4 w-4" />,
+            className: "text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300",
+            onClick: (row) => handleDelete(row.orderMasterId),
+            tooltip: "Delete",
+        });
+    }
+
+    if (privilegeLoading) {
+        return (
+            <div className="bg-primary dark:bg-primary min-h-screen">
+                <BreadCrumb
+                    routes={[
+                        { title: t("salesOrder.breadcrumb.master"), url: "#" },
+                        { title: t("salesOrder.breadcrumb.title"), url: "#" },
+                    ]}
+                    heading={{ icon: ReceiptText, title: t("salesOrder.breadcrumb.title") }}
+                />
+                <Preloader />
+            </div>
+        )
+    }
+
+    return (
+        <div className="bg-primary dark:bg-primary min-h-screen">
+            {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+            <BreadCrumb
+                routes={[
+                    { title: t("salesOrder.breadcrumb.master"), url: "#" },
+                    { title: t("salesOrder.breadcrumb.title"), url: "#" },
+                ]}
+                heading={{ icon: ReceiptText, title: t("salesOrder.breadcrumb.title") }}
+                actions={
+                    privileges?.can_add
+                        ? [
+                            {
+                                label: t("createNewBtn"),
+                                icon: Plus,
+                                type: "primary",
+                                onClick: () => navigate("/transaction/sales-order"),
+                            },
+                        ]
+                        : []
+                }
+            />
+
+            <div className='p-1'>
+                {/* Date Filter Section with customer search */}
+                <DateFilterSection
+                    fromDate={fromDate}
+                    toDate={toDate}
+                    onFromDateChange={(e) => setFromDate(e.target.value)}
+                    onToDateChange={(e) => setToDate(e.target.value)}
+                    onFilter={handleFilter}
+                    onReset={handleReset}
+                    loading={fetchLoading}
+                    totalRecords={meta.total}
+                    showTotalRecords={true}
+                    // Voucher code props
+                    showVoucherCode={true}
+                    voucherCode={voucherCode}
+                    onVoucherCodeChange={handleVoucherCodeChange}
+                    onClearVoucherCode={clearVoucherCode}
+                    voucherCodePlaceholder={t("Search by Order No...")}
+                    voucherCodeLabel={t("Order No")}
+                    disableDates={!!voucherCode?.trim()}
+                    // Customer search props
+                    staticSearchable={true}
+                    customerSearch={customerSearch}
+                    onCustomerSearchChange={handleCustomerSearchChange}
+                    onClearCustomerSearch={clearCustomerSearch}
+                    customerSearchPlaceholder={t("Search by Ledger Name...")}
+                    customerSearchLabel={t("Ledger Name")}
+                    // Button text
+                    filterButtonText={t("common.show") || "Show"}
+                />
+
+                {/* Server Paginated Table */}
+                <ContentTable
+                    columns={columns}
+                    data={filteredSalesData}
+                    actions={actions}
+                    currentPage={page}
+                    itemsPerPage={limit}
+                    totalItems={meta.total}
+                    totalPages={meta.total_pages}
+                    onPageChange={handlePageChange}
+                    onItemsPerPageChange={handleItemsPerPageChange}
+                    loading={fetchLoading}
+                    serverPagination={true}
+                    renderCell={renderCell}
+                    footerData={footerData}
+                    maxHeight='70vh'
+                    staticSearchable={true}
+                />
+            </div>
+        </div>
+    )
+}
+
+export default SalesOrderList

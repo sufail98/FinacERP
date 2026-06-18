@@ -1,0 +1,7 @@
+A1:I3   → Green box (company header)
+A5:F5   → Ledger name
+G5:I5   → Date
+A6:I6   → Date range
+A8:I8   → Column headers
+A9:I…   → Data rows
+Last    → Total row

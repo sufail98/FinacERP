@@ -1,0 +1,132 @@
+{
+  "name": "finac-erp",
+  "private": true,
+  "version": "2.0.81",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "author": "FINAC ERP Software Solutions",
+  "description": "Finac ERP Desktop Application",
+  "scripts": {
+    "dev": "vite --port 3000",
+    "build": "vite build",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:win": "npm run build && electron-builder --win --x64",
+    "release": "npm run build && cross-env GH_TOKEN=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 electron-builder --win --x64 --publish always"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.2",
+    "@mui/x-date-pickers": "^8.11.3",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@reduxjs/toolkit": "^2.8.2",
+    "@tailwindcss/vite": "^4.1.12",
+    "@types/leaflet": "^1.9.21",
+    "ag-grid-community": "^34.1.1",
+    "ag-grid-react": "^34.1.1",
+    "axios": "^1.11.0",
+    "browser-image-compression": "^2.0.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "dayjs": "^1.11.18",
+    "devextreme": "^25.1.6",
+    "devextreme-react": "^25.1.6",
+    "electron-log": "^5.4.3",
+    "electron-store": "^7.0.3",
+    "electron-updater": "^6.1.7",
+    "html2canvas": "^1.4.1",
+    "html2pdf.js": "^0.14.0",
+    "i18next": "^25.4.2",
+    "icons": "^1.0.0",
+    "js-cookie": "^3.0.5",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.3",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.541.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-datepicker": "^9.1.0",
+    "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.6.0",
+    "react-i18next": "^15.7.3",
+    "react-icons": "^5.6.0",
+    "react-input-mask": "^2.0.4",
+    "react-leaflet": "^4.2.1",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.8.1",
+    "recharts": "^3.7.0",
+    "redux-persist": "^6.0.0",
+    "rsuite": "^5.83.3",
+    "sweetalert2": "^11.22.4",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss": "^4.1.12",
+    "xlsx-js-style": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.6",
+    "terser": "^5.44.1",
+    "tw-animate-css": "^1.3.6",
+    "vite": "^5.2.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.finac.erp",
+    "productName": "Finac ERP",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "public/assets/images/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/assets/images/mainlogo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Finac ERP"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "shamiltechzera",
+      "repo": "finac-ERP-release",
+      "releaseType": "release"
+    }
+  }
+}

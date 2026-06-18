@@ -1,0 +1,114 @@
+/* Sidebar.css */
+
+/* Sidebar Color Variables */
+:root {
+  --sidebar-bg-main: #44203f;           /* Main sidebar background */
+  --sidebar-bg-secondary: #4e2348;      /* Borders, group headers */
+  --sidebar-bg-hover: #2f152c;          /* Hover states */
+  --sidebar-bg-active: #ffffff;         /* Active items */
+  --sidebar-border: #6a3c63;            /* All borders */
+}
+
+/* For darker theme, just uncomment this: */
+/*
+:root {
+  --sidebar-bg-main: #3a1a35;
+  --sidebar-bg-secondary: #4d2446;
+  --sidebar-bg-hover: #5d2a56;
+  --sidebar-bg-active: #6c3264;
+  --sidebar-border: #3a1a35;
+}
+*/
+
+/* Sidebar Main Background */
+.sidebar-main-bg {
+  background-color: var(--sidebar-bg-main);
+}
+
+/* Sidebar Borders */
+.sidebar-border {
+  border-color: var(--sidebar-border);
+}
+
+.sidebar-border-right {
+  border-right: 1px solid var(--sidebar-border);
+}
+
+.sidebar-border-bottom {
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.sidebar-border-top {
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.sidebar-border-left {
+  border-left: 1px solid var(--sidebar-border);
+}
+
+/* Group Headers */
+.sidebar-group-header {
+  background-color: var(--sidebar-bg-secondary);
+}
+
+.sidebar-group-header:hover {
+  background-color: var(--sidebar-bg-hover);
+}
+
+/* Menu Item States */
+.sidebar-menu-item-hover:hover {
+  background-color: var(--sidebar-bg-secondary);
+}
+
+.sidebar-menu-item-active {
+  background-color: var(--sidebar-bg-hover);
+}
+
+.sidebar-menu-item-has-active-child {
+  background-color: var(--sidebar-bg-secondary);
+}
+
+/* Button Hover */
+.sidebar-button-hover {
+  background-color: transparent;
+  transition: background-color 0.2s;
+}
+
+.sidebar-button-hover:hover {
+  background-color: var(--sidebar-bg-secondary);
+}
+
+/* Scrollbar for Sidebar */
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 3px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: var(--sidebar-bg-main);
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--sidebar-bg-secondary);
+  border-radius: 10px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--sidebar-bg-hover);
+}
+
+/* Mobile burger button */
+.sidebar-burger-button {
+  background-color: var(--sidebar-bg-main);
+  border-color: var(--sidebar-border);
+}
+/* Mega Menu Panel Animation */
+@keyframes megaMenuSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

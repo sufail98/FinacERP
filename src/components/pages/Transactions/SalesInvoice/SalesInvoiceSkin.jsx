@@ -1,0 +1,1856 @@
+import BreadCrumb from '@/components/common/BreadCrumb';
+import { Archive, ArchiveRestore, Eraser, Loader2, Pencil, ReceiptText, SaveAll, Table } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import FormSectionMain from './FormSectionMain';
+import { useCallback, useEffect, useState } from 'react';
+import axiosInstance from '@/lib/axiosConfig';
+import useAuth from '@/redux/hook/auth/useAuth';
+import Swal from 'sweetalert2';
+import { useSelector } from 'react-redux';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import Preloader from '@/components/common/Preloader';
+import useFormValidation from '@/lib/hooks/useFormValidation';
+import printInvoiceOne, { generateQRCodeData, saveInvoiceAsPDF } from '@/utils/prints/salesInvoicePrints/InvoicePrintOne';
+import printThermalInvoice from '@/utils/prints/salesInvoicePrints/thermal/printThermalInvoiceOne';
+import { formatDateWithTime, parseDateFromAPI, } from '@/lib/dateFormat';
+import printInvoiceTwo, { saveInvoiceTwoAsPDF } from '@/utils/prints/salesInvoicePrints/InvoicePrintTwo';
+import printInvoiceThree from '@/utils/prints/salesInvoicePrints/InvoicePrintThree';
+import printInvoiceFive, { saveInvoiceFiveAsPDF } from '@/utils/prints/salesInvoicePrints/Invoiceprintfive';
+import PrintDropdown from '@/components/common/PrintDropdown';
+import { Checkbox } from '@/components/ui/checkbox';
+import axios from 'axios';
+import { showToast } from '@/utils/toast';
+import PopupPreloader from '@/components/common/PopupPreloader';
+import printInvoiceFour, { saveInvoiceFourAsPDF } from '@/utils/prints/salesInvoicePrints/InvoicePrintFour';
+import { formatInvoiceMessageWithLink, generateInvoicePDFLink, sendWhatsAppMessage, uploadInvoicePDFAndGetLink } from '@/utils/whatsappService';
+import printInvoiceSix, {
+    generateInvoiceHTML,
+    saveInvoiceSixAsPDF,
+} from '@/utils/prints/salesInvoicePrints/invoicePrintSix';
+import printInvoiceSeven, { saveInvoiceSevenAsPDF } from '@/utils/prints/salesInvoicePrints/invoicePrintSeven';
+
+
+const SalesInvoiceSkin = () => {
+    const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
+    const { salesMasterId } = useParams();
+    const editMode = Boolean(salesMasterId);
+    const [fetchLoading, setFetchLoading] = useState(false)
+    const navigate = useNavigate()
+    const [existingInvoiceNo, setExistingInvoiceNo] = useState('')
+    const { t } = useTranslation();
+    const [isSaving, setIsSaving] = useState(false);
+    const [employees, setEmployees] = useState([]);
+    const [costCenters, setCostCenters] = useState([]);
+    const [customers, setCustomers] = useState([]);
+    const [pricingLevel, setPricingLevel] = useState([]);
+    const [godowns, setGodowns] = useState([]);
+    const [batches, setBatches] = useState([]);
+    const [invoiceId, setInvoiceId] = useState('');
+    const [currency, setCurrnecies] = useState([])
+    const { selectedBranchDetails, userId, selectedBranchId, currentFinancialYear, currentCurrencyConversion, currentCurrency } = useAuth();
+
+
+    const [time, setTime] = useState("");
+    const { generalSettings, saleSettings, financeSettings, zatcaSettings, printSettings } = useSelector((state) => state.settings);
+    const decimalPart = generalSettings?.decimalPart ?? 2;
+    const invoiceTypes = Object.keys(printSettings?.["Sales Invoice"]?.types || {});
+    const invoicePrintConfig = printSettings?.["Sales Invoice"]?.default || Object.values(printSettings?.["Sales Invoice"]?.types || {})[0];
+    const [resetTableKey, setResetTableKey] = useState(0);
+    const printType = localStorage.getItem('printType');
+    const [isEditMode, setIsEditMode] = useState(Boolean(salesMasterId));
+    const [canEdit, setCanEdit] = useState(!Boolean(salesMasterId));
+    const [heldInvoices, setHeldInvoices] = useState([]);
+    const [showHeldInvoices, setShowHeldInvoices] = useState(false);
+    const [restoredHeldInvoiceId, setRestoredHeldInvoiceId] = useState(null);
+    const [ledgerBalance, setLedgerBalance] = useState(null)
+    const [cash, setCash] = useState([])
+    const [bank, setBank] = useState([])
+    const [salesAccount, setSalesAccount] = useState([]);
+    const [otherChargeLedgers, setOtherChargLedgers] = useState([])
+    const [currentledgerBalance, setCurrentLedgerBalance] = useState('')
+    const [shippingAdderess, setShippingAddress] = useState(null);
+    const [billingAddress, setBlillingAddress] = useState(null);
+    const [quotationData, setQuotationData] = useState([]);
+    const [profoemaData, setProformadata] = useState([]);
+    const [salesOrderData, setSalesOrderData] = useState([]);
+    const [deliveryNoteData, setDeliveryNoteData] = useState([]);
+    const [taxData, setTaxData] = useState([]);
+    const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
+    const [whatsappNumber, setWhatsappNumber] = useState('');
+
+    const [searchParams] = useSearchParams();
+
+
+    // ===== RESTORE FILTERS FROM URL =====
+    const getReturnFilters = useCallback(() => {
+        const returnFilters = searchParams.get('returnFilters');
+        if (returnFilters) {
+            try {
+                return new URLSearchParams(decodeURIComponent(returnFilters));
+            } catch (e) {
+                console.error('Error decoding return filters:', e);
+            }
+        }
+        return null;
+    }, [searchParams]);
+
+    const [formData, setFormData] = useState({
+        printAfterSave: saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : true,
+        printType: invoicePrintConfig?.printType || 'Thermal',
+        formType: generalSettings.formType || 'Tax Invoice',
+        customerData: {},
+        voucherType: "Sales Invoice",
+        yearId: currentFinancialYear?.yearId,
+        date: new Date(),
+        billTime: time,
+        ledgerId: '',
+        ledgerBalance: '',
+        pricingLevelId: 1,
+        employeeId: '',
+        salesAccount: '',
+        salesAccountName: '',
+        currencyConversionId: currentCurrencyConversion?.currencyConversionId,
+        taxType: generalSettings.taxType,
+        GodownId: null,
+        costCentreId: 1,
+        BatchId: '',
+        customerName: '',
+        CustomerAddress: '',
+        CustomerPhone: '',
+        customerVATNo: '',
+        customercreditLimit: '',
+        customerCreditlimitStatus: '',
+        RefNo: "", refDate: "", orderRefNo: "", orderRefDate: "",
+        creditPeriod: "", dueDate: "", deliveryDate: "",
+        exchangeRate: currentCurrencyConversion?.rate,
+        exchangeDate: currentCurrencyConversion?.date,
+        deliveryNoteMasterId: "", orderMasterId: "", quotationMasterId: "", proformaMasterId: "",
+        AgainstNo: "NA", lrNo: "", transportCompany: "", vehicleNo: "",
+        narration: "", taxableAmt: "", subTotal: "", totalTax: "",
+        additionalCost: "", OtherChargeRemark: "", otherChargeLedgerId: "", othercharge: "",
+        billDiscount: "", billDiscountWithTax: "", roundOff: "", totalAmount: "",
+        AdjustmentAmount: "", AdvancePerc: "",
+        RetentionLedgerId: "", RetentionType: "", RetentionDueDate: "",
+        RetentionPercentage: "", RetentionAmount: "",
+        paymentMode: saleSettings?.DefaultPaymentMode,
+        CashLedgerId: financeSettings?.DefaultCashAccount || '', CashRefNo: "", CashAmount: "",
+        BankLedgerId: financeSettings?.DefaultBankAccount || null, BankRefNo: "", BankAmount: 0, BillBalanceAmount: 0,
+        CarMake: "", CarModel: "", Kilometer: "", NextService: "",
+        VehicleInTime: "", VehicleOutTime: "",
+        preinvoiceHash: "", currentinvoiceHash: "", UUID: "",
+        Zatcastatus: "", logdata: "", qr_link: "",
+        postedStatus: generalSettings?.AccountPosting ? "No" : "Yes",
+        postedBy: generalSettings?.AccountPosting ? null : userId,
+        postedDate: generalSettings?.AccountPosting ? null : new Date(),
+        billDiscOnProductStatus: false, AddCostonProductStatus: false,
+        branchId: selectedBranchId, CreatedUser: userId,
+        vatLedgerId: generalSettings?.taxLedgerId,
+        salesDetails: [{
+            deliveryNoteDetails1Id: "",
+            orderDetails1Id: "",
+            quotationDetailsId: "",
+            proformaDetails1Id: "",
+            SlNo: "",
+            productCode: "",
+            qty: null,
+            freeQty: null,
+            inclusiveRate: null,
+            lineDiscountWithTax: null,
+            rate: null,
+            unitId: null,
+            discountPercentage: null,
+            taxId: null,
+            taxType: "",
+            ConversionFactor: null,
+            barcode: "",
+            PurchaseRate: null,
+            taxAmount: null,
+            grossAmount: null,
+            netAmount: null,
+            amount: null,
+            taxRate: 0,
+            productDescription: "",
+            billDiscOnProduct: null,
+            AddCostonProduct: null,
+            otherchargeonproduct: null,
+            salesManId: null,
+            GodownId: null,
+            RackId: null,
+            branchId: selectedBranchId,
+            productName: '',
+            productNameArb: '',
+            baseunitId: null,
+        }]
+    });
+
+    useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            CashLedgerId: financeSettings?.DefaultCashAccount,
+            BankLedgerId: financeSettings?.DefaultBankAccount,
+            paymentMode: saleSettings?.DefaultPaymentMode,
+            RetentionLedgerId: saleSettings?.retentionLedgerId,
+            taxType: generalSettings.taxType
+        }));
+    }, [financeSettings, saleSettings, generalSettings]);
+
+    const genarateSalesInvoiceId = async (taxType) => {
+        try {
+            const response = await axiosInstance.get(
+                `get-generated-voucherNo?voucherType=${taxType === 'NA' ? 'Sales Invoice-No Tax' : 'Sales Invoice'}&branchId=${selectedBranchId}&yearId=${currentFinancialYear.yearId}&taxType=${taxType || formData.taxType}`
+            );
+            setInvoiceId(response.data.voucherCode)
+        } catch (error) {
+            console.error(error);
+        }
+    }
+    // ===== HANDLE LIST NAVIGATE WITH FILTERS =====
+    const handleListNavigate = async (preserveFilters = true) => {
+        if (generalSettings?.askConfirmationClose) {
+            const result = await Swal.fire({
+                title: t('ConfirmCloseTitle'),
+                text: t('ConfirmCloseText'),
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesClose'),
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        // If in edit mode and we have return filters, use them
+        if (editMode && preserveFilters) {
+            const returnFilters = getReturnFilters();
+            if (returnFilters) {
+                // For HashRouter
+                const filterString = returnFilters.toString();
+                const listUrl = `/transaction/sales-invoice/invoice-list?${filterString}`;
+                navigate(listUrl);
+            } else {
+                navigate("/transaction/sales-invoice/invoice-list");
+            }
+        } else {
+            navigate("/transaction/sales-invoice/invoice-list");
+        }
+    };
+
+
+
+    const clearForm = async (skipConfirmation = false) => {
+        skipConfirmation = skipConfirmation === true;
+
+        if (!skipConfirmation && generalSettings?.askConfirmationClear) {
+            const result = await Swal.fire({
+                title: t('ConfirmClearTitle'),
+                text: t('ConfirmClearText'),
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesClear'),
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+        setFormData({
+            printAfterSave: saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : true,
+            printType: printType || 'thermal',
+            formType: generalSettings.formType || 'Tax Invoice',
+            customerData: {},
+            voucherType: "Sales Invoice",
+            yearId: currentFinancialYear?.yearId,
+            date: new Date(),
+            billTime: time,
+            ledgerId: financeSettings.defaultSalesAccount || '',
+            pricingLevelId: 1, employeeId: '',
+            salesAccount: '', salesAccountName: '',
+            currencyConversionId: currentCurrencyConversion?.currencyConversionId,
+            taxType: generalSettings.taxType,
+            GodownId: null, costCentreId: 1, BatchId: '',
+            customerName: '', CustomerAddress: '', CustomerPhone: '', customerVATNo: '',
+            customercreditLimit: '', customerCreditlimitStatus: '',
+            RefNo: "", refDate: "", orderRefNo: "", orderRefDate: "",
+            creditPeriod: "", dueDate: "", deliveryDate: "",
+            exchangeRate: currentCurrencyConversion?.rate,
+            exchangeDate: currentCurrencyConversion?.date,
+            deliveryNoteMasterId: "", orderMasterId: "", quotationMasterId: "", proformaMasterId: "",
+            AgainstNo: "NA", lrNo: "", transportCompany: "", vehicleNo: "",
+            narration: "", taxableAmt: "", subTotal: "", totalTax: "",
+            additionalCost: "", OtherChargeRemark: "", otherChargeLedgerId: "", othercharge: "",
+            billDiscount: "", roundOff: "", totalAmount: "",
+            AdjustmentAmount: "", AdvancePerc: "",
+            RetentionLedgerId: "", RetentionType: "", RetentionDueDate: "",
+            RetentionPercentage: "", RetentionAmount: "",
+            paymentMode: "cash",
+            CashLedgerId: financeSettings?.DefaultCashAccount || '',
+            CashRefNo: "",
+            CashAmount: 0,
+            BankLedgerId: financeSettings?.DefaultBankAccount || null,
+            BankRefNo: "",
+            BankAmount: 0, BillBalanceAmount: 0,
+            CarMake: "", CarModel: "", Kilometer: "", NextService: "",
+            VehicleInTime: "", VehicleOutTime: "",
+            preinvoiceHash: "", currentinvoiceHash: "", UUID: "",
+            Zatcastatus: "", logdata: "", qr_link: "",
+            postedStatus: generalSettings?.AccountPosting ? "No" : "Yes",
+            postedBy: generalSettings?.AccountPosting ? null : userId,
+            postedDate: generalSettings?.AccountPosting ? null : new Date(),
+            billDiscOnProductStatus: false, AddCostonProductStatus: false,
+            branchId: selectedBranchId, CreatedUser: userId,
+            vatLedgerId: generalSettings?.taxLedgerId,
+            salesDetails: [{
+                deliveryNoteDetails1Id: "", orderDetails1Id: "", quotationDetailsId: "",
+                proformaDetails1Id: "", productName: '', productNameArb: '',
+                SlNo: "", productCode: "",
+                qty: null, freeQty: null, rate: null, taxRate: 0, unitId: null,
+                discountPercentage: null, taxId: null, taxType: "",
+                ConversionFactor: null, barcode: "", PurchaseRate: null,
+                taxAmount: null, grossAmount: null, netAmount: null, amount: null,
+                productDescription: "",
+                billDiscOnProduct: null, AddCostonProduct: null, otherchargeonproduct: null,
+                salesManId: null, GodownId: null, RackId: null,
+                branchId: selectedBranchId, baseunitId: null,
+                inclusiveRate: null,
+                lineDiscountWithTax: null,
+            }]
+        });
+        if (isEditMode) {
+            setCanEdit(true);
+            setIsEditMode(false);
+            setExistingInvoiceNo('');
+        }
+        setResetTableKey(prev => prev + 1);
+        setFormData(prev => ({
+            ...prev,
+            salesAccount: salesAccount[0].ledgerId,
+            salesAccountName: salesAccount[0].ledgerName,
+            GodownId: godowns?.find(g => g.IsDefault)?.GodownId || '',
+        }));
+        fetchCustomerData(financeSettings?.defaultSalesAccount);
+        genarateSalesInvoiceId(generalSettings.taxType);
+
+    };
+
+    const [baseDataloading, setBaseDataloading] = useState(false)
+
+    const fetchCustomerData = async (ledgerId) => {
+        // setLoadingCustomer(true);
+        try {
+            const response = await axiosInstance.get(`get-account-ledger-byId/${ledgerId || formData.ledgerId}`);
+
+            if (response.data) {
+                const data = response.data.data;
+                setFormData(prev => ({
+                    ...prev,
+                    customerData: data
+                }));
+
+
+                const defaultShipping = Array.isArray(data?.shipping_address)
+                    ? data.shipping_address.find(addr => addr?.Isdefault === true)
+                    : null;
+
+                // setUpdateCustomerId(data?.ledgerId);
+
+                setShippingAddress({
+                    name: data?.ledgerName || '',
+                    email: data?.email || '',
+                    phoneNo: data?.phoneNo || '',
+                    shippingAddress: defaultShipping || {},
+                    vatNo: data?.tinNumber || ''
+                });
+
+                setBlillingAddress({
+                    name: data?.ledgerName || '',
+                    email: data?.email || '',
+                    phoneNo: data?.phoneNo || '',
+                    vatNo: data?.tinNumber || '',
+                    address: data?.address || ''
+                });
+
+                if (!editMode) {
+                    const autoFormType = data?.tinNumber
+                        ? 'Tax Invoice'
+                        : 'Retail Invoice';
+
+
+                    setFormData((prev) => ({
+                        ...prev,
+                        customerName: data?.ledgerName || '',
+                        CustomerAddress: data?.address || '',
+                        CustomerPhone: data?.phoneNo || '',
+                        customerVATNo: data?.tinNumber || '',
+                        customercreditLimit: data?.creditLimit || '',
+                        customerCreditlimitStatus: data?.creditLimitStatus || 'Ignore',
+                        formType: autoFormType,
+                    }));
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching customer data:", error);
+        }
+    };
+
+    useEffect(() => {
+        const getSalesRequiredData = async () => {
+            setBaseDataloading(true)
+            try {
+                const res = await axiosInstance.post('all-sales-data', {
+                    voucherType: "Sales Invoice",
+                    branchId: selectedBranchId,
+                    yearId: currentFinancialYear.yearId,
+                    ledgerTypes: ["Customer"],
+                    ledgerId: financeSettings?.defaultSalesAccount,
+                    currencyId: currentCurrency.currencyId,
+                    p_ledgerid: financeSettings?.defaultSalesAccount,
+                    p_branchid: selectedBranchId,
+                    p_isaccountsposting: false,
+                    p_salesmasterid: null
+                })
+                const data = res?.data?.data;
+                setInvoiceId(data?.voucherdata?.voucherCode)
+                setEmployees(data?.employees)
+                setGodowns(data?.godowns)
+                setPricingLevel(data?.pricinglevel)
+                setBatches(data?.transactionbatch)
+
+                const filteredCurrencies = data?.currencywithConversion?.filter(
+                    c => c.branchid_conversion == selectedBranchId
+                ) || [];
+                setCurrnecies(filteredCurrencies);
+                setCustomers(data?.customersupplierLedgers)
+                setCostCenters(data?.costcentre)
+                setCurrentLedgerBalance(data?.LedgerBalance.currentbal);
+
+                setBank(data?.bank)
+                setCash(data?.cash)
+                setSalesAccount(data?.salesAccount)
+                setQuotationData(data?.salesInvoiceAgainstData?.salesQuotationList)
+                setProformadata(data?.salesInvoiceAgainstData?.proformaList)
+                setDeliveryNoteData(data?.salesInvoiceAgainstData?.deliveryNoteList)
+                setSalesOrderData(data?.salesInvoiceAgainstData?.salesOrderList)
+                setOtherChargLedgers(data?.othercharge)
+                setTaxData(data?.taxMaster)
+
+                if (editMode) {
+                    await getSalesById(data?.taxMaster); // pass it directly
+                }
+                if (data?.salesAccount.length > 0 && !formData.salesAccount) {
+                    setFormData(prev => ({
+                        ...prev,
+                        salesAccount: data?.salesAccount[0].ledgerId,
+                        salesAccountName: data?.salesAccount[0].ledgerName,
+                    }));
+                }
+                setFormData(prev => ({
+                    ...prev,
+                    customerData: data?.customeraddress,
+                    BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : '',
+                }));
+
+
+                const defaultShipping = Array.isArray(data?.customeraddress?.shipping_address)
+                    ? data?.customeraddress?.shipping_address.find(addr => addr?.Isdefault === true) : null;
+
+                setShippingAddress({
+                    name: data?.customeraddress?.ledgerName || '',
+                    email: data?.customeraddress?.email || '',
+                    phoneNo: data?.customeraddress?.phoneNo || '',
+                    shippingAddress: defaultShipping || {},
+                    vatNo: data?.customeraddress?.tinNumber || ''
+                });
+                if (!editMode) {
+                    setBlillingAddress({
+                        name: data?.customeraddress?.ledgerName || '',
+                        email: data?.customeraddress?.email || '',
+                        phoneNo: data?.customeraddress?.phoneNo || '',
+                        vatNo: data?.customeraddress?.tinNumber || '',
+                        address: data?.customeraddress?.address || ''
+                    });
+
+                    setFormData((prev) => {
+                        return {
+                            ...prev,
+                            customerName: data?.customeraddress?.ledgerName || '',
+                            CustomerAddress: data?.customeraddress?.address || '',
+                            CustomerPhone: data?.customeraddress?.phoneNo || '',
+                            customerVATNo: data?.customeraddress?.tinNumber || '',
+                            customercreditLimit: data?.customeraddress?.creditLimit || '',
+                            customerCreditlimitStatus: data?.customeraddress?.creditLimitStatus || 'Ignore',
+                        };
+                    });
+
+                    setFormData((prev) => {
+                        const defaultGodown = data?.godowns?.find(g => g.IsDefault);
+
+                        return {
+                            ...prev,
+                            GodownId: defaultGodown
+                                ? defaultGodown.GodownId
+                                : data?.godowns?.[0]?.GodownId || '',
+                        };
+                    });
+                }
+
+
+            } catch (error) {
+                console.error('error fetching default data', error)
+            } finally {
+                setBaseDataloading(false)
+            }
+        }
+        getSalesRequiredData();
+        genarateSalesInvoiceId(generalSettings.taxType);
+
+    }, [])
+
+
+    useEffect(() => {
+        if (editMode) return;
+
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentSecond = now.getSeconds();
+
+        // Check if it's exactly midnight (12:00:00 AM)
+        const isMidnight = currentHour === 0 && currentMinute === 0 && currentSecond === 0;
+
+        setFormData(prev => {
+            const prevDate = new Date(prev.date);
+            const today = new Date();
+
+            // Compare only date parts (ignore time)
+            const isSameDate =
+                prevDate.getFullYear() === today.getFullYear() &&
+                prevDate.getMonth() === today.getMonth() &&
+                prevDate.getDate() === today.getDate();
+
+            // Update date if it's not the same date OR if it's exactly midnight
+            if (!isSameDate || isMidnight) {
+                return { ...prev, date: today };
+            }
+            return prev;
+        });
+    }, [time, editMode]);
+    const fetchLedgerBalance = async (ledgerId) => {
+        try {
+            const res = await axiosInstance.get(`get-ledger-balance?ledgerId=${ledgerId}&branchId=${selectedBranchId}&currencyId=${currentCurrency.currencyId}`);
+            setCurrentLedgerBalance(res?.data?.data?.currentbal);
+            setFormData(prev => ({
+                ...prev,
+                ledgerBalance: res?.data?.data?.currentbal
+            }));
+        } catch (error) { console.error(error); }
+    }
+
+    useEffect(() => {
+        const defaultGodown = godowns?.find(g => g.IsDefault);
+        setFormData(prev => ({
+            ...prev,
+            ledgerId: (financeSettings?.defaultSalesAccount) || '',
+            GodownId: defaultGodown?.GodownId || '',
+            exchangeRate: currentCurrencyConversion?.rate,
+            exchangeDate: currentCurrencyConversion?.date,
+            currencyConversionId: currentCurrencyConversion?.currencyConversionId,
+            formType: generalSettings.formType || 'Tax Invoice',
+            printAfterSave: saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : true,
+            printType: invoicePrintConfig?.printType || 'Thermal'
+        }));
+    }, [financeSettings, godowns, saleSettings, printSettings, currentCurrencyConversion, generalSettings]);
+
+    // ===== HOLD INVOICE LOGIC (unchanged) =====
+    useEffect(() => {
+        const savedHeldInvoices = localStorage.getItem('heldSalesInvoices');
+        if (savedHeldInvoices) {
+            const allHeldInvoices = JSON.parse(savedHeldInvoices);
+            const branchHeldInvoices = allHeldInvoices.filter(invoice => invoice.branchId === selectedBranchId);
+            setHeldInvoices(branchHeldInvoices);
+        }
+    }, [selectedBranchId]);
+
+    useEffect(() => {
+        const savedHeldInvoices = localStorage.getItem('heldSalesInvoices');
+        const allHeldInvoices = savedHeldInvoices ? JSON.parse(savedHeldInvoices) : [];
+        const otherBranchInvoices = allHeldInvoices.filter(invoice => invoice.branchId !== selectedBranchId);
+        const updatedAllInvoices = [...otherBranchInvoices, ...heldInvoices];
+        if (updatedAllInvoices.length > 0) {
+            localStorage.setItem('heldSalesInvoices', JSON.stringify(updatedAllInvoices));
+        } else {
+            localStorage.removeItem('heldSalesInvoices');
+        }
+    }, [heldInvoices, selectedBranchId]);
+
+    const holdCurrentInvoice = useCallback(() => {
+        const hasData = formData.salesDetails.some(detail => detail.productCode && detail.qty > 0);
+        if (!hasData) {
+            showToast.warning("No data to hold. Please add products with quantity first.");
+            return;
+        }
+        const heldInvoice = {
+            id: Date.now(), timestamp: new Date().toISOString(),
+            invoiceId: invoiceId, customerName: formData.customerName || 'Unknown Customer',
+            customerAddress: formData.CustomerAddress || '',
+            totalAmount: formData.totalAmount || 0,
+            itemCount: formData.salesDetails.filter(d => d.productCode).length,
+            branchId: selectedBranchId, formData: { ...formData }
+        };
+        setHeldInvoices(prev => [...prev, heldInvoice]);
+        showToast.success(`Invoice held successfully. Total held invoices: ${heldInvoices.length + 1}`);
+        clearForm();
+    }, [formData, invoiceId, heldInvoices.length, selectedBranchId]);
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') {
+                e.preventDefault(); holdCurrentInvoice();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [holdCurrentInvoice]);
+
+    const restoreHeldInvoice = (heldInvoice) => {
+        const hasValidProducts = formData.salesDetails.some(detail => detail.productCode && detail.qty > 0);
+        if (hasValidProducts) {
+            const currentHeld = {
+                id: Date.now(), timestamp: new Date().toISOString(),
+                invoiceId: invoiceId, customerName: formData.customerName || 'Current Invoice',
+                customerAddress: formData.CustomerAddress || '',
+                totalAmount: formData.totalAmount || 0,
+                itemCount: formData.salesDetails.filter(d => d.productCode && d.qty > 0).length,
+                branchId: selectedBranchId, formData: { ...formData }
+            };
+            setHeldInvoices(prev => [...prev.filter(inv => inv.id !== heldInvoice.id), currentHeld]);
+        } else {
+            setHeldInvoices(prev => prev.filter(inv => inv.id !== heldInvoice.id));
+        }
+        setFormData(heldInvoice.formData);
+        setInvoiceId(heldInvoice.invoiceId);
+        setResetTableKey(prev => prev + 1);
+        setShowHeldInvoices(false);
+        setRestoredHeldInvoiceId(heldInvoice.id);
+        showToast.success("Invoice restored successfully");
+    };
+
+    const deleteHeldInvoice = (invoiceId) => {
+        setHeldInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
+        showToast.success("Held invoice deleted");
+    };
+
+    const HeldInvoicesPanel = () => {
+        if (!showHeldInvoices || heldInvoices.length === 0) return null;
+        return (
+            <div className="fixed top-20 right-4 z-50 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[70vh] overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
+                    <h3 className="font-semibold text-lg text-gray-800 dark:text-gray-200">Held Invoices ({heldInvoices.length})</h3>
+                    <button onClick={() => setShowHeldInvoices(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">✕</button>
+                </div>
+                <div className="overflow-y-auto p-4 space-y-3">
+                    {heldInvoices.map((invoice) => (
+                        <div key={invoice.id} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1">
+                                    <p className="font-semibold text-gray-800 dark:text-gray-200">{invoice.customerName}</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Invoice: {invoice.invoiceId}</p>
+                                    {invoice.customerAddress && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{invoice.customerAddress}</p>}
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-bold text-blue-600 dark:text-blue-400">{parseFloat(invoice.totalAmount || 0).toFixed(decimalPart)}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{invoice.itemCount} items</p>
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{new Date(invoice.timestamp).toLocaleString()}</p>
+                            <div className="flex gap-2">
+                                <button onClick={() => restoreHeldInvoice(invoice)} className="flex-1 px-3 py-2 bg-blue-500 text-white rounded hover:main-bg text-sm font-medium transition-colors">Restore</button>
+                                <button onClick={() => deleteHeldInvoice(invoice.id)} className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm font-medium transition-colors">Delete</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    useEffect(() => {
+        const updateTime = () => {
+            const now = new Date();
+            const formatted = now.toLocaleTimeString("en-US", { hour12: true, hour: "2-digit", minute: "2-digit" });
+            setTime(formatted);
+        };
+        updateTime();
+        const interval = setInterval(updateTime, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // useEffect(() => { if (editMode) getSalesById(); }, [editMode])
+
+    // Update the loadSalesModeData function in SalesInvoiceSkin.jsx
+
+    const loadSalesModeData = async (mode, masterId) => {
+        setFetchLoading(true);
+        try {
+            let data;
+            let againstNoValue = 'NA';
+
+            if (mode === 'quotation') {
+                const response = await axiosInstance.post(`get-sales-invoice-quotation-details`, {
+                    p_quotation_master_id: masterId,
+                    p_branchid: selectedBranchId,
+                    p_salesmasterid: null
+                });
+                data = response.data.data;
+                againstNoValue = 'Quotation';
+            }
+
+            if (mode === 'proforma') {
+                const response = await axiosInstance.post(`get-sales-invoice-proforma-details`, {
+                    p_proformamasterid: masterId,
+                    p_branchid: selectedBranchId,
+                    p_salesmasterid: null
+                });
+                data = response.data.data;
+                againstNoValue = 'Proforma';
+            }
+
+            if (mode === 'salesOrder') {
+                const response = await axiosInstance.post(`get-sales-invoice-sales-order-details`, {
+                    p_ordermasterid: masterId,
+                    p_branchid: selectedBranchId,
+                    p_salesmasterid: null
+                });
+                data = response.data.data;
+                againstNoValue = 'Order';
+            }
+
+            // ✅ FIX: Delivery Note loading
+            if (mode === 'deliveryNote') {
+                const response = await axiosInstance.post(`get-sales-invoice-delivery-note-details`, {
+                    p_deliverynotemasterid: masterId, // ✅ This should match the parameter name your API expects
+                    p_branchid: selectedBranchId,
+                    p_salesmasterid: null,
+                    p_isaccountsposting: false
+                });
+                data = response.data.data;
+                againstNoValue = 'Delivery Note';
+
+            }
+
+
+            // Process sales details
+            const salesDetailsWithProducts = await Promise.all(
+                (data.salesDetails || []).map(async (item) => {
+                    let productName = '';
+                    let availableUnits = [];
+                    let productDetails = {
+                        productCode: item.productCode || '',
+                        barcode: item.barcode || '',
+                        partNo: '',
+                        brand: '',
+                        mrp: '',
+                        purchase: item.PurchaseRate || '',
+                        productDescription: item.productDescription || '',
+                        UnitName: ''
+                    };
+
+                    const taxInfo = taxData.find(t => t.taxId === item.taxId);
+                    const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
+
+                    if (item.productCode) {
+                        try {
+                            productName = item?.productname || '';
+                            availableUnits = item?.units || [];
+
+                            const selectedUnit = availableUnits.find(u => u.unitid === item.unitId);
+
+                            productDetails = {
+                                productCode: item.productCode,
+                                barcode: selectedUnit?.barcode || item.barcode || '',
+                                partNo: item.partno || '',
+                                brand: item?.brand?.brandName || '',
+                                mrp: item.mrp || '',
+                                purchase: item.PurchaseRate || '',
+                                productDescription: item.productDescription || '',
+                                UnitName: selectedUnit?.unitname || ''
+                            };
+                        } catch (err) {
+                            console.error(`Error fetching product ${item.productCode}:`, err);
+                        }
+                    }
+
+                    return {
+                        ...item,
+                        productName,
+                        taxRate,
+                        availableUnits,
+                        productDetails,
+                        qty: parseFloat(item.qty) || 0,
+                        freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                        rate: parseFloat(item.rate) || 0,
+                        lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
+                        inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
+                        discountPercentage: parseFloat(item.discountPercentage) || 0,
+                        PurchaseRate: parseFloat(item.PurchaseRate) || 0,
+                        taxAmount: parseFloat(item.taxAmount) || 0,
+                        grossAmount: parseFloat(item.grossAmount) || 0,
+                        netAmount: parseFloat(item.netAmount) || 0,
+                        amount: parseFloat(item.amount) || 0,
+                        descAmt: parseFloat(item.descAmt) || (() => {
+                            const gross = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+                            const discPerc = parseFloat(item.discountPercentage) || 0;
+                            return parseFloat(((gross * discPerc) / 100).toFixed(generalSettings?.decimalPart || 2)) || 0;
+                        })()
+                    };
+                })
+            );
+
+            // ✅ Update form data with loaded data
+            setFormData((prev) => ({
+                ...prev,
+                ...data,
+                date: new Date(),
+                AgainstNo: againstNoValue,
+                othercharge: Number(data?.othercharge) || 0,
+                totalAmount: undefined,  // ✅ never let API response set this; footer owns it
+                grandTotal: undefined,
+                billDiscountWithTax: data?.billDiscountWithTax,
+                refDate: data.refDate ? new Date(data.refDate) : "",
+                orderRefDate: data.orderRefDate ? new Date(data.orderRefDate) : "",
+                dueDate: data.dueDate ? new Date(data.dueDate) : "",
+                deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : "",
+                exchangeDate: data.exchangeDate ? new Date(data.exchangeDate) : "",
+                RetentionDueDate: data.RetentionDueDate ? new Date(data.RetentionDueDate) : "",
+                postedDate: data.postedDate ? new Date(data.postedDate) : "",
+                salesDetails: salesDetailsWithProducts,
+                yearId: currentFinancialYear?.yearId,
+                voucherType: "Sales Invoice"
+            }));
+
+            setResetTableKey((prev) => prev + 1);
+
+        } catch (error) {
+            console.error("Error fetching sale data", error);
+            Swal({
+                title: "Bill Not Found",
+                text: "No bill found for the provided details. Please check and try again.",
+                icon: "error",
+                button: "OK",
+            });
+        } finally {
+            setFetchLoading(false);
+        }
+    };
+
+    const getSalesById = async (taxMaster) => {
+        setFetchLoading(true);
+        try {
+            const response = await axiosInstance.get(`get-sales-byId/${salesMasterId}`);
+            const data = response.data.data;
+
+
+            fetchCustomerData(data.ledgerId);
+            fetchLedgerBalance(data.ledgerId);
+
+            setExistingInvoiceNo(data.invoiceNo);
+
+
+            const salesDetailsWithProducts = await Promise.all(
+                (data.salesDetails || []).map(async (item) => {
+                    let productName = '';
+                    let productNameArb = '';
+                    let availableUnits = [];
+                    let productDetails = {
+                        productCode: item.productCode || '',
+                        barcode: item.barcode || '',
+                        partNo: '',
+                        brand: '',
+                        mrp: '',
+                        purchase: item.PurchaseRate || '',
+                        productDescription: item.productDescription || '',
+                        UnitName: ''
+                    };
+                    const resolvedTaxData = taxMaster || taxData;
+
+                    const taxInfo = resolvedTaxData?.find(t => t.taxId === item?.taxId);
+                    const taxRate = taxInfo ? parseFloat(taxInfo?.rate) : 0;
+
+
+                    if (item.productCode) {
+                        try {
+
+                            productName = item?.productname || '';
+                            productNameArb = item?.productNameArb || '';
+                            availableUnits = item?.units || [];
+
+                            const selectedUnit = availableUnits.find(u => u.unitid === item.unitId);
+
+                            productDetails = {
+                                productCode: item.productCode,
+                                barcode: selectedUnit?.barcode || item.barcode || '',
+                                partNo: item.partno || '',
+                                brand: item?.brand?.brandName || '',
+                                mrp: item.mrp || '',
+                                purchase: item.PurchaseRate || '',
+                                productDescription: item.productDescription || '',
+                                UnitName: selectedUnit?.unitname || ''
+                            };
+                        } catch (err) {
+                            console.error(`Error fetching product ${item.productCode}:`, err);
+                        }
+                    }
+
+                    // Calculate discount amount if not available
+                    const descAmt = parseFloat(item.descAmt) || (() => {
+                        const gross = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+                        const discPerc = parseFloat(item.discountPercentage) || 0;
+                        return parseFloat(
+                            ((gross * discPerc) / 100).toFixed(generalSettings?.decimalPart || 2)
+                        ) || 0;
+                    })();
+
+                    return {
+                        ...item,
+                        productName,
+                        productNameArb,
+                        taxRate: taxRate,
+                        availableUnits,
+                        productDetails,
+                        qty: parseFloat(item.qty) || 0,
+                        freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                        rate: parseFloat(item.rate) || 0,
+                        lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
+                        inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
+                        discountPercentage: parseFloat(item.discountPercentage) || 0,
+                        PurchaseRate: parseFloat(item.PurchaseRate) || 0,
+                        taxAmount: parseFloat(item.taxAmount) || 0,
+                        grossAmount: parseFloat(item.grossAmount) || 0,
+                        netAmount: parseFloat(item.netAmount) || 0,
+                        amount: parseFloat(item.amount) || 0,
+                        descAmt,
+                    };
+                })
+            );
+            setBlillingAddress({
+                name: data?.customerName || '',
+                vatNo: data?.customerVATNo || '',
+                phoneNo: data?.CustomerPhone || '',
+                address: data?.CustomerAddress || ''
+            })
+            setFormData((prev) => ({
+                ...prev,
+                ...data,
+                billTime: data.billTime || '',
+                date: parseDateFromAPI(data.date),
+                refDate: data.refDate ? new Date(data.refDate) : "",
+                orderRefDate: data.orderRefDate ? new Date(data.orderRefDate) : "",
+                dueDate: data.dueDate ? new Date(data.dueDate) : "",
+                deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : "",
+                exchangeDate: data.exchangeDate ? new Date(data.exchangeDate) : "",
+                RetentionDueDate: data.RetentionDueDate ? new Date(data.RetentionDueDate) : "",
+                postedDate: data.postedDate ? new Date(data.postedDate) : "",
+                salesDetails: salesDetailsWithProducts,
+                billDiscountWithTax: data?.billDiscountWithTax,
+                yearId: currentFinancialYear?.yearId,
+                CashAmount: data?.CashAmount || 0,
+                BankAmount: data?.BankAmount || 0,
+                BillBalanceAmount: data?.BillBalanceAmount || 0,
+                voucherType: "Sales Invoice",
+            }));
+
+            setResetTableKey((prev) => prev + 1);
+        } catch (error) {
+            console.error("Error fetching sale data", error);
+        } finally {
+            setFetchLoading(false);
+        }
+    };
+
+    const [loading, setLoading] = useState({ employees: false, costCenters: false, pricingLevel: false, customers: false, godowns: false, batch: false });
+
+    const validateFormData = () => {
+        const errors = [];
+        if (!formData.ledgerId || !formData.customerName) errors.push('Please select a customer');
+        if (!formData.date) errors.push('Please select invoice date');
+        if (!formData.salesDetails || formData.salesDetails.length === 0) errors.push('Please add at least one product');
+        const hasValidProducts = formData.salesDetails.some(detail => detail.productCode && detail.qty > 0);
+        if (!hasValidProducts) errors.push('Please add valid products with quantity');
+        return errors;
+    };
+
+    const validationRules = {
+        ledgerId: { required: true, label: t("requiredFieldsError") },
+        date: { required: true, label: t("requiredFieldsError") },
+    };
+
+    const checkCreditLimit = async (formData, finalGrandTotal, currentledgerBalance) => {
+        if (formData.customerCreditlimitStatus === 'Ignore') return { allowed: true };
+        const creditLimit = parseFloat(formData.customercreditLimit) || 0;
+        const currentBalance = parseFloat(currentledgerBalance) || 0;
+        const invoiceAmount = parseFloat(finalGrandTotal) || 0;
+        const newBalance = currentBalance - invoiceAmount;
+        if (Math.abs(newBalance) > creditLimit && creditLimit > 0) {
+            const exceededAmount = Math.abs(newBalance) - creditLimit;
+            if (formData.customerCreditlimitStatus === 'Block') {
+                await Swal.fire({ title: t('salesInvoice.alert.creditLimit.blockTitle') || 'Credit Limit Exceeded!', html: `<div class="text-left"><p><strong>Customer:</strong> ${formData.customerName}</p><p><strong>Credit Limit:</strong> ${creditLimit.toFixed(decimalPart)}</p><p><strong>New Balance:</strong> ${newBalance.toFixed(decimalPart)}</p><p class="text-red-600"><strong>Exceeded by:</strong> ${exceededAmount.toFixed(decimalPart)}</p></div>`, icon: 'error', confirmButtonColor: '#d33', confirmButtonText: t('okBtn') });
+                return { allowed: false };
+            }
+            if (formData.customerCreditlimitStatus === 'Warn') {
+                const result = await Swal.fire({ title: t('salesInvoice.alert.creditLimit.warnTitle'), html: `<div class="text-left"><p><strong>Customer:</strong> ${formData.customerName}</p><p><strong>Credit Limit:</strong> ${creditLimit.toFixed(decimalPart)}</p><p class="text-orange-600"><strong>Exceeded by:</strong> ${exceededAmount.toFixed(decimalPart)}</p><p>Do you want to proceed?</p></div>`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#3085d6', cancelButtonColor: '#d33', confirmButtonText: t('salesInvoice.alert.creditLimit.proceedBtn'), cancelButtonText: t('Cancel') });
+                return { allowed: result.isConfirmed };
+            }
+        }
+        return { allowed: true };
+    };
+
+    // ===== PRINT HELPERS =====
+
+    const buildInvoiceDataForPrint = useCallback((invoiceNumber, qrLink) => {
+
+        return {
+            ...formData,
+            invoiceNo: invoiceNumber,
+            date: formData.date,
+            salesDetails: formData.salesDetails,
+            qr_link: qrLink || formData.qr_link,
+        };
+    }, [formData]);
+
+    const printToPrinterFn = useCallback((invoiceDataForPrint, qrLink) => {
+        if (formData.printType === 'Type 1') {
+            printInvoiceOne(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 2') {
+            printInvoiceTwo(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 3') {
+            printInvoiceThree(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 4') {
+            printInvoiceFour(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 5') {
+            printInvoiceFive(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 6') {
+            printInvoiceSix(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 7') {
+            printInvoiceSeven(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Thermal') {
+            printThermalInvoice(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else {
+            printInvoiceOne(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        }
+    }, [formData.printType, selectedBranchDetails, time]);
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // CHANGE 2 — Add a printToPdfFn (mirrors printToPrinterFn, uses *AsPdf variants)
+    //            Place this right after the printToPrinterFn definition.
+    // ━━━━━━━━━━━━━━━━━━━━
+    const printToPdfFn = useCallback((invoiceDataForPrint, qrLink) => {
+        // For Type 6 we have a dedicated PDF export.
+        // For all other types we fall back to the regular print function —
+        // the browser/Electron print dialog lets the user choose "Save as PDF".
+        if (formData.printType === 'Type 6') {
+            saveInvoiceSixAsPDF(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 1') {
+            saveInvoiceAsPDF(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 2') {
+            saveInvoiceTwoAsPDF(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 3') {
+            printInvoiceThree(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 4') {
+            saveInvoiceFourAsPDF(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 5') {
+            saveInvoiceFiveAsPDF(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Type 7') {
+            saveInvoiceSevenAsPDF(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else if (formData.printType === 'Thermal') {
+            printThermalInvoice(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        } else {
+            // Default fallback
+            saveInvoiceSixAsPDF(invoiceDataForPrint, selectedBranchDetails, editMode ? formData.billTime : time, currentCurrency, qrLink,);
+        }
+    }, [formData.printType, formData.billTime, selectedBranchDetails, time, editMode]);
+
+
+
+
+    // ===== SAVE HANDLER =====
+    const handleSave = useCallback(async () => {
+        if (formData.formType === 'Tax Invoice' && generalSettings.zatcaType === 'Phase 2') {
+            const requiredFields = [
+                'ledgerName',
+                'tinNumber',
+                'BuildingNo',
+                'StreetName',
+                'District',
+                'CityName',
+                'Country',
+                'PostboxNo',
+                'AdditionalNo',
+                'cstNumber'
+            ];
+            const customerData = formData.customerData || {};
+            const hasMissingPartyDetails = requiredFields.some(field => !customerData[field]);
+
+            if (hasMissingPartyDetails) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Party Details Required',
+                    text: 'Cannot save Tax Invoice without filling party details.',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+        }
+
+        if (!validateForm(formData, validationRules)) return;
+
+        // Row validation
+        let hasGaps = false;
+        let lastFilledIndex = -1;
+        const rowValidationErrors = [];
+
+        formData.salesDetails.forEach((row, index) => {
+            const isRowFilled = row.productCode && row.productCode.trim() !== '';
+            const hasAnyData = row.productName?.trim() !== '' ||
+                row.barcode?.trim() !== '' ||
+                row.qty > 0 ||
+                row.rate > 0;
+
+            if (isRowFilled) {
+                if (lastFilledIndex !== -1 && index - lastFilledIndex > 1) {
+                    hasGaps = true;
+                }
+                lastFilledIndex = index;
+
+                const missingFields = [];
+                if (!row.productName || row.productName.trim() === '') {
+                    missingFields.push('Product Name');
+                }
+                if (!row.qty || row.qty <= 0) {
+                    missingFields.push('Quantity');
+                }
+                if (row.rate === undefined || row.rate < 0) {
+                    missingFields.push('Sales Rate');
+                }
+                if (!row.unitId) {
+                    missingFields.push('Unit');
+                }
+
+                if (missingFields.length > 0) {
+                    rowValidationErrors.push({
+                        row: index + 1,
+                        message: `Missing: ${missingFields.join(', ')}`
+                    });
+                }
+            } else if (lastFilledIndex !== -1 && index < formData.salesDetails.length - 1) {
+                const hasFilledRowsAfter = formData.salesDetails
+                    .slice(index + 1)
+                    .some(r => r.productCode && r.productCode.trim() !== '');
+
+                if (hasFilledRowsAfter) {
+                    hasGaps = true;
+                    rowValidationErrors.push({
+                        row: index + 1,
+                        message: 'Row skipped'
+                    });
+                }
+            } else if (!isRowFilled && hasAnyData && index < formData.salesDetails.length - 1) {
+                rowValidationErrors.push({
+                    row: index + 1,
+                    message: 'Incomplete data'
+                });
+            }
+        });
+
+        if (hasGaps || rowValidationErrors.length > 0) {
+            showToast.error(
+                rowValidationErrors.map(err => `Row ${err.row}: ${err.message}`).join('\n') ||
+                "Cannot skip rows!"
+            );
+            return;
+        }
+
+        // Validation: Check if any row has rate without productCode
+        const rateWithoutProductCode = formData.salesDetails.filter((row, index) => {
+            const hasRate = (row.salesRate > 0 && generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') ||
+                (row.salesRateWithoutTax > 0) ||
+                (row.rate > 0);
+            const noProductCode = !row.productCode || row.productCode.trim() === '';
+            return hasRate && noProductCode;
+        });
+
+        if (rateWithoutProductCode.length > 0) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Invalid Row Data',
+                text: 'Cannot save: Rate/Price entered without selecting a product. Please select a product for all rows with rates.',
+                confirmButtonColor: '#3085d6',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        // AFTER
+        if (formData.BillBalanceAmount < 0) {
+            showToast.error(t("salesInvoice.alert.billBalanceAmtError"));
+            return;
+        }
+
+        if (formData.paymentMode === 'cash' && (!(formData.CashAmount) || parseFloat(formData.CashAmount) <= 0)) {
+            showToast.error(t("salesInvoice.alert.cashAmountRequired") || "Cash amount must be greater than 0 for Cash payment mode.");
+            return;
+        }
+
+        if (formData.paymentMode === 'card' && (!(formData.BankAmount) || parseFloat(formData.BankAmount) <= 0)) {
+            showToast.error(t("salesInvoice.alert.bankAmountRequired") || "Bank/Card amount must be greater than 0 for Card payment mode.");
+            return;
+        }
+
+        if (formData.paymentMode === 'credit' && (!(formData.BillBalanceAmount) || parseFloat(formData.BillBalanceAmount) <= 0)) {
+            showToast.error(t("salesInvoice.alert.creditPaymentModeError"));
+            return;
+        }
+
+        const validationErrors = validateFormData();
+        if (validationErrors.length > 0) {
+            showToast.error(validationErrors.join('\n'));
+            return;
+        }
+
+        const creditLimitCheck = await checkCreditLimit(
+            formData,
+            formData.totalAmount,
+            currentledgerBalance
+        );
+        if (!creditLimitCheck.allowed) return;
+
+        if (generalSettings?.askConfirmationSave) {
+            const result = await Swal.fire({
+                title: t('ConfirmSaveTitle'),
+                text: t('ConfirmSaveText'),
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesSave'),
+                cancelButtonText: t('Cancel')
+            });
+
+            if (!result.isConfirmed) return;
+        }
+
+        setIsSaving(true);
+
+        try {
+            const qrCodeBase64 = generateQRCodeData(
+                formData,
+                selectedBranchDetails?.branchName || '',
+                selectedBranchDetails?.taxNo || '',
+                time
+            );
+            const qrCodeUrl = qrCodeBase64;
+            // const dataToSave = {
+            //     ...formData,
+            //     date: formatDateWithTime(formData.date),
+            //     billTime: time,
+            //     qr_link: qrCodeUrl
+            // };
+            const calculatedTotal = (
+                parseFloat(formData.taxableAmt || 0) +
+                parseFloat(formData.totalTax || 0) +
+                parseFloat(formData.othercharge || 0) -
+                parseFloat(formData.billDiscount || 0) +
+                parseFloat(formData.roundOff || 0) +
+                parseFloat(formData.additionalCost || 0)
+            ).toFixed(2);
+
+            const dataToSave = {
+                ...formData,
+                date: formatDateWithTime(formData.date),
+                billTime: time,
+                qr_link: qrCodeUrl,
+                totalAmount: calculatedTotal  // ✅ always override with fresh calculation
+            };
+
+            const api = 'save-sales';
+
+            const response = await axiosInstance.post(api, dataToSave);
+
+            if (!response.data.error) {
+                const zatcaPhaceOneQrLink = response.data.data.qr_link;
+                const { data } = await axiosInstance.get(`zatca/preinvoicehash/${selectedBranchId}`);
+                const PreviousHash = data.data;
+
+                // ZATCA Phase 2 logic
+                const zatcaPayload = {
+                    MasterId: response.data.data.salesMasterId || '',
+                    VoucherNo: response.data.data.invoicenumber || invoiceId,
+                    VoucherType: "Sales Invoice",
+                    BillDate: (() => {
+                        const now = new Date();
+                        const hours = String(now.getHours()).padStart(2, '0');
+                        const minutes = String(now.getMinutes()).padStart(2, '0');
+                        const seconds = String(now.getSeconds()).padStart(2, '0');
+                        const timeWithSeconds = `${hours}:${minutes}:${seconds}`;
+
+                        const dateStr = formData.date instanceof Date
+                            ? formData.date.toISOString().split('T')[0]  // "2025-01-15"
+                            : String(formData.date).split('T')[0];
+
+                        return `${dateStr} ${timeWithSeconds}`;
+                    })(),
+                    SchemeID: "CRN",
+                    SchemeIDNo: selectedBranchDetails.crNo,
+                    BuildingNo: selectedBranchDetails.buildingNo,
+                    CityName: selectedBranchDetails.cityName,
+                    CitySubDivisionName: selectedBranchDetails.district,
+                    TaxCode: selectedBranchDetails.taxNo,
+                    CountrySubentity: "SA",
+                    PlotIdentification: "",
+                    CompanyPostalZone: selectedBranchDetails.postalCode,
+                    PartyRegistrationName: selectedBranchDetails.branchName,
+                    StreetName: selectedBranchDetails.streetName,
+                    DistrictName: selectedBranchDetails.district,
+                    BuyerDistrict: formData.customerData.District,
+                    BuyerCityName: formData.customerData.CityName,
+                    BuyerStreetName: formData.customerData.StreetName,
+                    BuyerBuildingNo: formData.customerData.BuildingNo,
+                    BuyerCitySubDivisionName: formData.customerData.District,
+                    BuyerCountryCode: "SA",
+                    BuyerPlotIdentification: "",
+                    BuyerPostalZone: formData.customerData.PostboxNo,
+                    BuyerContactName: formData.customerData.District,
+                    BuyerSchemeID: formData.formType === 'Tax Invoice' ? 'CRN' : "OTH",
+                    BuyerSchemIDNo: formData.customerData.cstNumber,
+                    BuyerTaxCode: formData.customerData.tinNumber,
+                    PaymentMeansCode: formData.paymentMode === 'cash' ? '10' :
+                        formData.paymentMode === 'bank' ? '42' : '30',
+                    BillType: formData.formType,
+                    ReasonForReturn: "",
+                    LF: "",
+                    CERTIFICATE_CONTENT: zatcaSettings.binarytoken,
+                    PRIVATE_KEY: zatcaSettings.privatekey,
+                    PRODUCTION_SECRET: zatcaSettings.productionsecret,
+                    PROFUCTION_BINARY_TOKEN: zatcaSettings.profectionbinarytoken,
+                    PUBLIC_KEY: zatcaSettings.publickey,
+                    AUTH_BINARYSECURITYTOKEN_PCSID: zatcaSettings.auth_binarysecuritytoken_pcsid,
+                    PreviousHash: response.data.data.prevInvoiceHash,
+                    InvoiceItems: formData.salesDetails
+                        .filter(item => item.productCode && item.qty > 0)
+                        .map(item => ({
+                            ItemName: item.productName || "",
+                            Qty: item.qty,
+                            Amount: parseFloat(item.amount),
+                            Discount: 0,
+                            TaxAmt: parseFloat(item.taxAmount) || 0.0,
+                            CurrencyConversionRate: currentCurrencyConversion.rate
+                        }))
+                };
+
+
+                let zatcaPhaceTwoQrLink;
+
+                if (generalSettings.zatcaType === 'Phase 2') {
+                    const zatcaResponse = await axios.post(
+                        'https://api.finacerp.com/api/Invoice/Submit',
+                        zatcaPayload
+                    );
+                    axiosInstance.post('zatca/save-zatca-response', { SalesMasterId: response.data.data.salesMasterId, ZatcaResponse: JSON.stringify(zatcaResponse.data) });
+
+                    zatcaPhaceTwoQrLink = zatcaResponse.data.QrCodeBase64;
+
+
+                    if (zatcaResponse.data.Success) {
+                        await axiosInstance.post('update-zatca-fields', {
+                            VoucherType: "Sales Invoice",
+                            salesMasterId: response.data.data.salesMasterId,
+                            PreInvoiceHash: response.data.data.prevInvoiceHash,
+                            CurrentInvoiceHash: zatcaResponse.data.InvoiceHash,
+                            UUID: zatcaResponse.data.UUID,
+                            ZatcaStatus: zatcaResponse.data.status,
+                            LogData: zatcaResponse.data.logData,
+                            Qrlink: zatcaResponse.data.QrCodeBase64,
+                            UploadedInvoice: zatcaResponse.data.ZatcaJson,
+                            ZatcaSignedXml: zatcaResponse.data.SignedXml
+                        });
+                    } else {
+                        showToast.error('ZATCA submission failed');
+                    }
+                }
+
+                showToast.success(t('saveSuccess'));
+                setIsSaving(false);
+
+                const invoiceQr = generalSettings.zatcaType === 'Phase 2' ?
+                    zatcaPhaceTwoQrLink :
+                    zatcaPhaceOneQrLink;
+                const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceId, invoiceQr);
+
+                // Handle held invoices cleanup first
+                if (restoredHeldInvoiceId) {
+                    setHeldInvoices(prev => prev.filter(inv => inv.id !== restoredHeldInvoiceId));
+                    setRestoredHeldInvoiceId(null);
+                }
+
+                // PRINT LOGIC
+                if (formData?.printAfterSave) {
+                    // Checkbox ON → Print to physical printer
+                    printToPrinterFn(invoiceDataForPrint, invoiceQr);
+
+                    // Clear form if not in edit mode and not closing after save
+                    if (!editMode && !saleSettings.CloseAfterSave) {
+                        clearForm();
+                    }
+                } else {
+                    // Checkbox OFF → Ask if they want PDF
+                    const pdfResult = await Swal.fire({
+                        title: t('Print As Pdf') || 'Print as PDF?',
+                        text: t('Do you want to download this invoice as a PDF?') ||
+                            'Do you want to download this invoice as a PDF?',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
+                        cancelButtonText: t('No, Just Save') || 'No, Just Save',
+                    });
+
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            printToPdfFn(invoiceDataForPrint, invoiceQr);
+                        }, 500);
+                    } else if (editMode) {
+                        // User clicked "No, Just Save" in edit mode - switch to add mode
+                        setIsEditMode(false);
+                        clearForm();
+                    }
+
+                    // Clear form if not in edit mode and user didn't want PDF and not closing after save
+                    if (!editMode && !saleSettings.CloseAfterSave) {
+                        clearForm();
+                    }
+                }
+
+                // Handle navigation if CloseAfterSave is enabled
+                if (saleSettings.CloseAfterSave) {
+                    setTimeout(() => {
+                        navigate('/transaction/sales-invoice/invoice-list');
+                    }, formData.printAfterSave ? 1500 : 500);
+                }
+                genarateSalesInvoiceId();
+            }
+        } catch (error) {
+            console.error('Error saving sales:', error);
+            Swal.fire({
+                icon: 'error',
+                title: t('Error') || 'Error',
+                text: error.response?.data?.message ||
+                    t('SaveFailed') ||
+                    'Failed to save sales invoice'
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    }, [
+        formData,
+        time,
+        saleSettings,
+        generalSettings,
+        editMode,
+        selectedBranchDetails,
+        restoredHeldInvoiceId,
+        currentledgerBalance,
+        invoiceId,
+        buildInvoiceDataForPrint,
+        printToPrinterFn,
+        // printToPdfFn,
+        clearForm,
+        navigate,
+        t
+    ]);
+    // ===== EDIT MODE: Print to Printer =====
+    const handleReprintToPrinter = useCallback(() => {
+
+        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, formData.qr_link);
+        printToPrinterFn(invoiceDataForPrint, formData.qr_link);
+    }, [buildInvoiceDataForPrint, existingInvoiceNo, formData.qr_link, printToPrinterFn]);
+
+    // ===== EDIT MODE: Print as PDF =====
+    // ✅ CHANGE 3 (edit mode): Also pass qrLink so PDF uses correct template with QR
+    // AFTER:
+    const handleReprintToPdf = useCallback(() => {
+        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, formData.qr_link);
+        printToPdfFn(invoiceDataForPrint, formData.qr_link);       // ← now uses PDF fn ✅
+    }, [buildInvoiceDataForPrint, existingInvoiceNo, formData.qr_link, printToPdfFn]);
+
+
+    // ===== EDIT MODE: Send via WhatsApp =====
+    const handleSendWhatsApp = useCallback(() => {
+        setWhatsappNumber(formData.CustomerPhone || '');
+        setWhatsappModalOpen(true);
+    }, [formData.CustomerPhone]);
+
+
+    const handleSendWhatsAppMessage = useCallback(async () => {
+        if (!whatsappNumber || whatsappNumber.trim() === '') {
+            showToast.error('Please enter a phone number');
+            return;
+        }
+        const phoneRegex = /\d{7,}/;
+        if (!phoneRegex.test(whatsappNumber)) {
+            showToast.error('Please enter a valid phone number');
+            return;
+        }
+
+        setIsSaving(true); // reuse the popup preloader to show "Generating PDF…"
+
+        try {
+            // 1️⃣  Build the same invoiceData object the print functions receive
+            const invoiceDataForPrint = buildInvoiceDataForPrint(
+                existingInvoiceNo,
+                formData.qr_link,
+            );
+
+            // 2️⃣  Generate PDF, upload it, get the hosted URL
+            const pdfUrl = await uploadInvoicePDFAndGetLink(
+                generateInvoiceHTML,        // the HTML generator from invoicePrintSix
+                invoiceDataForPrint,
+                selectedBranchDetails,
+                editMode ? formData.billTime : time,
+            );
+
+            if (!pdfUrl) {
+                showToast.error('Failed to generate or upload PDF. Please try again.');
+                return;
+            }
+
+            // 3️⃣  Build the WhatsApp message with the real hosted URL
+            const message = formatInvoiceMessageWithLink(
+                formData,
+                existingInvoiceNo,
+                pdfUrl,
+                'Sales Invoice',
+            );
+
+            // 4️⃣  Open WhatsApp
+            sendWhatsAppMessage(whatsappNumber, message);
+            showToast.success('Opening WhatsApp with invoice PDF link…');
+            setWhatsappModalOpen(false);
+            setWhatsappNumber('');
+
+        } catch (error) {
+            console.error('WhatsApp send error:', error);
+            showToast.error('Failed to send WhatsApp message');
+        } finally {
+            setIsSaving(false);
+        }
+    }, [
+        whatsappNumber,
+        formData,
+        existingInvoiceNo,
+        buildInvoiceDataForPrint,
+        selectedBranchDetails,
+        time,
+        editMode,
+    ]);
+
+    const handleCloseWhatsAppModal = useCallback(() => {
+        setWhatsappModalOpen(false);
+        setWhatsappNumber('');
+    }, []);
+
+    // Modal Component - UPDATED VERSION
+    const WhatsAppModal = () => {
+        if (!whatsappModalOpen) return null;
+
+        // Check if phone number is valid
+        const isPhoneValid = whatsappNumber && whatsappNumber.trim() !== '' && /\d{7,}/.test(whatsappNumber);
+
+        return (
+            <>
+                {/* Backdrop overlay */}
+                <div
+                    className="fixed inset-0 bg-[#0000009a] z-40"
+                    onClick={handleCloseWhatsAppModal}
+                />
+
+                {/* Modal */}
+                <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                Send Invoice via WhatsApp
+                            </h2>
+                            <button
+                                onClick={handleCloseWhatsAppModal}
+                                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl leading-none"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6">
+                            <div className="mb-4">
+                                <label
+                                    htmlFor="whatsapp-number"
+                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                                >
+                                    WhatsApp Number <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    id="whatsapp-number"
+                                    type="tel"
+                                    placeholder="Enter phone number (e.g., +966501234567)"
+                                    value={whatsappNumber}
+                                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && isPhoneValid) {
+                                            handleSendWhatsAppMessage();
+                                        }
+                                    }}
+                                    autoFocus
+                                    className={`w-full px-4 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent transition
+                                    ${!whatsappNumber || whatsappNumber.trim() === ''
+                                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500'
+                                            : 'border-gray-300 dark:border-gray-600 focus:ring-green-500'
+                                        }`}
+                                />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                    Include country code for international numbers
+                                </p>
+                                {whatsappNumber && whatsappNumber.trim() !== '' && !/\d{7,}/.test(whatsappNumber) && (
+                                    <p className="text-xs text-red-500 mt-1">
+                                        Please enter a valid phone number (minimum 7 digits)
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                            <button
+                                onClick={handleCloseWhatsAppModal}
+                                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md font-medium transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSendWhatsAppMessage}
+                                disabled={!isPhoneValid || isSaving}
+                                className={`px-4 py-2 rounded-md font-medium transition flex items-center gap-2
+        ${isPhoneValid && !isSaving
+                                        ? 'bg-green-600 hover:bg-green-700 text-white cursor-pointer'
+                                        : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                                    }`}
+                            >
+                                {isSaving ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Generating PDF…
+                                    </>
+                                ) : (
+                                    'Send Message'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </>
+        );
+    };
+
+    // Keyboard shortcut: Ctrl+S
+    useEffect(() => {
+        if (!editMode) {
+            const handleKeyDown = (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); handleSave(); }
+            };
+            window.addEventListener('keydown', handleKeyDown);
+            return () => window.removeEventListener('keydown', handleKeyDown);
+        }
+    }, [handleSave]);
+
+    // ===== BREADCRUMB ACTIONS =====
+    const breadcrumbActions = [
+        {
+            label: t("listBtn"),
+            icon: Table,
+            type: "secondary",
+            title: "Go to invoice list",
+            onClick: () => handleListNavigate(true), // ✅ Pass true to preserve filters
+        },
+        !isEditMode && {
+            label: `Hold Invoice${heldInvoices.length > 0 ? ` (${heldInvoices.length})` : ''}`,
+            icon: Archive,
+            type: "secondary",
+            onClick: holdCurrentInvoice,
+            title: "Hold the current invoice (CTRL + H)",
+        },
+        heldInvoices.length > 0 && !isEditMode && {
+            label: "Restore",
+            icon: ArchiveRestore,
+            type: "tertiary",
+            title: "View and restore held invoices",
+            onClick: () => setShowHeldInvoices(!showHeldInvoices),
+        },
+
+        {
+            label: t("clearBtn"),
+            icon: Eraser,
+            type: "secondary",
+            title: "Clear all form fields",
+            onClick: clearForm,
+        },
+        canEdit && {
+            label: t("submitBtn"),
+            icon: isEditMode ? Pencil : SaveAll,
+            type: "primary",
+            title: isEditMode
+                ? "Update the invoice (CTRL + S)"
+                : "Save the invoice (CTRL + S)",
+            onClick: handleSave,
+            loading: isSaving,
+            dataAttribute: "data-save-button",
+            loadingText: t("loadingText"),
+        },
+    ].filter(Boolean);
+
+
+    if (fetchLoading || baseDataloading) {
+        return (
+            <div className="bg-primary dark:bg-primary">
+                <BreadCrumb
+                    routes={[
+                        { title: t("salesInvoice.breadcrumb.master"), url: "#" },
+                        { title: t("salesInvoice.breadcrumb.title"), url: "#" },
+                    ]}
+                    heading={{ icon: ReceiptText, title: t("salesInvoice.breadcrumb.title") }}
+                    actions={breadcrumbActions}
+                />
+                <Preloader />
+            </div>
+        );
+    }
+
+    return (
+        <div className='bg-primary dark:bg-primary'>
+            <PopupPreloader
+                isOpen={isSaving}
+                state="loading"
+                title={t("loadingText")}
+                subtitle={t("loadingDesc")}
+            />
+            <WhatsAppModal />
+            <HeldInvoicesPanel />
+            <BreadCrumb
+                routes={[
+                    { title: t("salesInvoice.breadcrumb.master"), url: "#" },
+                    { title: t("salesInvoice.breadcrumb.title"), url: "#" },
+                ]}
+                heading={{ icon: ReceiptText, title: t("salesInvoice.breadcrumb.title") }}
+                actions={breadcrumbActions}
+
+                customActions={
+                    <div className="flex items-center gap-3">
+                        {!isEditMode && (
+                            <>
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id="printAfterSaveTopInvoice"
+                                        checked={formData.printAfterSave || false}
+                                        onCheckedChange={(value) =>
+                                            setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                        }
+                                    />
+                                    <label
+                                        htmlFor="printAfterSaveTopInvoice"
+                                        className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                                    >
+                                        {t("salesInvoice.form.footerSection.otherDetails.label.printAfterSave") || "Print After Save"}
+                                    </label>
+                                </div>
+                                {/* Form Type Dropdown */}
+
+                            </>
+                        )}
+                        <select
+                            name="printType"
+                            id="printType"
+                            className='border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none'
+                            value={formData.printType}
+                            onChange={(e) => {
+                                setFormData(prev => ({ ...prev, printType: e.target.value }));
+
+                            }}
+                        >
+                            {
+                                invoiceTypes.map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))
+                            }
+                        </select>
+                        {isEditMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                onSendWhatsApp={handleSendWhatsApp}
+                            />
+                        )}
+                    </div>
+                }
+            />
+
+            <FormSectionMain
+                validationRules={validationRules}
+                handleBlur={handleBlur}
+                setErrors={setErrors}
+                errors={errors}
+                loadSalesModeData={loadSalesModeData}
+                loading={loading}
+                existingInvoiceNo={existingInvoiceNo}
+                editMode={editMode}
+                key={resetTableKey}
+                time={time}
+                invoiceId={invoiceId}
+                setFormData={setFormData}
+                formData={formData}
+                employees={employees}
+                costCenters={costCenters}
+                customers={customers}
+                pricingLevel={pricingLevel}
+                batches={batches}
+                godowns={godowns}
+                rows={formData?.salesDetails}
+                setRows={(updatedRows) => setFormData((prev) => ({ ...prev, salesDetails: updatedRows }))}
+                fetchLedgerBalance={fetchLedgerBalance}
+                currentledgerBalance={currentledgerBalance}
+                salesAccount={salesAccount}
+                bank={bank}
+                cash={cash}
+                ledgerBalance={ledgerBalance}
+                billingAddress={billingAddress}
+                shippingAdderess={shippingAdderess}
+                setBlillingAddress={setBlillingAddress}
+                setShippingAddress={setShippingAddress}
+                otherChargeLedgers={otherChargeLedgers}
+                currency={currency}
+                quotationData={quotationData}
+                setQuotationData={setQuotationData}
+
+                proformaData={profoemaData}
+                setProformaData={setProformadata}
+
+                salesOrderData={salesOrderData}
+                setSalesOrderData={setSalesOrderData}
+
+                deliveryNoteData={deliveryNoteData}
+                setDeliveryNoteData={setDeliveryNoteData}
+                genarateSalesInvoiceId={genarateSalesInvoiceId}
+                setCustomers={setCustomers}
+            />
+        </div>
+    )
+}
+
+export default SalesInvoiceSkin

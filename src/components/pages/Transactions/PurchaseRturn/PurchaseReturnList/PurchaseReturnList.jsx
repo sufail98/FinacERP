@@ -1,0 +1,409 @@
+import AlertBox from '@/components/common/AlertBox'
+import BreadCrumb from '@/components/common/BreadCrumb'
+import Preloader from '@/components/common/Preloader'
+import axiosInstance from '@/lib/axiosConfig'
+import usePrivileges from '@/lib/hooks/usePrivileges'
+import { Edit, Plus, ReceiptText, Trash2 } from 'lucide-react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useSelector } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
+import Swal from 'sweetalert2'
+import ContentTable from '@/components/common/ContentTable'
+import DateFilterSection from '../../Components/DateFilterSection'
+import useAuth from '@/redux/hook/auth/useAuth'
+
+const PurchaseReturnList = () => {
+    const [alert, setAlert] = useState(null);
+    const [salesData, setSalesData] = useState([])
+    const [voucherCode, setVoucherCode] = useState('') // Single search field
+    const navigate = useNavigate()
+    const { t } = useTranslation();
+    const [fetchLoading, setFetchLoading] = useState(false)
+    const { generalSettings } = useSelector((state) => state.settings)
+    const { selectedBranchId } = useAuth()
+
+    const { privileges, loading: privilegeLoading } = usePrivileges("Purchase Return");
+
+    // Debounce timer ref
+    const debounceTimerRef = useRef(null);
+
+    // Get today's date in YYYY-MM-DD format
+    const getTodayDate = () => {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    };
+
+    // Date filter states - default to today's date
+    const [fromDate, setFromDate] = useState(getTodayDate());
+    const [toDate, setToDate] = useState(getTodayDate());
+
+    // Server-side pagination states
+    const [limit, setLimit] = useState(80);
+    const [page, setPage] = useState(1);
+    const [meta, setMeta] = useState({
+        total: 0,
+        page: 1,
+        limit: 80,
+        total_pages: 1
+    });
+
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+
+        const date = new Date(dateString);
+        const dd = String(date.getDate()).padStart(2, '0');
+        const MM = String(date.getMonth() + 1).padStart(2, '0');
+        const yyyy = date.getFullYear();
+
+        const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+        return format
+            .replace('dd', dd)
+            .replace('MM', MM)
+            .replace('yyyy', yyyy);
+    };
+
+    // Main fetch function
+    const fetchAllSales = useCallback(async (params = {}) => {
+        setFetchLoading(true);
+        try {
+            const currentVoucherCode = params.voucherCode !== undefined ? params.voucherCode : voucherCode;
+            const currentFromDate = params.fromDate !== undefined ? params.fromDate : fromDate;
+            const currentToDate = params.toDate !== undefined ? params.toDate : toDate;
+            const currentLimit = params.limit !== undefined ? params.limit : limit;
+            const currentPage = params.page !== undefined ? params.page : page;
+
+            // Build payload - if voucherCode has value, set dates to null
+            const payload = {
+                fromDate: currentVoucherCode?.trim() ? null : currentFromDate,
+                toDate: currentVoucherCode?.trim() ? null : currentToDate,
+                limits: currentLimit,
+                page: currentPage,
+                branchId: selectedBranchId,
+                vouchercode: currentVoucherCode?.trim() || null
+            };
+
+            const res = await axiosInstance.post('purchase-returns', payload);
+
+            const formattedData = res.data.data.map((item, index) => ({
+                ...item,
+                SNo: ((currentPage - 1) * currentLimit) + index + 1,
+                date: formatDate(item.date),
+            }));
+
+            setSalesData(formattedData);
+
+            if (res.data.meta) {
+                setMeta({
+                    total: res.data.meta.total || 0,
+                    page: res.data.meta.page || currentPage,
+                    limit: res.data.meta.limit || currentLimit,
+                    total_pages: res.data.meta.total_pages || 1
+                });
+            }
+        } catch (error) {
+            console.error('Error Fetching Purchase Return Data', error);
+            setAlert({
+                id: Date.now(),
+                type: "error",
+                message: error.response?.data?.message || "Error fetching purchase returns",
+            });
+        } finally {
+            setFetchLoading(false);
+        }
+    }, [voucherCode, fromDate, toDate, limit, page, selectedBranchId, generalSettings]);
+    const footerData = useMemo(() => {
+        if (!salesData || salesData.length === 0) return null;
+
+        const grandTotal = salesData.reduce((sum, item) => {
+            return sum + (Number(item.totalAmount) || 0);
+        }, 0);
+
+        return {
+            SNo: "",
+            returnNo: "",
+            date: "",
+            ledgerName: t("Grand Total"),
+            totalAmount: grandTotal.toFixed(generalSettings?.decimalPart || 2),
+        };
+    }, [salesData, generalSettings?.decimalPart, t]);
+    // Initial load with today's date
+    useEffect(() => {
+        fetchAllSales();
+    }, []);
+
+    // Fetch when page or limit changes
+    useEffect(() => {
+        // Skip initial render
+        if (page === 1 && limit === 10) return;
+
+        fetchAllSales();
+    }, [page, limit]);
+
+    // Debounced search for voucher code
+    const handleVoucherCodeChange = (e) => {
+        const value = e.target.value;
+        setVoucherCode(value);
+        setPage(1); // Reset to first page
+
+        // Clear existing timer
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        // Set new debounce timer (300ms delay)
+        debounceTimerRef.current = setTimeout(() => {
+            fetchAllSales({ voucherCode: value, page: 1 });
+        }, 300);
+    };
+
+    // Clear voucher code and fetch with dates
+    const clearVoucherCode = () => {
+        setVoucherCode('');
+
+        // Clear debounce timer
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        // Fetch with current date filters
+        setPage(1);
+        fetchAllSales({ voucherCode: '', page: 1 });
+    };
+
+    // Filter button click - only for date filtering
+    const handleFilter = () => {
+        if (voucherCode?.trim()) {
+            // If voucher code exists, just search by voucher code
+            setPage(1);
+            fetchAllSales({ page: 1 });
+            return;
+        }
+
+        // Validate dates
+        if (fromDate > toDate) {
+            setAlert({
+                id: Date.now(),
+                type: "error",
+                message: "From Date cannot be greater than To Date",
+            });
+            return;
+        }
+
+        setPage(1);
+        fetchAllSales({ page: 1 });
+    };
+
+    // Reset everything
+    const handleReset = async () => {
+        const today = getTodayDate();
+
+        // Clear debounce timer
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        setFromDate(today);
+        setToDate(today);
+        setPage(1);
+        setLimit(10);
+        setVoucherCode('');
+
+        await fetchAllSales({
+            fromDate: today,
+            toDate: today,
+            limit: 10,
+            page: 1,
+            voucherCode: ''
+        });
+    };
+
+    const handlePageChange = (newPage) => {
+        setPage(newPage);
+        fetchAllSales({ page: newPage });
+    };
+
+    const handleItemsPerPageChange = (newLimit) => {
+        setLimit(newLimit);
+        setPage(1);
+        fetchAllSales({ limit: newLimit, page: 1 });
+    };
+
+    const handleDelete = async (id) => {
+        if (!privileges?.can_delete) return;
+
+        const result = await Swal.fire({
+            title: t("delete.title"),
+            text: t("delete.text"),
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#3085d6",
+            cancelButtonColor: "#d33",
+            confirmButtonText: t("delete.confirm"),
+            cancelButtonText: t("delete.cancel"),
+        });
+
+        if (!result.isConfirmed) return;
+
+        try {
+            const res = await axiosInstance.get(`delete-purchase-return/${id}`);
+            if (!res.data.error) {
+                setAlert({ key: new Date(), type: "success", message: t("deleteSuccess") });
+
+                if (salesData.length === 1 && page > 1) {
+                    const newPage = page - 1;
+                    setPage(newPage);
+                    fetchAllSales({ page: newPage });
+                } else {
+                    fetchAllSales();
+                }
+            }
+        } catch (error) {
+            const errorMessage = error.response?.data?.message || "Error deleting Purchase Return";
+            const finalMessage = errorMessage.toLowerCase().includes("foreign key violation")
+                ? t("foreeignKeyError")
+                : errorMessage;
+
+            setAlert({
+                id: Date.now(),
+                type: "error",
+                message: finalMessage,
+            });
+            console.error(error);
+        }
+    };
+
+    // Cleanup debounce timer on unmount
+    useEffect(() => {
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+        };
+    }, []);
+
+    const columns = [
+        { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "right" },
+        { key: "returnNo", label: t("purchaseReturn.list.columns.returnNo"), sortable: true, align: "left",width: "80px" },
+        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "center" , width: "120px" },
+        { key: "ledgerName", label: t("salesInvoice.list.columns.partyName"), sortable: true, align: "left" , width: "200px"},
+        { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right" , width: "150px"},
+    ];
+
+    const renderCell = (key, row) => {
+        if (key === "totalAmount") {
+            return (
+                <div className="text-sm">
+                    <div className="flex items-center justify-end gap-1">
+                        <span>{Number(row.totalAmount).toFixed(generalSettings.decimalPart)}</span>
+                    </div>
+                </div>
+            );
+        }
+
+        return row[key] ?? "-";
+    };
+
+    const actions = [];
+    if (privileges?.can_edit) {
+        actions.push({
+            icon: <Edit className="h-4 w-4" />,
+            onClick: (row) => navigate(`/transaction/purchase-return/edit-purchase-return/${row.returnMasterId}`),
+            className: "text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300",
+            tooltip: "Edit",
+        });
+    }
+    if (privileges?.can_delete) {
+        actions.push({
+            icon: <Trash2 className="h-4 w-4" />,
+            className: "text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300",
+            onClick: (row) => handleDelete(row.returnMasterId),
+            tooltip: "Delete",
+        });
+    }
+
+    if (privilegeLoading) {
+        return (
+            <div className="bg-primary dark:bg-primary">
+                <BreadCrumb
+                    routes={[
+                        { title: t("purchaseReturn.breadcrumb.master"), url: "#" },
+                        { title: t("purchaseReturn.breadcrumb.title"), url: "#" },
+                    ]}
+                    heading={{ icon: ReceiptText, title: t("purchaseReturn.breadcrumb.title") }}
+                />
+                <Preloader />
+            </div>
+        )
+    }
+
+    return (
+        <div className="bg-primary dark:bg-primary">
+            {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+            <BreadCrumb
+                routes={[
+                    { title: t("purchaseReturn.breadcrumb.master"), url: "#" },
+                    { title: t("purchaseReturn.breadcrumb.title"), url: "#" },
+                ]}
+                heading={{ icon: ReceiptText, title: t("purchaseReturn.breadcrumb.title") }}
+                actions={
+                    privileges?.can_add
+                        ? [
+                            {
+                                label: t("createNewBtn"),
+                                icon: Plus,
+                                type: "primary",
+                                onClick: () => navigate("/transaction/purchase-return"),
+                            },
+                        ]
+                        : []
+                }
+            />
+
+            <div className='p-1'>
+                {/* Date Filter Section with single search */}
+                <DateFilterSection
+                    fromDate={fromDate}
+                    toDate={toDate}
+                    onFromDateChange={(e) => setFromDate(e.target.value)}
+                    onToDateChange={(e) => setToDate(e.target.value)}
+                    onFilter={handleFilter}
+                    onReset={handleReset}
+                    loading={fetchLoading}
+                    totalRecords={meta.total}
+                    showTotalRecords={true}
+                    // Voucher code props
+                    showVoucherCode={true}
+                    voucherCode={voucherCode}
+                    onVoucherCodeChange={handleVoucherCodeChange}
+                    onClearVoucherCode={clearVoucherCode}
+                    voucherCodePlaceholder={t("Search by Return No...")}
+                    voucherCodeLabel={t("Return No")}
+                    disableDates={!!voucherCode?.trim()}
+                    // Button text
+                    filterButtonText={t("common.show") || "Show"}
+                />
+
+                {/* Server Paginated Table */}
+                <ContentTable
+                    columns={columns}
+                    data={salesData}
+                    actions={actions}
+                    currentPage={page}
+                    itemsPerPage={limit}
+                    totalItems={meta.total}
+                    totalPages={meta.total_pages}
+                    onPageChange={handlePageChange}
+                    onItemsPerPageChange={handleItemsPerPageChange}
+                    loading={fetchLoading}
+                    serverPagination={true}
+                    renderCell={renderCell}
+                    footerData={footerData}
+                />
+            </div>
+        </div>
+    )
+}
+
+export default PurchaseReturnList

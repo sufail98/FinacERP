@@ -1,0 +1,428 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+/* React DatePicker base styles */
+@import "react-datepicker/dist/react-datepicker.css";
+@custom-variant dark (&:is(.dark *));
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  /* Brand colors */
+  --main-bg: #4e2348;
+  --secondary-bg: #3b2d94;
+
+  /* ✅ Light mode colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+  --bg-hover: #f3f4f6;
+
+  --text-primary: #010102;
+  --text-secondary: #000000;
+  --text-tertiary: #000000;
+  --text-muted: #000000;
+
+  --border-color: #e5e7eb;
+  --border-light: #f3f4f6;
+
+  /* Theme variables */
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* ✅ STANDARD DARK MODE (WhatsApp/Instagram/Material Design style) */
+.dark {
+  /* Main backgrounds - Instagram/WhatsApp style */
+  --bg-primary: #121212;
+  /* Base background (Material Design) */
+  --bg-secondary: #1a1a1a;
+  /* Elevated surfaces */
+  --bg-tertiary: #242424;
+  /* More elevated (cards, modals) */
+  --bg-hover: #2c2c2c;
+  /* Hover states */
+
+  /* Text colors */
+  --text-primary: #e4e6eb;
+  /* Primary text (Facebook/WhatsApp) */
+  --text-secondary: #b0b3b8;
+  /* Secondary text */
+  --text-tertiary: #8a8d91;
+  /* Tertiary/muted text */
+  --text-muted: #65676b;
+  /* Very muted text */
+
+  /* Borders */
+  --border-color: #38383a;
+  /* Standard border (Instagram) */
+  --border-light: #2f2f2f;
+  /* Lighter borders */
+
+  /* Theme variables */
+  --background: #121212;
+  --foreground: #e4e6eb;
+  --card: #1e1e1e;
+  --card-foreground: #e4e6eb;
+  --popover: #1e1e1e;
+  --popover-foreground: #e4e6eb;
+  --primary: #e4e6eb;
+  --primary-foreground: #121212;
+  --secondary: #242424;
+  --secondary-foreground: #e4e6eb;
+  --muted: #242424;
+  --muted-foreground: #b0b3b8;
+  --accent: #242424;
+  --accent-foreground: #e4e6eb;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: #38383a;
+  --input: #38383a;
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: #1a1a1a;
+  --sidebar-foreground: #e4e6eb;
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: #e4e6eb;
+  --sidebar-accent: #242424;
+  --sidebar-accent-foreground: #e4e6eb;
+  --sidebar-border: #38383a;
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* Utility classes */
+.bg-primary {
+  background-color: var(--bg-primary);
+}
+
+.bg-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.bg-tertiary {
+  background-color: var(--bg-tertiary);
+}
+
+.bg-hover {
+  background-color: var(--bg-hover);
+}
+
+.text-primary {
+  color: var(--text-primary);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-tertiary {
+  color: var(--text-tertiary);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.border-themed {
+  border-color: var(--border-color);
+}
+
+.border-light-themed {
+  border-color: var(--border-light);
+}
+
+/* Custom css */
+.main-bg {
+  background-color: var(--main-bg);
+}
+.sidebar-bg {
+  /* background-color: #482a44; */
+  background-color: #2e142a;
+  /* background-color: #210f1e; */
+}
+.sidebar-secondary-bg {
+  /* background-color: #482a44; */
+  background-color: #f5ebeb;
+  /* background-color: #210f1e; */
+}
+
+.MuiModal-root {
+  user-select: none;
+}
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+.text-main {
+  color: var(--main-bg);
+}
+
+.secondary-bg {
+  background-color: var(--secondary-bg);
+}
+/* Apply to entire page */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #ffffff;       /* Track color */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #b5b5b5;          /* Scroll thumb color */
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;          /* Hover color */
+}
+
+.dashboard-bg {
+  background-image: url('/assets/images/dashboard bg.jpg');
+  background-size: cover;
+  /* height: 100vh; */
+  height: calc(100vh - 45px);
+  background-position: center;
+  background-repeat: no-repeat;
+  overflow: hidden;
+  /* position: relative;  */
+}
+
+.dark .dashboard-bg::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 1;
+  /* ✅ Add this */
+}
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Custom Scrollbar - Light Mode */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Custom Scrollbar - Dark Mode (Instagram/WhatsApp style) */
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
+
+/* Input placeholder */
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3afa5;
+  font-size: 0.875rem;
+  font-style: italic;
+  font-weight: 300;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #65676b;
+}
+
+/* RTL Support */
+html[dir="rtl"] body {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="ltr"] body {
+  direction: ltr;
+  text-align: left;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground transition-colors duration-200;
+  }
+}
+
+* {
+  /* font-family: "Inter", sans-serif; */
+  /* font-family: "Outfit", sans-serif; */
+   font-family: "Titillium Web", sans-serif;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+button,
+a,
+input[type="checkbox"],
+input[type="radio"],
+.no-transition {
+  transition-property: none;
+}
+
+button:hover,
+a:hover {
+  transition-property: background-color, border-color, color, transform;
+  transition-duration: 150ms;
+}
+
+/* Animation for notification */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+
+/* Add to your App.css - Mega Menu Panel Animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+

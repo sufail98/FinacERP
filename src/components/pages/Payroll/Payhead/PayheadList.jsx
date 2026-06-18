@@ -1,0 +1,223 @@
+import { useState, useEffect } from "react";
+import { Edit, Trash2, Plus, Layers } from "lucide-react";
+import BreadCrumb from "@/components/common/BreadCrumb";
+import ContentTable from "@/components/common/ContentTable";
+import PayheadForm from "./PayheadForm";
+import axiosInstance from "@/lib/axiosConfig";
+import Preloader from "@/components/common/Preloader";
+import AlertBox from "@/components/common/AlertBox";
+import useAuth from "@/redux/hook/auth/useAuth";
+import Swal from "sweetalert2";
+import { useTranslation } from "react-i18next";
+
+const PayheadList = () => {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState("add");
+  const [selectedId, setSelectedId] = useState(null);
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [alert, setAlert] = useState(null);
+  const { t } = useTranslation();
+  const { selectedBranchId } = useAuth();
+
+  useEffect(() => {
+    fetchData();
+  }, [selectedBranchId]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const res = await axiosInstance.get(`getall-payhead/${selectedBranchId}`);
+      setData(res.data.data || []);
+    } catch (err) {
+      console.error("Error fetching payheads:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Keyboard shortcut: Ctrl+C to create new
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey && (e.key === "c" || e.key === "C")) {
+        const selectedText = window.getSelection()?.toString();
+        if (selectedText && selectedText.length > 0) return;
+
+        const activeElement = document.activeElement;
+        const isInputField =
+          activeElement?.tagName === "INPUT" ||
+          activeElement?.tagName === "TEXTAREA";
+
+        if (isInputField) {
+          const selectionStart = activeElement.selectionStart;
+          const selectionEnd = activeElement.selectionEnd;
+          if (selectionStart !== selectionEnd) return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (open) return;
+
+        setMode("add");
+        setSelectedId(null);
+        setOpen(true);
+        return;
+      }
+
+      if (e.key === "Escape" && open) {
+        e.preventDefault();
+        setOpen(false);
+        setSelectedId(null);
+        return;
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [open]);
+
+  const handleDelete = async (id) => {
+    const result = await Swal.fire({
+      title: t("delete.title") || "Are you sure?",
+      text: t("delete.text") || "You won't be able to revert this!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#3085d6",
+      cancelButtonColor: "#d33",
+      confirmButtonText: t("delete.confirm") || "Yes, delete it!",
+      cancelButtonText: t("delete.cancel") || "Cancel",
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const response = await axiosInstance.get(`delete-payhead/${id}`);
+      if (!response.data.error) {
+        setAlert({
+          id: Date.now(),
+          type: "success",
+          message: response.data.message || "Deleted successfully",
+        });
+        fetchData();
+      } else {
+        setAlert({
+          id: Date.now(),
+          type: "error",
+          message: response.data.message || "Delete failed",
+        });
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || "Delete failed";
+      setAlert({
+        id: Date.now(),
+        type: "error",
+        message: errorMessage,
+      });
+    }
+  };
+
+  const columns = [
+    { key: "SNo", label: "S.No", sortable: true },
+    { key: "payheadName", label: "Payhead Name", sortable: true },
+    { key: "type", label: "Type", sortable: true },
+    { key: "narration", label: "Narration", sortable: true },
+  ];
+
+  const actions = [
+    {
+      icon: <Edit className="h-4 w-4" />,
+      onClick: (row) => {
+        const id = row.payheadId || row.PayheadId || row.id;
+        setSelectedId(id);
+        setMode("edit");
+        setOpen(true);
+      },
+      className:
+        "text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300",
+      tooltip: "Edit",
+    },
+    {
+      icon: <Trash2 className="h-4 w-4" />,
+      className:
+        "text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300",
+      onClick: (row) => {
+        const id = row.payheadId || row.PayheadId || row.id;
+        handleDelete(id);
+      },
+      tooltip: "Delete",
+    },
+  ];
+
+  const breadcrumbProps = {
+    routes: [
+      { title: "Payroll", url: "#" },
+      { title: "Payhead", url: "#" },
+    ],
+    heading: {
+      icon: Layers,
+      title: "Payhead",
+    },
+    actions: [
+      {
+        label: `${t("createNewBtn") || "Create New"} (Ctrl+C)`,
+        type: "primary",
+        icon: Plus,
+        onClick: () => {
+          setMode("add");
+          setSelectedId(null);
+          setOpen(true);
+        },
+      },
+    ],
+  };
+
+  if (loading)
+    return (
+      <div>
+        <BreadCrumb {...breadcrumbProps} />
+        <Preloader />
+      </div>
+    );
+
+  return (
+    <div>
+      {alert && (
+        <AlertBox key={alert.id} message={alert.message} type={alert.type} />
+      )}
+
+      <BreadCrumb {...breadcrumbProps} />
+
+      <div className="w-full bg-white dark:bg-[#1e1e1e] px-2 py-2 transition-colors">
+        <div className="w-full mx-auto">
+          <ContentTable
+            columns={columns}
+            data={data}
+            actions={actions}
+            showPagination={true}
+            searchable={true}
+            staticSearchable
+            pageSize={20}
+            autoFocusSearch={true}
+          />
+        </div>
+      </div>
+
+      <PayheadForm
+        open={open}
+        handleClose={() => {
+          setOpen(false);
+          setSelectedId(null);
+        }}
+        mode={mode}
+        id={selectedId}
+        onSaved={(alertData) => {
+          fetchData();
+          setAlert(alertData);
+        }}
+      />
+    </div>
+  );
+};
+
+export default PayheadList;

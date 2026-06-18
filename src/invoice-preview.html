@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TAX INVOICE - INV-2024-001234</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+    <style>
+        @page { size: A4; margin: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #f0f0f0;
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: "Inter", sans-serif;
+        }
+        .page {
+            width: 210mm;
+            height: 297mm;
+            background: white;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 10px;
+            page-break-after: always;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .page:last-child { margin-bottom: 0; }
+        
+        .header-image { width: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        .header-image img { width: 100%; display: block; }
+        
+        .header-text {
+            width: 100%;
+            padding: 15px;
+            text-align: center;
+            border-bottom: 2px solid #000;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            background: white;
+        }
+        .header-text .company-name {
+            font-size: 18px;
+            font-weight: 800;
+        }
+        .header-text .company-code {
+            font-size: 11px;
+            margin-top: 2px;
+        }
+        .header-text .company-vat,
+        .header-text .company-vat-ar {
+            font-size: 10px;
+            margin-top: 2px;
+        }
+        
+        .footer-image { 
+            width: 100%; 
+            position: absolute; 
+            bottom: 10px; 
+            left: 0; 
+            z-index: 1; 
+            padding: 15px;
+            text-align: center;
+            border-top: 1px solid #ddd;
+            font-size: 10px;
+            color: #666;
+        }
+        .footer-image img { width: 100%; display: block; }
+        
+        .content-wrapper {
+            flex: 1;
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            padding: 90px 15px 235px 15px;
+        }
+        
+        .content-wrapper.last-page {
+            padding-bottom: 235px;
+        }
+        
+        .total-section-fixed {
+            position: absolute;
+            bottom: 90px;
+            left: 15px;
+            right: 15px;
+            z-index: 2;
+        }
+        
+        .heading {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            font-size: 18px;
+            margin: 0 0 20px 0;
+            font-weight: 800;
+        }
+        
+        .header-section {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            font-size: 10px;
+        }
+        
+        .invoice-info-grid,
+        .customer-info-grid {
+            flex: 1;
+            border: 1px solid #000;
+        }
+        
+        .info-row {
+            display: flex;
+            border-bottom: 1px solid #000;
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-cell {
+            flex: 1;
+            padding: 5px 8px;
+            background-color: #e8e8e8;
+            border-right: 1px solid #000;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .info-label-ar {
+            font-weight: 700;
+            text-align: right;
+            font-size: 9px;
+        }
+        
+        .info-label {
+            font-weight: 700;
+            font-size: 9px;
+        }
+        
+        .info-value {
+            flex: 1;
+            padding: 5px 8px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+        
+        .product-table { 
+            border: 1px solid #000; 
+            font-size: 10px;
+        }
+        
+        .product-header, .product-row, .product-footer {
+            display: flex;
+            border-bottom: 1px solid #000;
+        }
+        
+        .product-footer { 
+            border-top: 1px solid #000; 
+            background-color: #e8e8e8;
+        }
+        
+        .product-header {
+            background-color: #e8e8e8;
+            font-size: 8px;
+            font-weight: 700;
+        }
+        
+        .product-header > div {
+            padding: 4px 5px;
+            border-right: 1px solid #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+        }
+        
+        .product-row { 
+            min-height: 24px;
+        }
+        
+        .product-row > div {
+            padding: 3px 5px;
+            border-right: 1px solid #000;
+            display: flex;
+            align-items: center;
+        }
+        
+        .empty-row { 
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .product-footer { 
+            border-bottom: none; 
+            font-weight: 700;
+            font-size: 10px;
+        }
+        
+        .product-footer > div {
+            padding: 6px 5px;
+            border-right: 1px solid #000;
+            display: flex;
+            align-items: center;
+        }
+        
+        .col-sl { 
+            width: 4%; 
+            text-align: center; 
+            justify-content: center;
+            font-size: 9px;
+        }
+        
+        .col-product { 
+            width: 26%; 
+            flex-direction: column;
+            justify-content: center;
+            gap: 2px;
+        }
+        
+        .col-qty { 
+            width: 8%; 
+            text-align: center; 
+            justify-content: center;
+            font-size: 9px;
+        }
+        
+        .col-price { 
+            width: 9%; 
+            text-align: right; 
+            justify-content: flex-end;
+            font-size: 9px;
+        }
+        
+        .col-gross { 
+            width: 9%; 
+            text-align: right; 
+            justify-content: flex-end;
+            font-size: 9px;
+        }
+        
+        .col-disc { 
+            width: 7%; 
+            text-align: right; 
+            justify-content: flex-end;
+            font-size: 9px;
+        }
+        
+        .col-taxable { 
+            width: 9%; 
+            text-align: right; 
+            justify-content: flex-end;
+            font-size: 9px;
+        }
+        
+        .col-vat-percent { 
+            width: 7%; 
+            text-align: center; 
+            justify-content: center;
+            font-size: 9px;
+        }
+        
+        .col-vat-amt { 
+            width: 9%; 
+            text-align: right; 
+            justify-content: flex-end;
+            font-size: 9px;
+        }
+        
+        .col-total { 
+            width: 12%; 
+            text-align: right; 
+            justify-content: flex-end;
+            font-size: 9px;
+        }
+        
+        .product-header > div:last-child,
+        .product-row > div:last-child,
+        .product-footer > div:last-child { 
+            border-right: none; 
+        }
+        
+        .continuation-note {
+            text-align: center;
+            font-weight: bold;
+            padding: 10px;
+            border-bottom: 1px solid #000;
+        }
+        
+        .total-section { 
+            display: flex; 
+            gap: 15px;
+        }
+        
+        .total-section .total-left-side {
+            width: 55%;
+            border: 1px solid #000;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 10px;
+        }
+        
+        .description-section {
+            border-bottom: 1px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .words-section {
+            flex: 1;
+            margin-bottom: 10px;
+        }
+        
+        .total-section .total-right-side {
+            width: 45%;
+            border: 1px solid #000;
+            padding: 10px;
+        }
+        
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+        }
+        
+        .totals-table tr {
+            height: 28px;
+        }
+        
+        .totals-label-ar {
+            text-align: right;
+            padding-right: 5px;
+            width: 35%;
+        }
+        
+        .totals-label {
+            text-align: left;
+            padding-left: 5px;
+            width: 35%;
+        }
+        
+        .totals-colon {
+            width: 5%;
+            text-align: center;
+        }
+        
+        .totals-value {
+            width: 25%;
+            text-align: right;
+            padding-right: 5px;
+        }
+        
+        .grand-total-row {
+            border-top: 2px solid #000;
+        }
+        
+        .signature-section {
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid #000;
+            padding-top: 10px;
+        }
+        
+        .qr-code-section {
+            position: absolute;
+            bottom: 10px;
+            right: 20px;
+        }
+        
+        .qr-code-section img {
+            width: 80px;
+            height: 80px;
+        }
+        
+        @media print {
+            body { background: white; padding: 0; }
+            .page { box-shadow: none; width: 100%; height: 297mm; margin-bottom: 0; }
+        }
+    </style>
+</head>
+<body>
+    <!-- PAGE 1 -->
+    <div class="page">
+        <!-- Header Text (No Image) -->
+        <div class="header-text">
+            <div class="company-name">AL MADINA TRADING COMPANY LLC</div>
+            <div class="company-code">Branch: Riyadh Main Branch - BR001</div>
+            <div class="company-vat">Tax Registration Number 300456789012345</div>
+            <div class="company-vat-ar">رقم التسجيل الضريبي 300456789012345</div>
+        </div>
+
+        <div class="content-wrapper last-page">
+            <!-- Heading -->
+            <h2 class="heading">
+                <span>Tax Invoice</span>
+                <span>فاتورة ضريبية</span>
+            </h2>
+
+            <!-- Header Section with Invoice & Customer Info -->
+            <div class="header-section">
+                <div class="invoice-info-grid">
+                    <div class="info-row">
+                        <div class="info-cell">
+                            <span class="info-label-ar">رقم الفاتورة</span>
+                            <span class="info-label">INVOICE NO</span>
+                        </div>
+                        <div class="info-value">INV-2024-001234</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-cell">
+                            <span class="info-label-ar">تاريخ</span>
+                            <span class="info-label">DATE</span>
+                        </div>
+                        <div class="info-value">15-Jan-2024</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-cell">
+                            <span class="info-label-ar">نوع المبيعات</span>
+                            <span class="info-label">Sales Type</span>
+                        </div>
+                        <div class="info-value">Credit Sale</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-cell">
+                            <span class="info-label">LPO No</span>
+                        </div>
+                        <div class="info-value">LPO-2024-5678</div>
+                    </div>
+                </div>
+
+                <div class="customer-info-grid">
+                    <div class="info-row">
+                        <div class="info-cell">
+                            <span class="info-label-ar">اسم</span>
+                            <span class="info-label">Customer Name</span>
+                        </div>
+                        <div class="info-value">ABC Construction Materials Co.</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-cell">
+                            <span class="info-label-ar">العمالء ضريبة</span>
+                            <span class="info-label">Customer VAT</span>
+                        </div>
+                        <div class="info-value">300123456789012</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Product Table -->
+            <div class="product-table">
+                <!-- Table Header -->
+                <div class="product-header">
+                    <div class="col-sl">
+                        <div>رقم</div>
+                        <div>SL NO</div>
+                    </div>
+                    <div class="col-product">
+                        <div>الوصف</div>
+                        <div>PRODUCT</div>
+                    </div>
+                    <div class="col-qty">
+                        <div>الكمية</div>
+                        <div>QTY</div>
+                    </div>
+                    <div class="col-price">
+                        <div>سعر الوحدة</div>
+                        <div>UNIT PRICE</div>
+                    </div>
+                    <div class="col-gross">
+                        <div>المعدل الإجمالي</div>
+                        <div>GROSS VALUE</div>
+                    </div>
+                    <div class="col-disc">
+                        <div>خصم</div>
+                        <div>DISC</div>
+                    </div>
+                    <div class="col-taxable">
+                        <div>الخاضعة للضريبة</div>
+                        <div>TAXABLE AMT</div>
+                    </div>
+                    <div class="col-vat-percent">
+                        <div>ضريبة %</div>
+                        <div>VAT %</div>
+                    </div>
+                    <div class="col-vat-amt">
+                        <div>مبلغ ضريبة</div>
+                        <div>VAT AMT</div>
+                    </div>
+                    <div class="col-total">
+                        <div>المجموع</div>
+                        <div>TOTAL AMT</div>
+                    </div>
+                </div>
+
+                <!-- Product Body -->
+                <div class="product-body">
+                    <!-- Row 1 -->
+                    <div class="product-row">
+                        <div class="col-sl">1</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">Samsung Galaxy S24 Ultra 256GB</div>
+                            <div style="font-size: 9px;">سامسونج جالاكسي S24 الترا</div>
+                        </div>
+                        <div class="col-qty">5 PCS</div>
+                        <div class="col-price">4,500.00</div>
+                        <div class="col-gross">22,500.00</div>
+                        <div class="col-disc">500.00</div>
+                        <div class="col-taxable">22,000.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">3,300.00</div>
+                        <div class="col-total">25,300.00</div>
+                    </div>
+
+                    <!-- Row 2 -->
+                    <div class="product-row">
+                        <div class="col-sl">2</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">Apple iPhone 15 Pro Max 512GB</div>
+                            <div style="font-size: 9px;">ابل ايفون 15 برو ماكس</div>
+                        </div>
+                        <div class="col-qty">3 PCS</div>
+                        <div class="col-price">5,200.00</div>
+                        <div class="col-gross">15,600.00</div>
+                        <div class="col-disc">300.00</div>
+                        <div class="col-taxable">15,300.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">2,295.00</div>
+                        <div class="col-total">17,595.00</div>
+                    </div>
+
+                    <!-- Row 3 -->
+                    <div class="product-row">
+                        <div class="col-sl">3</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">MacBook Pro 16" M3 Max 1TB</div>
+                            <div style="font-size: 9px;">ماك بوك برو 16 انش</div>
+                        </div>
+                        <div class="col-qty">2 PCS</div>
+                        <div class="col-price">12,500.00</div>
+                        <div class="col-gross">25,000.00</div>
+                        <div class="col-disc">1,000.00</div>
+                        <div class="col-taxable">24,000.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">3,600.00</div>
+                        <div class="col-total">27,600.00</div>
+                    </div>
+
+                    <!-- Row 4 -->
+                    <div class="product-row">
+                        <div class="col-sl">4</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">Sony WH-1000XM5 Headphones</div>
+                            <div style="font-size: 9px;">سوني سماعات لاسلكية</div>
+                        </div>
+                        <div class="col-qty">10 PCS</div>
+                        <div class="col-price">1,350.00</div>
+                        <div class="col-gross">13,500.00</div>
+                        <div class="col-disc">200.00</div>
+                        <div class="col-taxable">13,300.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">1,995.00</div>
+                        <div class="col-total">15,295.00</div>
+                    </div>
+
+                    <!-- Row 5 -->
+                    <div class="product-row">
+                        <div class="col-sl">5</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">Dell UltraSharp 32" 4K Monitor</div>
+                            <div style="font-size: 9px;">ديل شاشة 32 انش</div>
+                        </div>
+                        <div class="col-qty">4 PCS</div>
+                        <div class="col-price">2,800.00</div>
+                        <div class="col-gross">11,200.00</div>
+                        <div class="col-disc">150.00</div>
+                        <div class="col-taxable">11,050.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">1,657.50</div>
+                        <div class="col-total">12,707.50</div>
+                    </div>
+
+                    <!-- Row 6 -->
+                    <div class="product-row">
+                        <div class="col-sl">6</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">Logitech MX Master 3S Mouse</div>
+                            <div style="font-size: 9px;">لوجيتك ماوس لاسلكي</div>
+                        </div>
+                        <div class="col-qty">15 PCS</div>
+                        <div class="col-price">450.00</div>
+                        <div class="col-gross">6,750.00</div>
+                        <div class="col-disc">100.00</div>
+                        <div class="col-taxable">6,650.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">997.50</div>
+                        <div class="col-total">7,647.50</div>
+                    </div>
+
+                    <!-- Row 7 -->
+                    <div class="product-row">
+                        <div class="col-sl">7</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">iPad Pro 12.9" M2 256GB WiFi</div>
+                            <div style="font-size: 9px;">ايباد برو 12.9 انش</div>
+                        </div>
+                        <div class="col-qty">6 PCS</div>
+                        <div class="col-price">4,200.00</div>
+                        <div class="col-gross">25,200.00</div>
+                        <div class="col-disc">400.00</div>
+                        <div class="col-taxable">24,800.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">3,720.00</div>
+                        <div class="col-total">28,520.00</div>
+                    </div>
+
+                    <!-- Row 8 -->
+                    <div class="product-row">
+                        <div class="col-sl">8</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">HP LaserJet Pro MFP M428fdw</div>
+                            <div style="font-size: 9px;">اتش بي طابعة ليزر</div>
+                        </div>
+                        <div class="col-qty">2 PCS</div>
+                        <div class="col-price">1,850.00</div>
+                        <div class="col-gross">3,700.00</div>
+                        <div class="col-disc">50.00</div>
+                        <div class="col-taxable">3,650.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">547.50</div>
+                        <div class="col-total">4,197.50</div>
+                    </div>
+
+                    <!-- Row 9 -->
+                    <div class="product-row">
+                        <div class="col-sl">9</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">Bose SoundLink Revolve+ II</div>
+                            <div style="font-size: 9px;">بوز سماعة بلوتوث</div>
+                        </div>
+                        <div class="col-qty">8 PCS</div>
+                        <div class="col-price">980.00</div>
+                        <div class="col-gross">7,840.00</div>
+                        <div class="col-disc">120.00</div>
+                        <div class="col-taxable">7,720.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">1,158.00</div>
+                        <div class="col-total">8,878.00</div>
+                    </div>
+
+                    <!-- Row 10 -->
+                    <div class="product-row">
+                        <div class="col-sl">10</div>
+                        <div class="col-product">
+                            <div style="font-weight: 600;">Microsoft Surface Pro 9 i7/16GB</div>
+                            <div style="font-size: 9px;">مايكروسوفت سيرفس برو</div>
+                        </div>
+                        <div class="col-qty">3 PCS</div>
+                        <div class="col-price">6,500.00</div>
+                        <div class="col-gross">19,500.00</div>
+                        <div class="col-disc">350.00</div>
+                        <div class="col-taxable">19,150.00</div>
+                        <div class="col-vat-percent">15%</div>
+                        <div class="col-vat-amt">2,872.50</div>
+                        <div class="col-total">22,022.50</div>
+                    </div>
+
+                    <!-- Empty Rows -->
+                    <div class="product-row empty-row">
+                        <div class="col-sl"></div>
+                        <div class="col-product"></div>
+                        <div class="col-qty"></div>
+                        <div class="col-price"></div>
+                        <div class="col-gross"></div>
+                        <div class="col-disc"></div>
+                        <div class="col-taxable"></div>
+                        <div class="col-vat-percent"></div>
+                        <div class="col-vat-amt"></div>
+                        <div class="col-total"></div>
+                    </div>
+                    <div class="product-row empty-row">
+                        <div class="col-sl"></div>
+                        <div class="col-product"></div>
+                        <div class="col-qty"></div>
+                        <div class="col-price"></div>
+                        <div class="col-gross"></div>
+                        <div class="col-disc"></div>
+                        <div class="col-taxable"></div>
+                        <div class="col-vat-percent"></div>
+                        <div class="col-vat-amt"></div>
+                        <div class="col-total"></div>
+                    </div>
+                    <div class="product-row empty-row">
+                        <div class="col-sl"></div>
+                        <div class="col-product"></div>
+                        <div class="col-qty"></div>
+                        <div class="col-price"></div>
+                        <div class="col-gross"></div>
+                        <div class="col-disc"></div>
+                        <div class="col-taxable"></div>
+                        <div class="col-vat-percent"></div>
+                        <div class="col-vat-amt"></div>
+                        <div class="col-total"></div>
+                    </div>
+                    <div class="product-row empty-row">
+                        <div class="col-sl"></div>
+                        <div class="col-product"></div>
+                        <div class="col-qty"></div>
+                        <div class="col-price"></div>
+                        <div class="col-gross"></div>
+                        <div class="col-disc"></div>
+                        <div class="col-taxable"></div>
+                        <div class="col-vat-percent"></div>
+                        <div class="col-vat-amt"></div>
+                        <div class="col-total"></div>
+                    </div>
+                    <div class="product-row empty-row">
+                        <div class="col-sl"></div>
+                        <div class="col-product"></div>
+                        <div class="col-qty"></div>
+                        <div class="col-price"></div>
+                        <div class="col-gross"></div>
+                        <div class="col-disc"></div>
+                        <div class="col-taxable"></div>
+                        <div class="col-vat-percent"></div>
+                        <div class="col-vat-amt"></div>
+                        <div class="col-total"></div>
+                    </div>
+                    <div class="product-row empty-row">
+                        <div class="col-sl"></div>
+                        <div class="col-product"></div>
+                        <div class="col-qty"></div>
+                        <div class="col-price"></div>
+                        <div class="col-gross"></div>
+                        <div class="col-disc"></div>
+                        <div class="col-taxable"></div>
+                        <div class="col-vat-percent"></div>
+                        <div class="col-vat-amt"></div>
+                        <div class="col-total"></div>
+                    </div>
+                    <div class="product-row empty-row">
+                        <div class="col-sl"></div>
+                        <div class="col-product"></div>
+                        <div class="col-qty"></div>
+                        <div class="col-price"></div>
+                        <div class="col-gross"></div>
+                        <div class="col-disc"></div>
+                        <div class="col-taxable"></div>
+                        <div class="col-vat-percent"></div>
+                        <div class="col-vat-amt"></div>
+                        <div class="col-total"></div>
+                    </div>
+                    <div class="product-row empty-row">
+                        <div class="col-sl"></div>
+                        <div class="col-product"></div>
+                        <div class="col-qty"></div>
+                        <div class="col-price"></div>
+                        <div class="col-gross"></div>
+                        <div class="col-disc"></div>
+                        <div class="col-taxable"></div>
+                        <div class="col-vat-percent"></div>
+                        <div class="col-vat-amt"></div>
+                        <div class="col-total"></div>
+                    </div>
+                </div>
+
+                <!-- Footer Row - Totals -->
+                <div class="product-footer">
+                    <div class="col-sl"></div>
+                    <div class="col-product" style="text-align: right; font-weight: 800;">
+                        إجماليات / <span>TOTAL</span>
+                    </div>
+                    <div class="col-qty">58</div>
+                    <div class="col-price"></div>
+                    <div class="col-gross">150,790.00</div>
+                    <div class="col-disc">3,170.00</div>
+                    <div class="col-taxable">147,620.00</div>
+                    <div class="col-vat-percent"></div>
+                    <div class="col-vat-amt">22,143.00</div>
+                    <div class="col-total">169,763.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Section Fixed at Bottom -->
+        <div class="total-section-fixed">
+            <div class="total-section">
+                <div class="total-left-side">
+                    <div class="description-section">
+                        <div style="font-weight: 700; margin-bottom: 5px;">Description:</div>
+                        <div style="min-height: 40px;">Bulk order for IT equipment - Q1 2024</div>
+                    </div>
+                    <div class="words-section">
+                        <div style="font-weight: 700; margin-bottom: 5px;">
+                            <span>المبلغ بالكلمات</span> <span>Amount In Words</span> :-
+                        </div>
+                        <div style="margin-top: 5px;">Saudi Riyal One Hundred Sixty Nine Thousand Seven Hundred Sixty Three Only</div>
+                        <div style="margin-top: 5px; text-align: right;">ريال سعودي مائة و تسعة و ستون ألف و سبعمائة و ثلاثة و ستون فقط</div>
+                    </div>
+                    <div class="signature-section">
+                        <div><span style="font-size: 9px; font-weight: 700;">AUTHORIZED SIGNATORY</span></div>
+                        <div><span style="font-size: 9px; font-weight: 700;">CUSTOMER SIGNATURE</span></div>
+                    </div>
+                </div>
+                <div class="total-right-side">
+                    <table class="totals-table">
+                        <tr>
+                            <td class="totals-label-ar">المجموع الفرعي</td>
+                            <td class="totals-label">Sub Total</td>
+                            <td class="totals-colon">:</td>
+                            <td class="totals-value">147,620.00</td>
+                        </tr>
+                        <tr>
+                            <td class="totals-label-ar">تكلفة إضافية</td>
+                            <td class="totals-label">Additional Cost</td>
+                            <td class="totals-colon">:</td>
+                            <td class="totals-value">0.00</td>
+                        </tr>
+                        <tr>
+                            <td class="totals-label-ar">مقدار الخصم</td>
+                            <td class="totals-label">Discount Amt</td>
+                            <td class="totals-colon">:</td>
+                            <td class="totals-value">3,170.00</td>
+                        </tr>
+                        <tr>
+                            <td class="totals-label-ar">رسوم أخرى</td>
+                            <td class="totals-label">Other Charge</td>
+                            <td class="totals-colon">:</td>
+                            <td class="totals-value">0.00</td>
+                        </tr>
+                        <tr>
+                            <td class="totals-label-ar">ضريبة القيمة المضافة</td>
+                            <td class="totals-label">Vat @ 15%</td>
+                            <td class="totals-colon">:</td>
+                            <td class="totals-value">22,143.00</td>
+                        </tr>
+                        <tr class="grand-total-row">
+                            <td class="totals-label-ar" style="font-weight: 800;">المجموع الإجمالي</td>
+                            <td class="totals-label" style="font-weight: 800;">Grand Total</td>
+                            <td class="totals-colon">:</td>
+                            <td class="totals-value" style="font-weight: 800; font-size: 16px;">169,763.00</td>
+                        </tr>
+                    </table>
+                    <!-- QR Code -->
+                    <div style="text-align: center; margin-top: 10px;">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=ZATCA-SAMPLE-QR-CODE-DATA" alt="QR Code" style="width: 80px; height: 80px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer-image">
+            <div>Thank you for your business! | شكراً لتعاملكم معنا</div>
+            <div style="margin-top: 5px;">Phone: +966 11 123 4567 | Email: sales@almadinatrading.com | www.almadinatrading.com</div>
+        </div>
+    </div>
+</body>
+</html>
