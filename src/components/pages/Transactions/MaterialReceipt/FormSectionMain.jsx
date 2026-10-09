@@ -19,6 +19,9 @@ import DateInput from '@/components/elements/theme/DateInput'
 import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal'
 import AddCustomerModal from '@/components/elements/theme/AddCustomerModal'
 import CustomerDropdown from '@/components/elements/theme/CustomerDropdown'
+import NormalSelectInput from '@/components/elements/theme/NormalSelectInput'
+import usePrivileges from '@/lib/hooks/usePrivileges'
+
 
 const FormSectionMain = ({
   batches,
@@ -42,11 +45,16 @@ const FormSectionMain = ({
   setCurrentLedgerBalance,
   otherChargeLedgers,
   currency,
-  fetchAgainstModeDetailes
+  fetchAgainstModeDetailes,
+  fetchSupplierData,
+  setUpdateSupplierId,
+  updateSupplierId,
+  loadingSupplier
 }) => {
+  const { hasAccess: purchaseQuotationHasAccess } = usePrivileges("Purchase Quotation");
+  const { hasAccess: transactionBatchHasAccess } = usePrivileges("Transaction Batch");
 
   const { t } = useTranslation();
-  const [loadingSupplier, setLoadingSupplier] = useState(false);
   const { generalSettings, saleSettings, financeSettings } = useSelector((state) => state.settings);
   const [purchaseAcModalOpen, setPurchaseAcModalOpen] = useState(false);
   const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
@@ -55,22 +63,70 @@ const FormSectionMain = ({
   const [billingAddressOpen, setBilligAddressOpen] = useState(false);
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
 
-  const [shippingAdderess, setShippingAddress] = useState(null);
   const [purchaseAccounts, setPurchaseAccounts] = useState([]);
-  const [updateSupplierId, setUpdateSupplierId] = useState(null);
 
   const { currentCurrency: currentCurrencyFromStore, setCurrency, currentFinancialYear } = useAuth();
   const { selectedBranchId, currentCurrency } = useAuth()
   const [errors, setErrors] = useState({});
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [showTaxType, setShowTaxType] = useState(false);
+  const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
 
+  useEffect(() => {
+    fetchCurrencyConvertion()
+  }, [selectedBranchId])
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+
+    const date = new Date(dateString);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const MM = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+
+    const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+    return format
+      .replace('dd', dd)
+      .replace('MM', MM)
+      .replace('yyyy', yyyy);
+  };
+  const formatDecimal = (value) =>
+    Number(value || 0).toFixed(generalSettings.decimalPart);
+  const fetchCurrencyConvertion = async () => {
+    try {
+      const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+
+      const formattedData = response.data.data.map((item, index) => ({
+        ...item,
+        SNo: index + 1,
+        date: formatDate(item.date),
+        rate: item.rate !== null && item.rate !== undefined
+          ? formatDecimal(item.rate)
+          : formatDecimal(0),
+      }));
+
+      setCurrencyConvertionData(formattedData);
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const purchaseModeOptions = [
     { value: 'NA', label: 'NA' },
-    { value: 'Quotation', label: 'Against Quotation' },
+    purchaseQuotationHasAccess ? { value: 'Quotation', label: 'Against Quotation' } : null,
     { value: 'Order', label: 'Against Order' },
   ];
-
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.altKey && e.key === 'F10') {
+        e.preventDefault();
+        setShowTaxType(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
 
   const fetchLedgerBalance = async (ledgerId) => {
@@ -128,49 +184,7 @@ const FormSectionMain = ({
     }
   }, [formData.purchaseAccount, purchaseAccounts]);
 
-  const fetchSupplierData = async (ledgerId) => {
-    setLoadingSupplier(true);
-    try {
-      const response = await axiosInstance.get(`get-account-ledger-byId/${ledgerId}`);
-      if (response.data) {
-        const data = response.data.data;
 
-        const defaultShipping = Array.isArray(data?.shipping_address)
-          ? data.shipping_address.find(addr => addr?.Isdefault === true)
-          : null;
-
-        setUpdateSupplierId(data?.ledgerId);
-
-        setShippingAddress({
-          name: data?.ledgerName || '',
-          email: data?.email || '',
-          phoneNo: data?.phoneNo || '',
-          shippingAddress: defaultShipping || {},
-          vatNo: data?.tinNumber || ''
-        });
-
-        setBlillingAddress({
-          name: data?.ledgerName || '',
-          email: data?.email || '',
-          phoneNo: data?.phoneNo || '',
-          vatNo: data?.tinNumber || '',
-          address: data?.address || ''
-        });
-
-        setFormData((prev) => ({
-          ...prev,
-          partyName: data?.ledgerName || '',
-          partyAddress: data?.address || '',
-          partyMobile: data?.phoneNo || '',
-          partyVatNo: data?.tinNumber || '',
-        }));
-      }
-    } catch (error) {
-      console.error("Error fetching supplier data:", error);
-    } finally {
-      setLoadingSupplier(false);
-    }
-  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -235,21 +249,23 @@ const FormSectionMain = ({
                 max={currentFinancialYear?.toDate}
               />
 
-              <SearchableDropdown
-                name="BatchId"
-                label={t('materialReceipt.form.label.formHeaderSection.BatchId')}
-                options={batches.map(batch => ({
-                  value: batch.transactionbatchid,
-                  label: batch.batchname
-                }))}
-                value={formData.BatchId}
-                onChange={(value) => handleDropdownChange('BatchId', value)}
-                placeholder={t('materialReceipt.form.placeholders.formHeaderSection.BatchId')}
-                searchPlaceholder={t('materialReceipt.form.placeholders.formHeaderSection.BatchId')}
-                error={errors.batch}
-                clearable={true}
-                className="w-full"
-              />
+              {transactionBatchHasAccess && (
+                <SearchableDropdown
+                  name="BatchId"
+                  label={t('materialReceipt.form.label.formHeaderSection.BatchId')}
+                  options={batches.map(batch => ({
+                    value: batch.transactionbatchid,
+                    label: batch.batchname
+                  }))}
+                  value={formData.BatchId}
+                  onChange={(value) => handleDropdownChange('BatchId', value)}
+                  placeholder={t('materialReceipt.form.placeholders.formHeaderSection.BatchId')}
+                  searchPlaceholder={t('materialReceipt.form.placeholders.formHeaderSection.BatchId')}
+                  error={errors.batch}
+                  clearable={true}
+                  className="w-full"
+                />
+              )}
 
             </div>
 
@@ -280,7 +296,7 @@ const FormSectionMain = ({
               <TextInput
                 name="partyRefNo"
                 label={t('materialReceipt.form.label.formHeaderSection.RefNo')}
-                type="number"
+                type="text"
                 value={formData.partyRefNo}
                 onChange={handleInputChange}
                 className="w-full"
@@ -296,7 +312,21 @@ const FormSectionMain = ({
                 format={generalSettings.dateformat}
               />
 
-
+              {showTaxType && (
+                <NormalSelectInput
+                  name='taxType'
+                  label={t('salesInvoice.form.label.formHeaderSection.taxtype')}
+                  value={formData.taxType}
+                  options={[
+                    { value: "Applicable to product", label: "Applicable to product" },
+                    { value: "NA", label: "NA" },
+                  ]}
+                  onChange={(e) => handleDropdownChange(e.target.name, e.target.value)}
+                  placeholder={t('salesInvoice.form.placeholders.formHeaderSection.status')}
+                  searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.status')}
+                  readOnly={editMode}
+                />
+              )}
 
 
             </div>
@@ -337,6 +367,7 @@ const FormSectionMain = ({
               error={errors.AgainstNo}
               clearable={true}
               className='w-full'
+              readOnly={editMode}
             />
             {formData.AgainstNo === 'Order' && (
               <SearchableDropdown
@@ -351,6 +382,7 @@ const FormSectionMain = ({
                 searchPlaceholder={t('purchaseInvoice.form.label.againstOrder')}
                 clearable={true}
                 className="w-full"
+                readOnly={editMode}
               />
             )}
           </div>
@@ -457,12 +489,14 @@ const FormSectionMain = ({
         >
           {t('materialReceipt.form.label.formHeaderSection.purchaseAcLabel')}: {formData.purchaseAccountName}
         </p> */}
-        <p
-          className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
-          onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
-        >
-          {t('materialReceipt.form.label.formHeaderSection.currencyLabel')}: {currentCurrencyFromStore?.currencyName || "Select Currency"}
-        </p>
+      {financeSettings?.multiCurrency && (
+  <p
+    className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+    onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
+  >
+    {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {formData?.currencyName || currentCurrencyFromStore?.currencyName || "Select Currency"}
+  </p>
+)}
       </div>
 
       {/* Material Receipt Table */}
@@ -494,6 +528,7 @@ const FormSectionMain = ({
         handleChange={(field, value) => {
           handleDropdownChange(field, value);
         }}
+        currencyConvertionData={currencyConvertionData}
       />
       <PurchaseModeModal
         open={purchaseModeModalOpen}

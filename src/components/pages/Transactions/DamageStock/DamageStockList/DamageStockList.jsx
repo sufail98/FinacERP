@@ -66,7 +66,17 @@ const DamageStockList = () => {
             SNo: index + 1
         }));
     }, [filteredData]);
-
+const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
     const fetchAllDamageStocks = async () => {
         setFetchLoading(true);
         try {
@@ -83,7 +93,11 @@ const DamageStockList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((page - 1) * limit) + index + 1,
-                date: formatDate(item.date),
+                date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.createddate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setDamageStockData(formattedData);
@@ -145,7 +159,11 @@ const DamageStockList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: index + 1,
-                date: formatDate(item.date),
+               date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setDamageStockData(formattedData);
@@ -259,7 +277,7 @@ const DamageStockList = () => {
     const columns = [
         { key: "SNo", label: t("damageStock.list.columns.sno"), sortable: true, align: "right" },
         { key: "damagestockno", label: t("damageStock.list.columns.damagestockno"), sortable: true, align: "left" },
-        { key: "date", label: t("damageStock.list.columns.date"), sortable: true, align: "center" },
+        { key: "date", label: t("damageStock.list.columns.date"), sortable: true, align: "left" },
         { key: "totalamount", label: t("damageStock.list.columns.totalAmt"), sortable: true, align: "right" },
     ];
 

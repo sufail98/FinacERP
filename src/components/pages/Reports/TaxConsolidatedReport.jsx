@@ -17,15 +17,17 @@ const TaxConsolidatedReport = () => {
     const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState(null);
-    const { selectedBranchId } = useAuth();
+    const { selectedBranchId, selectedBranchDetails } = useAuth();
+    const isMainBranch = selectedBranchDetails?.mainBranch === true;
+
     const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Tax Consolidated Report");
     const { generalSettings } = useSelector((state) => state.settings);
 
     // Use the unified export hook
-    const { 
-        exportGenericToExcel, 
-        exportGenericToPdf, 
-        exportGenericToCsv 
+    const {
+        exportGenericToExcel,
+        exportGenericToPdf,
+        exportGenericToCsv
     } = useReportExport();
 
     const [filters, setFilters] = useState({
@@ -39,7 +41,16 @@ const TaxConsolidatedReport = () => {
         const requestBody = {
             from_date: filters.fromDate,
             to_date: filters.toDate,
-            branch_id: parseInt(selectedBranchId) || 1
+            branch_id: selectedBranchId,
+            // branch_id: isMainBranch
+            //     ? (filters.selectedBranchId ?? null)
+            //     : Number(selectedBranchId) || 1
+        };
+        const carryForwardRequestBody = {
+            taxLedgerId: 30,
+            fromDate: filters.fromDate,
+            toDate: filters.toDate,
+            branchId: selectedBranchId
         };
 
         try {
@@ -49,19 +60,29 @@ const TaxConsolidatedReport = () => {
                 exemptSales,
                 standardRatedPurchase,
                 zeroRatedDomesticPurchase,
-                exemptPurchase
+                exemptPurchase,
+                vatPaidThisPeriod
             ] = await Promise.all([
                 axiosInstance.post("tax-consolidated/tax-return-standard-rated-sales-report", requestBody),
                 axiosInstance.post("tax-consolidated/tax-return-zero-rated-domestic-sales-report", requestBody),
                 axiosInstance.post("tax-consolidated/tax-return-exempt-sales-report", requestBody),
                 axiosInstance.post("tax-consolidated/tax-return-standard-rated-purchase", requestBody),
                 axiosInstance.post("tax-consolidated/tax-return-zero-rated-domestic-purchase", requestBody),
-                axiosInstance.post("tax-consolidated/tax-return-exempt-purchase", requestBody)
+                axiosInstance.post("tax-consolidated/tax-return-exempt-purchase", requestBody),
+                axiosInstance.post("tax-consolidated/vat-credit-carryforward", carryForwardRequestBody)
             ]);
 
             const extractData = (responseData) => {
                 const dataArray = responseData?.data || [];
                 return dataArray.length > 0 ? dataArray[0] : {};
+            };
+
+            // vat-credit-carryforward response shape is:
+            // { status, error, message, data: "87235.120000" }  <-- a plain numeric string, not an array
+            const extractAmount = (responseData) => {
+                const raw = responseData?.data;
+                const value = parseFloat(raw ?? 0);
+                return Number.isNaN(value) ? 0 : value;
             };
 
             const consolidatedData = {
@@ -70,7 +91,9 @@ const TaxConsolidatedReport = () => {
                 exemptSales: extractData(exemptSales.data),
                 standardRatedPurchase: extractData(standardRatedPurchase.data),
                 zeroRatedDomesticPurchase: extractData(zeroRatedDomesticPurchase.data),
-                exemptPurchase: extractData(exemptPurchase.data)
+                exemptPurchase: extractData(exemptPurchase.data),
+                // shown on the "VAT paid on this period(s)" line, not on "VAT credit carried forward"
+                vatPaidThisPeriod: extractAmount(vatPaidThisPeriod.data)
             };
 
             setReportData(consolidatedData);
@@ -96,7 +119,7 @@ const TaxConsolidatedReport = () => {
 
     const totals = useMemo(() => {
         if (!reportData) {
-            return { salesVAT: 0, purchasesVAT: 0, netVAT: 0 };
+            return { salesVAT: 0, purchasesVAT: 0, totalVATDue: 0, vatPaidThisPeriod: 0, netVAT: 0 };
         }
 
         const decimalPart = generalSettings?.decimalPart || 2;
@@ -104,11 +127,20 @@ const TaxConsolidatedReport = () => {
         const totalSalesVAT = standardSalesVAT;
         const standardPurchaseVAT = parseFloat(reportData.standardRatedPurchase?.['VAT Amount'] || 0);
         const totalPurchasesVAT = standardPurchaseVAT;
-        const netVAT = totalSalesVAT - totalPurchasesVAT;
+
+        // VAT due before applying VAT already paid this period
+        const totalVATDue = totalSalesVAT - totalPurchasesVAT;
+
+        const vatPaidThisPeriod = parseFloat(reportData.vatPaidThisPeriod || 0);
+
+        // Net VAT due (or claim) after applying VAT already paid this period
+        const netVAT = totalVATDue - vatPaidThisPeriod;
 
         return {
             salesVAT: totalSalesVAT.toFixed(decimalPart),
             purchasesVAT: totalPurchasesVAT.toFixed(decimalPart),
+            totalVATDue: totalVATDue.toFixed(decimalPart),
+            vatPaidThisPeriod: vatPaidThisPeriod.toFixed(decimalPart),
             netVAT: netVAT.toFixed(decimalPart)
         };
     }, [reportData, generalSettings?.decimalPart]);
@@ -203,9 +235,10 @@ const TaxConsolidatedReport = () => {
                 isTotal: true
             },
             { Title: '', Amount: '', Adjustment: '', VATAmount: '' },
-            { Title: t('Total VAT due for current period'), Amount: '-', Adjustment: '-', VATAmount: totals.salesVAT },
+            { Title: t('Total VAT due for current period'), Amount: '-', Adjustment: '-', VATAmount: totals.totalVATDue },
             { Title: t('Corrections from previous period'), Amount: '-', Adjustment: '-', VATAmount: '0.000' },
-            { Title: t('VAT credit carried forward'), Amount: '-', Adjustment: '-', VATAmount: '0.000' },
+            { Title: t('VAT credit carried forward from previous period(s)'), Amount: '-', Adjustment: '-', VATAmount: '0.000' },
+            { Title: t('VAT paid on this period(s)'), Amount: '-', Adjustment: '-', VATAmount: totals.vatPaidThisPeriod },
             { Title: t('Net VAT due (or claim)'), Amount: '-', Adjustment: '-', VATAmount: totals.netVAT, isTotal: true }
         ];
 
@@ -435,7 +468,7 @@ const TaxConsolidatedReport = () => {
                                         <td className="px-4 py-2 dark:text-gray-300">{t('Total VAT due for current period')}</td>
                                         <td className="px-4 py-2 text-right dark:text-gray-300">-</td>
                                         <td className="px-4 py-2 text-right dark:text-gray-300">-</td>
-                                        <td className="px-4 py-2 text-right dark:text-gray-300">{totals.salesVAT}</td>
+                                        <td className="px-4 py-2 text-right dark:text-gray-300">{totals.totalVATDue}</td>
                                     </tr>
                                     <tr className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                         <td className="px-4 py-2 dark:text-gray-300">{t('Corrections from previous period')}</td>
@@ -449,13 +482,19 @@ const TaxConsolidatedReport = () => {
                                         <td className="px-4 py-2 text-right dark:text-gray-300">-</td>
                                         <td className="px-4 py-2 text-right dark:text-gray-300">0.000</td>
                                     </tr>
+                                    <tr className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                        <td className="px-4 py-2 dark:text-gray-300">{t('VAT paid on this period(s)')}</td>
+                                        <td className="px-4 py-2 text-right dark:text-gray-300">-</td>
+                                        <td className="px-4 py-2 text-right dark:text-gray-300">-</td>
+                                        <td className="px-4 py-2 text-right dark:text-gray-300">{totals.vatPaidThisPeriod}</td>
+                                    </tr>
 
-                                   <tr className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-bold">
-    <td className="px-4 py-3">{t('Net VAT due (or claim)')}</td>
-    <td className="px-4 py-3 text-right text-red-500">{formatNumber(0)}</td>
-    <td className="px-4 py-3 text-right text-red-500">{formatNumber(0)}</td>
-    <td className="px-4 py-3 text-right">{totals.netVAT}</td>
-</tr>
+                                    <tr className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-bold">
+                                        <td className="px-4 py-3">{t('Net VAT due (or claim)')}</td>
+                                        <td className="px-4 py-3 text-right">-</td>
+                                        <td className="px-4 py-3 text-right">-</td>
+                                        <td className="px-4 py-3 text-right">{totals.netVAT}</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>

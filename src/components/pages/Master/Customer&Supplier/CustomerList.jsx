@@ -152,7 +152,7 @@ const CustomerList = () => {
     try {
       setLoading(true);
       const res = await axiosInstance.post("customer-supplier-account-ledgers", {
-        ledgerTypes: ["Customer"],
+        ledgerTypes: ["Customer","Customer&Supplier"],
         branchId: selectedBranchId
       });
       if (res.data && !res.data.error) {

@@ -29,6 +29,7 @@ const ContraReportFilter = ({
                         name="fromDate"
                         value={filters.fromDate}
                         onChange={(e, value) => onFilterChange('fromDate', value)}
+                        max={new Date().toISOString().split(("T")[0])}
                         required
                         className='w-full'
                     />
@@ -48,7 +49,7 @@ const ContraReportFilter = ({
 
                 <div className="w-[160px]">
                     <SearchableDropdown
-                        label={t("reportFilters.selectLedger")}
+                        label={t("contraReport.filters.selectLedger")}
                         name="ledgerId"
                         value={filters.ledgerId}
                         onChange={(value) => onFilterChange('ledgerId', value)}

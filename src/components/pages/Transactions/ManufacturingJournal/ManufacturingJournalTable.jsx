@@ -30,6 +30,7 @@ const makeEmptyRow = (id) => ({
     baseUnitId: null,   // ← ADD
     qty: 1,
     rate: 0,
+    category: null,
     amount: 0,
     godownId: '',
     rackId: 1,
@@ -54,11 +55,13 @@ function mapRows(source) {
         amount: safeParsePrice(item.amount),
         godownId: item.godownId || '',
         rackId: item.rackId || 1,
+        category: item?.category,
         materials: (item.materials || []).map((m) => ({
             productCode: m.productCode || '',
             quantity: safeParsePrice(m.quantity),
             unitId: m.unitId || null,
             unitName: m.unitName || '',
+            category: m?.category,
             rawMaterialName: m.rawMaterialName || '',
             availableUnits: m.availableUnits || [],
             conversionRate: m.conversionRate ?? 1,
@@ -82,7 +85,8 @@ const makeEmptyBomRow = (id) => ({
     unitName: '',
     availableUnits: [],
     conversionRate: 1,
-    baseUnitId: null,   // ← ADD
+    baseUnitId: null,
+    category: null,
     qty: 1,
     rate: 0,
     amount: 0,
@@ -139,6 +143,7 @@ const ConvertModal = ({
                     conversionRate: matchedUnit?.conversionRate ?? m.conversionRate ?? 1,  // ← NEW
                     qty: safeParsePrice(m.quantity),
                     rate: safeParsePrice(m.rate),
+                   category: matchedProduct?.category ?? m?.category ?? null,
                     amount: safeParsePrice(m.amount),
                 };
             });
@@ -202,22 +207,48 @@ const ConvertModal = ({
         try {
             const lower = searchTerm.toLowerCase().trim();
             const parts = lower.split(/\s+/);
+            // const filtered = allProducts.filter((product) => {
+            //     const name = (product.productName || '').toLowerCase();
+            //     const code = (product.productCode || '').toLowerCase();
+            //     const barcode = (product.barcode || '').toLowerCase();
+            //     const partNo = (product.partNo || '').toLowerCase();
+            //     if (
+            //         code.includes(lower) ||
+            //         barcode.includes(lower) ||
+            //         partNo.includes(lower)
+            //     )
+            //         return true;
+            //     const words = name.split(/\s+/);
+            //     return parts.every((part) =>
+            //         words.some((w) => w.includes(part))
+            //     );
+            // });
+
             const filtered = allProducts.filter((product) => {
+                // Don't allow the selected finished good as a raw material
+                if (String(product.productCode) === String(sourceRow?.productCode)) {
+                    return false;
+                }
+
                 const name = (product.productName || '').toLowerCase();
                 const code = (product.productCode || '').toLowerCase();
                 const barcode = (product.barcode || '').toLowerCase();
                 const partNo = (product.partNo || '').toLowerCase();
+
                 if (
                     code.includes(lower) ||
                     barcode.includes(lower) ||
                     partNo.includes(lower)
-                )
+                ) {
                     return true;
+                }
+
                 const words = name.split(/\s+/);
-                return parts.every((part) =>
-                    words.some((w) => w.includes(part))
+                return parts.every(part =>
+                    words.some(word => word.includes(part))
                 );
             });
+
             setSuggestions((p) => ({ ...p, [rowId]: filtered }));
             setActiveSuggestionRow(rowId);
             setSelectedSuggestionIndex((p) => ({ ...p, [rowId]: 0 }));
@@ -229,6 +260,7 @@ const ConvertModal = ({
     };
 
     const selectProduct = (rowId, product) => {
+        const fullProduct = allProducts.find(p => String(p.productCode) === String(product.productCode)) || product;
         const units = product.units || [];
         const selectedUnit = units[0];
         setModalRows((prev) =>
@@ -243,6 +275,7 @@ const ConvertModal = ({
                 return {
                     ...row,
                     barcodeInput: product.barcode || '',
+                     category: fullProduct?.category ?? null,
                     productCode: String(product.productCode || ''),
                     rawMaterialName: product.productName || '',
                     unitId: selectedUnit?.unitId ?? null,
@@ -435,6 +468,7 @@ const ConvertModal = ({
                 unitName: detail.unitName || firstUnit?.unitName || '',
                 availableUnits: detail.materialUnits || [],
                 conversionRate: firstUnit?.conversionRate ?? 1,
+                category: detail?.category || null,
                 baseUnitId: detail.baseUnitId ?? null,  // ✅ already there, verify it's not undefined
                 qty: safeParsePrice(detail.quantity),
                 rate: 0,
@@ -892,10 +926,12 @@ const ManufacturingJournalTable = ({
             conversionRate: row.conversionRate ?? 1,
             baseUnitId: row.baseUnitId ?? null,   // ← ADD
             narration: row.rawMaterialName,
+            category: row.category ?? null,
             materials: (row.materials || []).map((m) => ({
                 productCode: m.productCode,
                 quantity: m.quantity,
                 unitId: m.unitId,
+                category: m.category ?? null,
                 conversionRate: m.conversionRate ?? 1,
                 baseUnitId: m.baseUnitId ?? null,   // ← ADD
                 rate: m.rate,
@@ -1089,6 +1125,7 @@ const ManufacturingJournalTable = ({
     };
 
     const selectProduct = (rowId, product) => {
+        const fullProduct = allProducts.find(p => String(p.productCode) === String(product.productCode)) || product;
         const units = product.productUnits || product.units || [];
         const firstUnit = units[0];
         setRows((prev) =>
@@ -1101,6 +1138,7 @@ const ManufacturingJournalTable = ({
                     rawMaterialName: product.productName || '',
                     unitId: firstUnit?.unitId ?? null,
                     unitName: firstUnit?.unitName || '',
+                       category: fullProduct?.category ?? null,
                     availableUnits: units,
                     conversionRate: firstUnit?.conversionRate ?? 1,
                     baseUnitId: product.baseUnitId ?? null,   // ← ADD
@@ -1225,6 +1263,7 @@ const ManufacturingJournalTable = ({
                     amount: mr.amount,
                     godownId: mr.godownId || '',
                     rackId: mr.rackId || 1,
+                    category:mr.category||null,
                 })),
             };
             return updated.map((r, i) => ({ ...r, id: i + 1, sn: i + 1 }));

@@ -65,6 +65,17 @@ const SalesReturnList = () => {
             .replace('MM', MM)
             .replace('yyyy', yyyy);
     };
+    const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
 
     // Main fetch function
     const fetchAllSales = useCallback(async (params = {}) => {
@@ -96,7 +107,11 @@ const SalesReturnList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((currentPage - 1) * currentLimit) + index + 1,
-                date: formatDate(item.date),
+                date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setSalesData(formattedData);
@@ -140,12 +155,10 @@ const SalesReturnList = () => {
         setPage(1);
         fetchAllSales({
             page: 1,
-            fromDate,
-            toDate,
             voucherCode,
             customerSearch
         });
-    }, [fromDate, toDate, voucherCode, customerSearch]);
+    }, [voucherCode, customerSearch]);
 
     // Debounced search for voucher code
     const handleVoucherCodeChange = (e) => {
@@ -206,12 +219,10 @@ const SalesReturnList = () => {
     // Filter button click - only for date filtering
     const handleFilter = () => {
         if (voucherCode?.trim() || customerSearch?.trim()) {
-            // If search exists, just reset to page 1
-            setPage(1);
+            // search mode is already live via the effect above
             return;
         }
 
-        // Validate dates
         if (fromDate > toDate) {
             setAlert({
                 id: Date.now(),
@@ -222,6 +233,13 @@ const SalesReturnList = () => {
         }
 
         setPage(1);
+        fetchAllSales({
+            page: 1,
+            fromDate,
+            toDate,
+            voucherCode: '',
+            customerSearch: ''
+        });
     };
 
     // Reset everything
@@ -342,18 +360,26 @@ const SalesReturnList = () => {
     const columns = [
         { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "right", width: "80px" },
         { key: "returnNo", label: t("salesInvoice.list.columns.invoiceNo"), sortable: true, align: "left", width: "120px" },
-        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "center", width: "120px" },
+        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "left", width: "120px" },
         { key: "LedgerName", label: t("salesInvoice.list.columns.cashParty"), sortable: true, align: "left", width: "180px" },
         { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right", width: "150px" },
     ];
 
     const renderCell = (key, row) => {
+
         if (key === "totalAmount") {
             return (
                 <div className="text-sm">
                     <div className="flex items-center justify-end gap-1">
                         <span>{Number(row.totalAmount).toFixed(generalSettings?.decimalPart || 2)}</span>
                     </div>
+                </div>
+            );
+        }
+        if (key === "returnNo") {
+            return (
+                <div className="text-sm text-center">
+                        <span>{row.returnNo} - {row.billTime}</span>
                 </div>
             );
         }

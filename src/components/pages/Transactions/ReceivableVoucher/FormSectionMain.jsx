@@ -9,14 +9,15 @@ import { PencilIcon, Plus } from 'lucide-react'
 import SelectedPurchaseACModal from './SelectedPurchaseACModal'
 import AddNewBtn from '@/components/common/AddNewBtn'
 import axiosInstance from '@/lib/axiosConfig'
-// ✅ CHANGED: Import AddCustomerModal from SalesOrder
 import AddCustomerModal from '@/components/elements/theme/AddCustomerModal'
-import ShippingAddressModal from './ShippingAddressModal'
+import ShippingAddressModal from '../SalesInvoice/ShippingAddressModal'
 import BillingAddressModal from './BillingAddressModal'
 import useAuth from '@/redux/hook/auth/useAuth'
+import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal';
 import PayableVoucherTable from './ReceivableVoucherTable'
 import DateInput from '@/components/elements/theme/DateInput'
 import AddEmployeeModal from '../Delivery Note/AddEmployeeModal'
+import usePrivileges from '@/lib/hooks/usePrivileges'
 
 const FormSectionMain = ({
   existingInvoiceNo,
@@ -39,14 +40,21 @@ const FormSectionMain = ({
   cash,
   banks,
   payableVouchrLedgers,
-  taxData
+  taxData,
+  currency = [],
+  currencyConvertionData = [],
+  financeSettings,
+  onLedgerCreated,
 }) => {
+    const {  hasAccess:employeeAccess,  } = usePrivileges("Employee");
 
   const { t } = useTranslation();
   // ✅ CHANGED: loadingCustomer instead of loadingSupplier
   const [loadingCustomer, setLoadingCustomer] = useState(false);
-  const { generalSettings } = useSelector((state) => state.settings);
+  const { generalSettings, financeSettings: financeSettingsFromStore } = useSelector((state) => state.settings);
+  const effectiveFinanceSettings = financeSettings ?? financeSettingsFromStore;
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
+  const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
   const [shippingAddresOpen, setShippingAddressOpen] = useState(false);
   const [billingAddressOpen, setBilligAddressOpen] = useState(false);
   // ✅ CHANGED: customerModalOpen instead of supplierModalOpen
@@ -176,7 +184,8 @@ const FormSectionMain = ({
                 />
               </div>
 
-              <div className='flex gap-0.5 lg:gap-1 items-end flex-1'>
+           {employeeAccess&&(
+               <div className='flex gap-0.5 lg:gap-1 items-end flex-1'>
                 <div className='flex-1 min-w-0'>
                   <SearchableDropdown
                     name="employeeId"
@@ -202,6 +211,7 @@ const FormSectionMain = ({
                   />
                 </div>
               </div>
+           )}
             </div>
 
             {/* Dynamic Grid Section */}
@@ -231,7 +241,7 @@ const FormSectionMain = ({
               <TextInput
                 name="ReferenceNo"
                 label={t('payableVoucher.form.label.formHeaderSection.RefNo')}
-                type="number"
+                type="text"
                 value={formData.ReferenceNo}
                 onChange={handleInputChange}
                 error={errors.RefNo}
@@ -385,6 +395,18 @@ const FormSectionMain = ({
         </div>
       </div>
 
+      {/* Currency Link */}
+      {effectiveFinanceSettings?.multiCurrency && (
+          <div className='flex flex-wrap gap-2 text-xs mt-2 mb-1'>
+              <p
+                  className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+                  onClick={() => setCurrencyModalOpen(true)}
+              >
+                  Currency: {formData?.currencyName || currentCurrency?.currencyName || 'Select Currency'}
+              </p>
+          </div>
+      )}
+
       {/* Payable Voucher Table */}
       <div className='mt-1.5 lg:mt-2 overflow-x-auto'>
         <PayableVoucherTable
@@ -398,8 +420,20 @@ const FormSectionMain = ({
           cash={cash}
           payableVouchrLedgers={payableVouchrLedgers}
           taxData={taxData}
+          onLedgerCreated={onLedgerCreated}
         />
       </div>
+
+      {effectiveFinanceSettings?.multiCurrency && (
+        <SelecteCurrecyModal
+            open={currencyModalOpen}
+            handleClose={() => setCurrencyModalOpen(false)}
+            formData={formData}
+            currency={currency}
+            handleChange={(field, value) => handleDropdownChange(field, value)}
+            currencyConvertionData={currencyConvertionData}
+        />
+      )}
 
       <AddEmployeeModal
         open={employeeModalOpen}

@@ -2,12 +2,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import { EllipsisVertical, Plus, PlusIcon, RefreshCcw, Trash2 } from 'lucide-react';
 import axiosInstance from '@/lib/axiosConfig';
 import { useDispatch, useSelector } from 'react-redux';
-import EditProductDetailsModal from './EditProductDetailsModal';
+
 import useAuth from '@/redux/hook/auth/useAuth';
 import MaterialReceiptFooterSection from './MaterialReceiptFooterSection';
 import Swal from 'sweetalert2';
 import { useTranslation } from 'react-i18next';
 import { refreshProductsByType } from '@/redux/slice/productSlice';
+import EditProuctDetailsModal from '../SalesInvoice/EditProuctDetailsModal';
 
 const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: propRows, setRows: propSetRows, otherChargeLedgers }) => {
 
@@ -16,8 +17,8 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
     const [editProductModalOpen, setEditProductModalOpen] = useState(false);
     const [selectedProductCode, setSelectedProductCode] = useState(null);
     const { selectedBranchId, } = useAuth();
-    const { generalSettings, purchaseSettings, inventorySettings } = useSelector((state) => state.settings);
-    const showBottomDetailsOnRow = purchaseSettings?.showProductDescription || false;
+    const { generalSettings, purchaseSettings, inventorySettings,saleSettings } = useSelector((state) => state.settings);
+    const shoBottomDeailsOnRow = purchaseSettings?.showProductDescription || false;
     const [suggestions, setSuggestions] = useState({});
     const [loadingProducts, setLoadingProducts] = useState({});
     const [activeSuggestionRow, setActiveSuggestionRow] = useState(null);
@@ -26,6 +27,8 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
     const [isInitialized, setIsInitialized] = useState(false);
     const { purchaseProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products)
     const [focusedField, setFocusedField] = useState(null);
+    const [focusedRowId, setFocusedRowId] = useState(null);
+    const [selectedRowIdForEdit, setSelectedRowIdForEdit] = useState(null);
 
     const dispatch = useDispatch()
 
@@ -89,7 +92,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                 taxType: item.taxType || 'Excluded',
                 employeeId: item.employeeId || formData.employeeId || null,
                 GodownId: item.GodownId || formData.GodownId || null,
-                orderDetails1Id: item.orderDetails1Id || "", 
+                orderDetails1Id: item.orderDetails1Id || "",
                 productDetails: item.productDetails || {
                     productCode: item.productCode || '',
                     barcode: item.barcode || '',
@@ -171,7 +174,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                 taxType: item.taxType || 'Excluded',
                 employeeId: item.employeeId || formData.employeeId || null,
                 GodownId: item.GodownId || formData.GodownId || null,
-                orderDetails1Id: item.orderDetails1Id || "", 
+                orderDetails1Id: item.orderDetails1Id || "",
                 productDetails: rows[index]?.productDetails || {
                     productCode: item.productCode || '',
                     barcode: item.barcode || '',
@@ -203,7 +206,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
             columns.push('desc', 'descAmt');
         }
 
-        if (generalSettings?.ActivateTax) {
+        if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
             columns.push('tax');
         }
         if (inventorySettings.maintainGodown) {
@@ -279,7 +282,13 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                     break;
             }
         }
-
+        if (currentField === 'productName' && e.key === 'Enter') {
+            const row = rows.find(r => r.id === rowId);
+            if (!row?.productCode || row.productCode.trim() === '') {
+                e.preventDefault();
+                return; // do nothing — don't create a new row, don't move focus
+            }
+        }
         const editableColumns = getEditableColumns();
         const currentRowIndex = rows.findIndex(row => row.id === rowId);
         const currentFieldIndex = editableColumns.indexOf(currentField);
@@ -412,6 +421,24 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
             if (hasChanges) setRows(updatedRows);
         }
     }, [formData.billDiscount]);
+    useEffect(() => {
+        if (formData.materialDetails && formData.materialDetails.length > 0) {
+            let hasChanges = false;
+            const updatedRows = rows.map((row, index) => {
+                const detail = formData.materialDetails[index];
+                if (
+                    detail &&
+                    detail.otherchargeOnProduct !== undefined &&
+                    parseFloat(detail.otherchargeOnProduct) !== parseFloat(row.otherchargeOnProduct || 0)
+                ) {
+                    hasChanges = true;
+                    return calculateRow({ ...row, otherchargeOnProduct: parseFloat(detail.otherchargeOnProduct) });
+                }
+                return row;
+            });
+            if (hasChanges) setRows(updatedRows);
+        }
+    }, [formData.othercharge]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -440,7 +467,8 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
             productName: row.productName || '',
             productNameArb: row.productNameArb || '',
             qty: row.qty || null,
-            freeQty: null,
+            // freeQty: null,
+            freeQty: row.freeQty || null,
             rate: row.purchaseRateInput || null,
             unitId: row.unit || null,
             discountPercentage: row.desc || null,
@@ -457,7 +485,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
             productDescription: row.productDetails.productDescription || "",
             billDiscOnProduct: row.billDiscOnProduct ?? null,
             AddCostonProduct: null,
-            otherchargeOnProduct: null,
+            otherchargeOnProduct: row.otherchargeOnProduct ?? null,
             employeeId: formData.employeeId,
             GodownId: formData.GodownId,
             RackId: null,
@@ -578,22 +606,24 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                 netValue = inputNetValue;
 
                 const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
-                const netValueAfterBillDisc = netValue - billDiscOnProduct;
+                const otherchargeOnProduct = parseFloat(row.otherchargeOnProduct) || 0;
+                const netValueAfterAdjustments = netValue - billDiscOnProduct + otherchargeOnProduct;
 
-                if (generalSettings?.ActivateTax) {
-                    taxAmt = (netValueAfterBillDisc * taxPercentage) / 100;
+                if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+                    taxAmt = (netValueAfterAdjustments * taxPercentage) / 100;
                 }
-                amount = netValueAfterBillDisc + taxAmt;
+                amount = netValueAfterAdjustments + taxAmt;
 
                 return {
                     ...row,
-                    purchaseRateInput: parseFloat(calculatedRate.toFixed(decimalPart)),
+                    purchaseRateInput: parseFloat(calculatedRate),
                     grossAmount: parseFloat(calculatedGross.toFixed(decimalPart)),
                     descAmt: parseFloat(descAmt.toFixed(decimalPart)),
                     netValue: parseFloat(netValue.toFixed(decimalPart)),
                     taxAmt: parseFloat(taxAmt.toFixed(decimalPart)),
                     amount: parseFloat(amount.toFixed(decimalPart)),
-                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(decimalPart))
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(decimalPart)),
+                    otherchargeOnProduct: parseFloat(otherchargeOnProduct.toFixed(decimalPart))
                 };
             }
         }
@@ -611,13 +641,14 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
         netValue = gross - descAmt;
 
         const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
-        const netValueAfterBillDisc = netValue - billDiscOnProduct;
+        const otherchargeOnProduct = parseFloat(row.otherchargeOnProduct) || 0;
+        const netValueAfterAdjustments = netValue - billDiscOnProduct + otherchargeOnProduct;
 
-        if (generalSettings?.ActivateTax) {
-            taxAmt = (netValueAfterBillDisc * taxPercentage) / 100;
+        if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+            taxAmt = (netValueAfterAdjustments * taxPercentage) / 100;
         }
 
-        amount = netValueAfterBillDisc + taxAmt;
+        amount = netValueAfterAdjustments + taxAmt;
 
         return {
             ...row,
@@ -626,7 +657,8 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
             taxAmt: parseFloat(taxAmt.toFixed(decimalPart)),
             amount: parseFloat(amount.toFixed(decimalPart)),
             descAmt: parseFloat(descAmt.toFixed(decimalPart)),
-            billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(decimalPart))
+            billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(decimalPart)),
+            otherchargeOnProduct: parseFloat(otherchargeOnProduct.toFixed(decimalPart))
         };
     };
 
@@ -696,7 +728,9 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
             setLoadingProducts(prev => ({ ...prev, [rowId]: false }));
         }
     };
-
+    useEffect(() => {
+        setRows(prevRows => prevRows.map(row => calculateRow(row)));
+    }, [formData.taxType]);
     // Updated selectProduct - Same method as SalesInvoice (no extra API call)
     const selectProduct = async (rowId, product, selectedUnitId) => {
 
@@ -862,21 +896,12 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
             });
         }
     };
-
-    const handleProductUpdate = (productCode, updatedDescription) => {
-        setRows(prevRows =>
-            prevRows.map(row =>
-                row.productDetails.productCode === productCode
-                    ? {
-                        ...row,
-                        productDetails: {
-                            ...row.productDetails,
-                            productDescription: updatedDescription
-                        }
-                    }
-                    : row
-            )
-        );
+  const handleProductUpdate = (rowId, updatedDescription) => {
+        setRows(prevRows => prevRows.map(row =>
+            row.id === rowId
+                ? { ...row, productDetails: { ...row.productDetails, productDescription: updatedDescription } }
+                : row
+        ));
     };
 
     const handleInputChange = (id, field, value, updatedField = null) => {
@@ -998,7 +1023,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
         const totalDiscount = rows.reduce((sum, row) => sum + row.descAmt, 0);
         const totalNetValue = rows.reduce((sum, row) => sum + row.netValue, 0);
 
-        const totalTax = generalSettings?.ActivateTax
+        const totalTax = (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product')
             ? rows.reduce((sum, row) => sum + row.taxAmt, 0)
             : 0;
 
@@ -1062,7 +1087,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                                     <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">
                                         {t("materialReceipt.form.gridSection.columns.netValue")}
                                     </th>
-                                    {generalSettings?.ActivateTax && (
+                                    {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                         <>
                                             <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[90px]">
                                                 {t("materialReceipt.form.gridSection.columns.tax%")}
@@ -1103,7 +1128,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                                     </>
                                 )}
                                 <col className="w-[100px]" />
-                                {generalSettings?.ActivateTax && (
+                                {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                     <>
                                         <col className="w-[90px]" />
                                         <col className="w-[50px]" />
@@ -1193,64 +1218,44 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                 </div>
                                             )}
 
-                                            {/* Conditional product details - only show when showBottomDetailsOnRow is true */}
-                                            {showBottomDetailsOnRow && (
-                                                row.productName && (row.productDetails.barcode || row.productDetails.partNo || row.productDetails.brand) && (
-                                                    <div className='flex justify-between'>
-                                                        <div className="mt-1 text-xs text-tertiary dark:text-tertiary space-y-0.5">
-                                                            {(row.productDetails.barcode || row.productDetails.partNo) && (
+                                            {row.productName && (
+                                                <div className='flex justify-between'>
+                                                    <div className="mt-1 text-xs text-tertiary dark:text-tertiary space-y-0.5">
+                                                        {shoBottomDeailsOnRow && (row.productDetails.barcode || row.productDetails.partNo || row.productDetails.brand) && (
+                                                            (row.productDetails.barcode || row.productDetails.partNo) && (
                                                                 <div className="flex gap-3 flex-wrap">
-                                                                    {row.productDetails.barcode && (
-                                                                        <span>
-                                                                            <span className="font-medium">{t("materialReceipt.form.gridSection.prodDetailsLabels.barcodeLabels")}:</span> {row.productDetails.barcode}
-                                                                        </span>
-                                                                    )}
-                                                                    {(row.productDetails.partNo && purchaseSettings?.ShowPartNo) && (
-                                                                        <span>
-                                                                            <span className="font-medium">{t("materialReceipt.form.gridSection.prodDetailsLabels.partNo")}:</span> {row.productDetails.partNo}
-                                                                        </span>
-                                                                    )}
-                                                                    {row.productDetails.mrp && (
-                                                                        <span>
-                                                                            <span className="font-medium">{t("materialReceipt.form.gridSection.prodDetailsLabels.mrp")}:</span> {row.productDetails.mrp}
-                                                                        </span>
-                                                                    )}
-                                                                    <span className="font-medium">{t("materialReceipt.form.gridSection.prodDetailsLabels.unit")} :{row.productDetails.UnitName}</span>
-                                                                    {(row.productDetails.purchase && purchaseSettings?.showPurchaserate) && (
+                                                                    {row.productDetails.barcode && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.barcodeLabels")}:</span> {row.productDetails.barcode}</span>}
+                                                                    {row.productDetails.partNo && saleSettings.ShowPartNo && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.partNo")}:</span> {row.productDetails.partNo}</span>}
+                                                                    {row.productDetails.mrp && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.mrp")}:</span> {row.productDetails.mrp}</span>}
+                                                                    <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.unit")} :{row.productDetails.UnitName}</span>
+                                                                    {row.productDetails.purchase && saleSettings.showPurchaserate && (
                                                                         <div className="flex gap-3">
-                                                                            <span>
-                                                                                <span className="font-medium">{t("materialReceipt.form.gridSection.prodDetailsLabels.purchase")}:</span> {row.productDetails.purchase}
-                                                                            </span>
-
-                                                                            {row.productDetails.brand && (
-                                                                                <span>
-                                                                                    <span className="font-medium">{t("materialReceipt.form.gridSection.prodDetailsLabels.brand")}:</span> {row.productDetails.brand}
-                                                                                </span>
-                                                                            )}
+                                                                            <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.purchase")}:</span> {row.productDetails.purchase}</span>
+                                                                            {row.productDetails.brand && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.brand")}:</span> {row.productDetails.brand}</span>}
                                                                         </div>
                                                                     )}
                                                                 </div>
-                                                            )}
-
-                                                            {(row.productDetails.productDescription && purchaseSettings?.showProductDescription) && (
-                                                                <p className="text-muted dark:text-muted leading-tight">
-                                                                    {t("materialReceipt.form.gridSection.prodDetailsLabels.desc")}: {row.productDetails.productDescription}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        {(purchaseSettings?.showProductDescription) && (
-                                                            <div className='cursor-pointer'>
-                                                                <EllipsisVertical
-                                                                    onClick={() => {
-                                                                        setSelectedProductCode(row.productDetails.productCode);
-                                                                        setEditProductModalOpen(true);
-                                                                    }}
-                                                                    className="text-secondary dark:text-secondary"
-                                                                />
-                                                            </div>
+                                                            )
+                                                        )}
+                                                        {row.productDetails.productDescription && saleSettings.showProductDescription && (
+                                                            <p className="text-muted dark:text-muted leading-tight">
+                                                                {t("salesInvoice.form.gridSection.prodDetailsLabels.desc")}: {row.productDetails.productDescription}
+                                                            </p>
                                                         )}
                                                     </div>
-                                                )
+                                                    {saleSettings.showProductDescription && (
+                                                        <div className='cursor-pointer'>
+                                                            <EllipsisVertical
+                                                                onClick={() => {
+                                                                    setSelectedProductCode(row.productDetails.productCode);
+                                                                    setSelectedRowIdForEdit(row.id);
+                                                                    setEditProductModalOpen(true);
+                                                                }}
+                                                                className="text-secondary dark:text-secondary"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
                                         </td>
                                         <td className="p-0.5 border border-themed dark:border-themed">
@@ -1301,12 +1306,12 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
 
                                                     // Find the product entry that matches both productCode and selected unitId
                                                     const productWithUnit = allProducts.find(
-                                                        (p) => p.productCode === row.productCode && p.unitId === selectedUnitId
+                                                        (p) => p.productCode === row.productCode && (p.unitId || p.unitid) === selectedUnitId
                                                     );
 
                                                     if (productWithUnit) {
                                                         const selectedUnit = row.availableUnits?.find(
-                                                            (u) => u.unitId === selectedUnitId
+                                                            (u) => (u.unitId || u.unitid) === selectedUnitId
                                                         );
 
                                                         let updatedRow = {
@@ -1317,7 +1322,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                             productDetails: {
                                                                 ...row.productDetails,
                                                                 barcode: productWithUnit.barcode || row.productDetails.barcode,
-                                                                UnitName: selectedUnit?.unitName || productWithUnit.unitName || row.productDetails.UnitName,
+                                                                UnitName: selectedUnit?.unitName || selectedUnit?.unitname || selectedUnit?.UnitName || productWithUnit.unitName || row.productDetails.UnitName,
                                                             },
                                                         };
 
@@ -1332,8 +1337,8 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                 className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded"
                                             >
                                                 {row.availableUnits?.map((unit) => (
-                                                    <option key={unit.unitId} value={unit.unitId}>
-                                                        {unit.unitName || unit.unitname}
+                                                    <option key={unit.unitId || unit.unitid} value={unit.unitId || unit.unitid}>
+                                                        {unit.unitName || unit.unitname || unit.UnitName}
                                                     </option>
                                                 ))}
                                             </select>
@@ -1346,7 +1351,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                 value={
                                                     focusedField === `${row.id}-purchaseRateInput`
                                                         ? row.purchaseRateInput
-                                                        : Number(row.purchaseRateInput).toFixed(generalSettings.decimalPart || 2)
+                                                        : Number(row.purchaseRateInput)
                                                 }
                                                 onFocus={(e) => { e.target.select(); setFocusedField(`${row.id}-purchaseRateInput`); }}
                                                 onChange={(e) => {
@@ -1359,7 +1364,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                 onBlur={(e) => {
                                                     setFocusedField(null);
                                                     const value = parseFloat(e.target.value) || 0;
-                                                    handleInputChange(row.id, 'purchaseRateInput', parseFloat(value.toFixed(generalSettings.decimalPart || 2)));
+                                                    handleInputChange(row.id, 'purchaseRateInput', parseFloat(value));
                                                 }}
 
                                                 onKeyDown={(e) => handleKeyDown(e, row.id, 'purchaseRateInput')}
@@ -1460,7 +1465,7 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                                             )}
                                         </td>
 
-                                        {generalSettings?.ActivateTax && (
+                                        {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                             <>
                                                 <td className="p-0.2 border border-themed dark:border-themed">
                                                     <select
@@ -1568,13 +1573,19 @@ const MaterialReceiptTable = ({ godowns, formData, setFormData, editMode, rows: 
                     {t("materialReceipt.form.gridSection.buttons.addRow")}
                 </button>
             </div>
-            <EditProductDetailsModal
+            <EditProuctDetailsModal
                 open={editProductModalOpen}
-                handleClose={() => setEditProductModalOpen(false)}
-                productCode={selectedProductCode}
-                onSuccess={(updatedDescription) => {
-                    handleProductUpdate(selectedProductCode, updatedDescription);
+                handleClose={() => {
+                    setEditProductModalOpen(false);
+                    setSelectedRowIdForEdit(null);
+                    if (focusedRowId) focusInput(focusedRowId, 'productName');
                 }}
+                productCode={selectedProductCode}
+                initialDescription={
+                    rows.find(r => r.id === selectedRowIdForEdit)
+                        ?.productDetails?.productDescription || ''
+                }
+                onSuccess={(updatedDescription) => handleProductUpdate(selectedRowIdForEdit, updatedDescription)}
             />
             <MaterialReceiptFooterSection
                 totals={totals}

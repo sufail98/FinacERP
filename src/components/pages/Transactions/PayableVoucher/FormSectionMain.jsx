@@ -9,13 +9,15 @@ import AddNewBtn from '@/components/common/AddNewBtn'
 // import AddEmployeeModal from './AddEmployeeModal'
 import axiosInstance from '@/lib/axiosConfig'
 import AddSupplierModal from './AddSupplierModal'
-import ShippingAddressModal from './ShippingAddressModal'
+import ShippingAddressModal from '../SalesInvoice/ShippingAddressModal'
 import BillingAddressModal from './BillingAddressModal'
 import useAuth from '@/redux/hook/auth/useAuth'
+import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal';
 import PayableVoucherTable from './PayableVoucherTable'
 import DateInput from '@/components/elements/theme/DateInput'
 import AddEmployeeModal from '../Delivery Note/AddEmployeeModal'
 import CustomerDropdown from '@/components/elements/theme/CustomerDropdown'
+import usePrivileges from '@/lib/hooks/usePrivileges'
 
 const FormSectionMain = ({
   generalSettings,
@@ -37,20 +39,25 @@ const FormSectionMain = ({
   payableVouchrLedgers,
   banks,
   cash,
+  currency = [],
+  currencyConvertionData = [],
+  financeSettings,
+  onLedgerCreated
 }) => {
+    const { hasAccess:employeeAccess,  } = usePrivileges("Employee");
 
   const { t } = useTranslation();
   const [loadingSupplier, setLoadingSupplier] = useState(false);
+  const { financeSettings: financeSettingsFromStore } = useSelector((state) => state.settings);
+  const effectiveFinanceSettings = financeSettings ?? financeSettingsFromStore;
   // const { generalSettings } = useSelector((state) => state.settings);
-  const [purchaseAcModalOpen, setPurchaseAcModalOpen] = useState(false);
-  const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
+  const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
   const [shippingAddresOpen, setShippingAddressOpen] = useState(false);
   const [billingAddressOpen, setBilligAddressOpen] = useState(false);
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
 
   const [shippingAdderess, setShippingAddress] = useState(null);
-  const [purchaseAccounts, setPurchaseAccounts] = useState([]);
   const [updateSupplierId, setUpdateSupplierId] = useState(null);
   const [currentledgerBalance, setCurrentLedgerBalance] = useState('')
   const [billingAddress, setBlillingAddress] = useState(null);
@@ -184,7 +191,8 @@ const FormSectionMain = ({
                 />
               </div>
 
-              <div className='flex gap-0.5 lg:gap-1 items-end flex-1'>
+           {employeeAccess&&(
+               <div className='flex gap-0.5 lg:gap-1 items-end flex-1'>
                 <div className='flex-1 min-w-0'>
                   <SearchableDropdown
                     name="employeeId"
@@ -210,6 +218,7 @@ const FormSectionMain = ({
                   />
                 </div>
               </div>
+           )}
             </div>
 
             {/* Dynamic Grid Section */}
@@ -239,7 +248,7 @@ const FormSectionMain = ({
               <TextInput
                 name="ReferenceNo"
                 label={t('payableVoucher.form.label.formHeaderSection.RefNo')}
-                type="number"
+                type="text"
                 value={formData.ReferenceNo}
                 onChange={handleInputChange}
                 error={errors.RefNo}
@@ -396,6 +405,17 @@ const FormSectionMain = ({
         </div>
       </div>
 
+      {/* Currency Link */}
+      {effectiveFinanceSettings?.multiCurrency && (
+          <div className='flex flex-wrap gap-2 text-xs mt-2 mb-1'>
+              <p
+                  className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+                  onClick={() => setCurrencyModalOpen(true)}
+              >
+                  Currency: {formData?.currencyName || currentCurrency?.currencyName || 'Select Currency'}
+              </p>
+          </div>
+      )}
 
       {/* Payable Voucher Table */}
       <div className='mt-1.5 lg:mt-2 overflow-x-auto'>
@@ -410,6 +430,7 @@ const FormSectionMain = ({
           ledgers={payableVouchrLedgers}
           banks={banks}
           cash={cash}
+          onLedgerCreated={onLedgerCreated}
         />
       </div>
 
@@ -421,13 +442,16 @@ const FormSectionMain = ({
         handleChange={handleDropdownChange}
         purchaseAccounts={purchaseAccounts}
       /> */}
-      {/* <SelecteCurrencyModal
-        open={currencyModalOpen}
-        handleClose={() => setCurrencyModalOpen(false)}
-        formData={formData}
-        handleChange={handleDropdownChange}
-        currencies={currencies}
-      /> */}
+      {effectiveFinanceSettings?.multiCurrency && (
+        <SelecteCurrecyModal
+            open={currencyModalOpen}
+            handleClose={() => setCurrencyModalOpen(false)}
+            formData={formData}
+            currency={currency}
+            handleChange={(field, value) => handleDropdownChange(field, value)}
+            currencyConvertionData={currencyConvertionData}
+        />
+      )}
       <AddEmployeeModal
         open={employeeModalOpen}
         handleClose={() => setEmployeeModalOpen(false)}

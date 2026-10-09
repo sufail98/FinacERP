@@ -5,14 +5,17 @@ import { useTranslation } from 'react-i18next'
 import { Checkbox } from "@/components/ui/checkbox"
 import NormalSelectInput from '@/components/elements/theme/NormalSelectInput'
 
-const OtherDetails = ({ totals, formData, setFormData }) => {
+const OtherDetails = ({ totals, formData, setFormData, editMode = false }) => {
     const { t } = useTranslation()
     const [printType, setPrintType] = useState('a4')
+    const isEditMode = Boolean(editMode)
 
     const handleChange = (field, value) => {
+        if (isEditMode) return;
         setFormData(prev => ({ ...prev, [field]: value }));
     };
     const handleDropdownChange = (name, value) => {
+        if (isEditMode) return;
         setFormData(prev => ({
             ...prev,
             [name]: value
@@ -28,6 +31,8 @@ const OtherDetails = ({ totals, formData, setFormData }) => {
                     value={formData.transportCompany}
                     onChange={(e) => handleChange('transportCompany', e.target.value)}
                     placeholder={t("salesInvoice.form.footerSection.otherDetails.placeholders.transportCompany")}
+                    readOnly={isEditMode}
+                    disabled={isEditMode}
                 />
 
                 <TextInput
@@ -36,6 +41,8 @@ const OtherDetails = ({ totals, formData, setFormData }) => {
                     value={formData.lrNo}
                     onChange={(e) => handleChange('lrNo', e.target.value)}
                     placeholder={t("salesInvoice.form.footerSection.otherDetails.placeholders.lrNo")}
+                    readOnly={isEditMode}
+                    disabled={isEditMode}
                 />
 
                 {/* <div className='col-span-3'> */}
@@ -46,6 +53,8 @@ const OtherDetails = ({ totals, formData, setFormData }) => {
                         onChange={(e) => handleChange('narration', e.target.value)}
                         placeholder={t("salesInvoice.form.footerSection.otherDetails.label.narration")}
                         rows={2}
+                        readOnly={isEditMode}
+                        disabled={isEditMode}
                     />
                 {/* </div> */}
 

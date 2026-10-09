@@ -11,6 +11,7 @@ import useAutoFocus from "@/lib/hooks/useAutoFocus";
 import { useTranslation } from "react-i18next";
 import TextInput from "@/components/elements/theme/TextInput";
 import TextArea from "@/components/elements/theme/TextArea";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const CreateCurrency = ({ open, handleClose, editId, onSaved }) => {
   const { t } = useTranslation();
@@ -60,7 +61,11 @@ const CreateCurrency = ({ open, handleClose, editId, onSaved }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let updatedValue = value
+    if(["currencyName","subunitName"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+    }
+    setFormData((prev) => ({ ...prev, [name]: updatedValue }));
   };
 
   // Handle Enter key to move to next field in order
@@ -206,6 +211,11 @@ const CreateCurrency = ({ open, handleClose, editId, onSaved }) => {
               placeholder={t("currencyForm.form.noOfDecimalPlacePlaceholder")}
               value={formData.noOfDecimalPlace}
               onChange={handleChange}
+              onKeyDown={(e) => {
+                if(e.key === "-" || e.key === "+"){
+                  e.preventDefault()
+                }
+              }}
               required
               className="border-gray-500"
               error={errors.noOfDecimalPlace}

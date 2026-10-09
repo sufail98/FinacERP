@@ -63,7 +63,17 @@ const PurchaseQuotationList = () => {
             .replace('MM', MM)
             .replace('yyyy', yyyy);
     };
-
+const formatTime = (dateTimeString) => {
+    if (!dateTimeString) return '';
+    const date = new Date(dateTimeString);
+    if (isNaN(date.getTime())) return '';
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours === 0 ? 12 : hours;
+    return `${hours}:${minutes} ${ampm}`;
+};
     // Main fetch function
     const fetchAllSales = useCallback(async (params = {}) => {
         setFetchLoading(true);
@@ -90,7 +100,11 @@ const PurchaseQuotationList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((currentPage - 1) * currentLimit) + index + 1,
-                date: formatDate(item.date),
+  date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setSalesData(formattedData);
@@ -128,36 +142,7 @@ const PurchaseQuotationList = () => {
         fetchAllSales();
     }, [page, limit]);
 
-    // Debounced search for voucher code
-    const handleVoucherCodeChange = (e) => {
-        const value = e.target.value;
-        setVoucherCode(value);
-        setPage(1); // Reset to first page
-
-        // Clear existing timer
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-        }
-
-        // Set new debounce timer (300ms delay)
-        debounceTimerRef.current = setTimeout(() => {
-            fetchAllSales({ voucherCode: value, page: 1 });
-        }, 300);
-    };
-
-    // Clear voucher code and fetch with dates
-    const clearVoucherCode = () => {
-        setVoucherCode('');
-
-        // Clear debounce timer
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-        }
-
-        // Fetch with current date filters
-        setPage(1);
-        fetchAllSales({ voucherCode: '', page: 1 });
-    };
+    
 
     // Filter button click - only for date filtering
     const handleFilter = () => {
@@ -272,10 +257,10 @@ const PurchaseQuotationList = () => {
 
     const columns = [
         { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "right" },
-        { key: "orderNo", label: t("purchaseInvoice.list.columns.invoiceNo"), sortable: true, align: "left" },
-        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "center" },
+        { key: "orderNo", label: t("purchaseInvoice.list.columns.invoiceNo"), sortable: true, align: "left" ,width:"120px"},
+        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "left",width:"120px" },
         { key: "partyName", label: t("salesInvoice.list.columns.cashParty"), sortable: true, align: "left" },
-        { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right" },
+        { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right",width:"120px" },
     ];
 
     const renderCell = (key, row) => {

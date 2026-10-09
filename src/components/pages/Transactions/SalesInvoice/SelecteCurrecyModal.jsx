@@ -6,23 +6,24 @@ import axiosInstance from '@/lib/axiosConfig'
 import useAuth from '@/redux/hook/auth/useAuth'
 import { Check, Search } from 'lucide-react'
 
-const SelecteCurrecyModal = ({ open, handleClose, onSuccess, editId, formData, handleChange,currency:data=[] }) => {
+const SelecteCurrecyModal = ({ open, handleClose, onSuccess, editId, formData, handleChange, currency: data = [], currencyConvertionData = [] }) => {
     const { t } = useTranslation();
-    const { currentCurrency: currentCurrencyFromStore, setCurrency } = useAuth();
-    
+    const { currentCurrency: currentCurrencyFromStore } = useAuth(); // note: setCurrency intentionally NOT used here
+
     const [selectedCurrency, setSelectedCurrency] = useState(currentCurrencyFromStore?.currencyId);
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(false);
 
-   
-
+    // Initialize selection from this invoice's own formData (not the global store),
+    // falling back to the global current currency only if the form has none set yet.
     useEffect(() => {
         if (open) {
-            setSelectedCurrency(currentCurrencyFromStore?.currencyId);
+            const currentConversion = currencyConvertionData?.find(
+                c => c.currencyConversionId === formData?.currencyConversionId
+            );
+            setSelectedCurrency(currentConversion?.currencyId ?? currentCurrencyFromStore?.currencyId);
         }
-    }, [open, currentCurrencyFromStore?.currencyId]);
-
-
+    }, [open, formData?.currencyConversionId, currentCurrencyFromStore?.currencyId, currencyConvertionData]);
 
     const filteredCurrencies = data?.filter(currency => {
         const searchLower = searchQuery.toLowerCase();
@@ -39,15 +40,26 @@ const SelecteCurrecyModal = ({ open, handleClose, onSuccess, editId, formData, h
     const handleSubmit = (e) => {
         if (e) e.preventDefault();
 
-        const selected = data.find(c => c.currencyid === selectedCurrency);
+        // Find the matching conversion record for the selected currency
+        const selectedConversion = currencyConvertionData?.find(
+            c => c.currencyId === selectedCurrency
+        );
+        // Find the currency's display meta (name/narration) from the currency list
+        const selectedCurrencyMeta = data.find(c => c.currencyid === selectedCurrency);
 
-        if (selected) {
-            setCurrency({
-                i: selected.currencyid,
-                currencyName: `${selected.currencyName} - ${selected.narration}`,
-            });
-
-            handleChange('currencyConversionId', selected.currencyid);
+        if (selectedConversion) {
+            // ✅ Only update THIS form's local state (formData) — no Redux dispatch,
+            // so the app-wide current currency stays untouched.
+            handleChange('currencyConversionId', selectedConversion.currencyConversionId);
+            handleChange('currencyId', selectedConversion.currencyId);
+            handleChange('exchangeRate', selectedConversion.rate);
+            handleChange('exchangeDate', selectedConversion.date);
+            handleChange(
+                'currencyName',
+                selectedCurrencyMeta
+                    ? `${selectedCurrencyMeta.currencyname} - ${selectedCurrencyMeta.narration}`
+                    : ''
+            );
 
             if (onSuccess) onSuccess();
         }

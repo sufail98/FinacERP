@@ -96,7 +96,20 @@ const ProductForm = ({ viewMode, modalMode, onSuccess, modalCloase }) => {
             endpoints.map(({ url, key, setter }) => fetchData(url, key, setter))
         );
     };
-
+// Add this function inside ProductForm
+const loadProductById = async (code) => {
+    setLoading(true);
+    editDataFetchedRef.current = true;
+    setEditData(null); // ← clear first so useEffect re-triggers cleanly
+    try {
+        const res = await axiosInstance.get(`view-product-byId/${code}`);
+        if (res.data?.data) {
+            setEditData(res.data.data);
+        }
+    } finally {
+        setLoading(false);
+    }
+};
     useEffect(() => {
         if (!selectedBranchId || !productCode || editDataFetchedRef.current) return;
         editDataFetchedRef.current = true;
@@ -107,7 +120,6 @@ const ProductForm = ({ viewMode, modalMode, onSuccess, modalCloase }) => {
             .then((res) => {
 
                 if (res.data?.data) {
-
                     setEditData(res.data.data);
                     editDataFetchedRef.current = true;
                 }
@@ -365,6 +377,7 @@ const ProductForm = ({ viewMode, modalMode, onSuccess, modalCloase }) => {
                 onSuccess={onSuccess}
                 modalMode={modalMode}
                 modalCloase={modalCloase}
+                 loadProductById={loadProductById}
             />
 
             {/* Barcode Print Modal */}

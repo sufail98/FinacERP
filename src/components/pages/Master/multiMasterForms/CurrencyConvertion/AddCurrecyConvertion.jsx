@@ -269,7 +269,7 @@ const AddCurrencyConversion = ({ open, handleClose, onSuccess, selectedId }) => 
               searchPlaceholder="Search Currency..."
               options={currencies.map((currency) => ({
                 value: currency.currencyId.toString(),
-                label: currency.currencyName || currency.currencyCode || `Currency ${currency.currencyId}`,
+                label:`${currency.currencySymbol} - ${currency.currencyName} (${currency.narration})`,
               }))}
               value={formData.currencyId}
               onChange={(value) => handleSelectChange(value, "currencyId")}
@@ -309,6 +309,11 @@ const AddCurrencyConversion = ({ open, handleClose, onSuccess, selectedId }) => 
               min="0"
               value={formData.rate}
               onChange={handleChange}
+              onKeyDown={(e) => {
+                if(e.key === "-" || e.key === "+"){
+                  e.preventDefault()
+                }
+              }}
               required
               className="w-full"
               placeholder="0.00"

@@ -1,5 +1,9 @@
 import axiosInstance from '@/lib/axiosConfig';
 import { LuRefreshCcwDot } from "react-icons/lu";
+import { store } from "@/redux/store";
+const orgData = store.getState().organization;
+
+
 import {
   // Finance Reports
   accountLedgerReportSvg,
@@ -216,13 +220,28 @@ import {
   CalendarRange,
   Codesandbox,
   Bell,
-  ShoppingBasket
+  ShoppingBasket,
+  QrCode,
+  FileUp,
+  PackageX,
+  RefreshCw,
+  ArrowUpToLine,
+  ArrowDownToLine,
+  Hourglass,
+  Zap
 } from 'lucide-react';
 
 
 export const iconMap = {
   CalendarRange,
   Bell,
+  PackageX,
+  RefreshCw,
+  ArrowUpToLine,
+  ArrowDownToLine,
+  Hourglass,
+  Zap,
+  QrCode,
   ClipboardList,
   ScrollText,
   NotebookText,
@@ -307,7 +326,8 @@ export const iconMap = {
   ListOrdered,
   CalendarCog,
   Codesandbox,
-  ShoppingBasket
+  ShoppingBasket,
+  FileUp
 };
 
 
@@ -329,7 +349,7 @@ const defaultMenuData = {
         },
         {
           "id": "all-branches",
-          "labelEn": "Branches",
+          "labelEn": "Branch",
           "labelAr": "جميع الفروع",
           "icon": "MapPin",
           "url": "/all-branches",
@@ -421,6 +441,25 @@ const defaultMenuData = {
           "shortKey": "Alt+C",
           "icon": "PackagePlus",
           "url": "/master/product-creation",
+          "svgLogo": productCreationSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "productList",
+          "labelEn": "Product List",
+          "labelAr": " قائمة المنتجات",
+          // "shortKey": "Alt+L",
+          "icon": "Package",
+          "url": "/master/product-list",
+          "svgLogo": productCreationSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "barcodeGenerator",
+          "labelEn": "Barcode Generator",
+          "labelAr": "مولد الرموز الشريطية",
+          "icon": "QrCode",
+          "url": "/master/barcode-generator",
           "svgLogo": productCreationSvg,
           "group": "inventory"
         },
@@ -555,6 +594,7 @@ const defaultMenuData = {
           "icon": "Truck",
           "url": "/master/van-sales/van-executive",
           "group": "van-sales",
+          "requiresSetting": "activateVanSale",
           "svgLogo": vanExecutiveSvg
         },
         {
@@ -564,6 +604,7 @@ const defaultMenuData = {
           "icon": "Settings2",
           "url": "/master/van-sales/van-executive-settings",
           "group": "van-sales",
+          "requiresSetting": "activateVanSale",
           "svgLogo": vanExecutiveSettingsSvg
         },
         {
@@ -1051,10 +1092,20 @@ const defaultMenuData = {
         },
         {
           "id": "godownTransfer",
-          "labelEn": "Godown Transfer",
+          "labelEn": "Stock Transfer",
           "labelAr": "نقل المخزن",
           "icon": "ArrowLeftRight",
           "url": "/transaction/godown-transfer",
+          "requiresSetting": "ActiveGodown",
+          "svgLogo": godownTransferSvg,
+          "group": "inventory-transactions"
+        },
+        {
+          "id": "godownTransferList",
+          "labelEn": "Stock Receipts",
+          "labelAr": "استلام المخزن",
+          "icon": "ArrowLeftRight",
+          "url": "/transaction/godown-transfer/list",
           "requiresSetting": "ActiveGodown",
           "svgLogo": godownTransferSvg,
           "group": "inventory-transactions"
@@ -1210,7 +1261,7 @@ const defaultMenuData = {
           "isGroupHeader": true,
           "icon": "BarChart3"
         },
-     
+
         {
           "id": "receipt-report",
           "labelEn": "Receipt Report",
@@ -1220,7 +1271,7 @@ const defaultMenuData = {
           "svgLogo": receiptReportSvg,
           "group": "finance-reports"
         },
-           {
+        {
           "id": "payment-report",
           "labelEn": "Payment Report",
           "labelAr": "تقرير الدفع",
@@ -1398,150 +1449,7 @@ const defaultMenuData = {
           "requiresSetting": "costCentre"
         },
 
-        // ── 2. Financial Statements ──
-        {
-          "id": "financial-statements-group",
-          "labelEn": "Financial Statements",
-          "labelAr": "البيانات المالية",
-          "isGroupHeader": true,
-          "icon": "Landmark"
-        },
-        {
-          "id": "trial-balance",
-          "labelEn": "Trial Balance",
-          "labelAr": "ميزان المراجعة",
-          "icon": "ArrowLeftRight",
-          "url": "/reports/trial-balance",
-          "svgLogo": trialBalanceSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "profit-loss-analysis",
-          "labelEn": "Profit & Loss Accounts",
-          "labelAr": "حسابات الأرباح والخسائر",
-          "icon": "TrendingUp",
-          "url": "/reports/profit-loss-analysis",
-          "svgLogo": profitLossAnalysisSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "balance-sheet-report",
-          "labelEn": "Balance Sheet",
-          "labelAr": "الميزانية العمومية",
-          "icon": "BarChart3",
-          "url": "/reports/balance-sheet",
-          "svgLogo": balanceSheetReportSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "cash-flow-summary",
-          "labelEn": "Cash Flow",
-          "labelAr": "التدفق النقدي",
-          "icon": "Wallet",
-          "url": "/reports/cash-flow-summary",
-          "svgLogo": fundFlowSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "fund-flow",
-          "labelEn": "Fund Flow",
-          "labelAr": "تدفق الأموال",
-          "icon": "ArrowLeftRight",
-          "url": "/reports/fund-flow",
-          "svgLogo": fundFlowSvg,
-          "group": "financial-statements"
-        },
-       
-        {
-          "id": "account-group-chart",
-          "labelEn": "Chart of Accounts",
-          "labelAr": "مخطط الحسابات",
-          "icon": "GitBranch",
-          "url": "/reports/account-group-chart",
-          "svgLogo": accountGroupChartSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "day-book-summary",
-          "labelEn": "Daybook Summary",
-          "labelAr": "ملخص دفتر اليوميات",
-          "icon": "BookOpen",
-          "url": "/reports/day-book-summary",
-          "svgLogo": dayBookSummarySvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "cash-book",
-          "labelEn": "Cash Book",
-          "labelAr": "كتاب النقدية",
-          "icon": "Wallet",
-          "url": "/reports/cash-book",
-          "svgLogo": cashBookSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "bank-book",
-          "labelEn": "Bank Book",
-          "labelAr": "كتاب البنك",
-          "icon": "Landmark",
-          "url": "/reports/bank-book",
-          "svgLogo": bankBookSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "day-book-report",
-          "labelEn": "Daybook",
-          "labelAr": "دفتر اليوميات",
-          "icon": "BookText",
-          "url": "/reports/day-book-report",
-          "svgLogo": dayBookReportSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "ledger-detailed-report",
-          "labelEn": "Detailed Ledger Report",
-          "labelAr": "تقرير دفتر الأستاذ المفصل",
-          "icon": "ScrollText",
-          "url": "/reports/ledger-detailed-report",
-          "svgLogo": ledgerDetailedReportSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "account-group-report",
-          "labelEn": "Account Group Report",
-          "labelAr": "تقرير مجموعة الحسابات",
-          "icon": "Layers",
-          "url": "/reports/account-group-report",
-          "svgLogo": accountGroupReportSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "ledger-report",
-          "labelEn": "Ledger Report",
-          "labelAr": "تقرير دفتر الحسابات",
-          "icon": "BookText",
-          "url": "/reports/ledger-report",
-          "svgLogo": accountLedgerReportSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "account-ledger-report",
-          "labelEn": "Account Ledger Report",
-          "labelAr": "تقرير مجموعة الحسابات",
-          "icon": "Layers",
-          "url": "/reports/account-ledger-report",
-          "svgLogo": accountGroupReportSvg,
-          "group": "financial-statements"
-        },
-        {
-          "id": "purchase-day-report",
-          "labelEn": "Purchase Day Report",
-          "labelAr": "تقرير مشتريات اليوم",
-          "icon": "Calendar",
-          "url": "/reports/purchase-day-report",
-          "svgLogo": purchaseDayReportSvg,
-          "group": "financial-statements"
-        },
+
 
         // ── 3. Sales ──
         {
@@ -1557,6 +1465,15 @@ const defaultMenuData = {
           "labelAr": "تقرير مبيعات اليوم",
           "icon": "Calendar",
           "url": "/reports/sales-day-report",
+          "svgLogo": salesDayReportSvg,
+          "group": "report-sales"
+        },
+        {
+          "id": "sales-profit-report",
+          "labelEn": "Sales Profit Report",
+          "labelAr": "تقرير أرباح المبيعات",
+          "icon": "Calendar",
+          "url": "/reports/sales-profit-report",
           "svgLogo": salesDayReportSvg,
           "group": "report-sales"
         },
@@ -1651,6 +1568,23 @@ const defaultMenuData = {
           "svgLogo": productVsSalesmanReportSvg,
           "group": "sales-vs-salesman"
         },
+        {
+          "id": "report-purchase-group",
+          "labelEn": "Purchase",
+          "labelAr": "المشتريات",
+          "isGroupHeader": true,
+          "icon": "ShoppingCart"
+        },
+        {
+          "id": "purchase-day-report",
+          "labelEn": "Purchase Day Report",
+          "labelAr": "تقرير مشتريات اليوم",
+          "icon": "Calendar",
+          "url": "/reports/purchase-day-report",
+          "svgLogo": purchaseDayReportSvg,
+          "group": "report-purchase"
+
+        },
 
         // ── 5. Inventory ──
         {
@@ -1683,7 +1617,7 @@ const defaultMenuData = {
           "labelEn": "Fast Moving",
           "labelAr": "سريع الحركة",
           "icon": "Zap",
-          "url": "/reports/fast-moving-report",
+          "url": "/reports/fast-moving-stock",
           "svgLogo": stockReportSvg,
           "group": "inventory"
         },
@@ -1692,7 +1626,7 @@ const defaultMenuData = {
           "labelEn": "Slow Moving",
           "labelAr": "بطيء الحركة",
           "icon": "Hourglass",
-          "url": "/reports/slow-moving-report",
+          "url": "/reports/slow-moving-stock",
           "svgLogo": stockReportSvg,
           "group": "inventory"
         },
@@ -1701,7 +1635,7 @@ const defaultMenuData = {
           "labelEn": "Minimum Level",
           "labelAr": "الحد الأدنى",
           "icon": "ArrowDownToLine",
-          "url": "/reports/minimum-level-report",
+          "url": "/reports/minimum-level",
           "svgLogo": stockReportSvg,
           "group": "inventory"
         },
@@ -1710,7 +1644,7 @@ const defaultMenuData = {
           "labelEn": "Maximum Level",
           "labelAr": "الحد الأقصى",
           "icon": "ArrowUpToLine",
-          "url": "/reports/maximum-level-report",
+          "url": "/reports/maximum-level",
           "svgLogo": stockReportSvg,
           "group": "inventory"
         },
@@ -1719,7 +1653,7 @@ const defaultMenuData = {
           "labelEn": "Reorder Level",
           "labelAr": "مستوى إعادة الطلب",
           "icon": "RefreshCw",
-          "url": "/reports/reorder-level-report",
+          "url": "/reports/reorder-level",
           "svgLogo": stockReportSvg,
           "group": "inventory"
         },
@@ -1728,7 +1662,7 @@ const defaultMenuData = {
           "labelEn": "Unused Stock",
           "labelAr": "المخزون غير المستخدم",
           "icon": "PackageX",
-          "url": "/reports/unused-stock-report",
+          "url": "/reports/unused-stock",
           "svgLogo": physicalStockReportSvg,
           "group": "inventory"
         },
@@ -1750,6 +1684,167 @@ const defaultMenuData = {
           "svgLogo": productWiseSalesSummaryReportSvg,
           "group": "inventory"
         }
+      ]
+    },
+    {
+      "id": "financialStatementsReports",
+      "labelEn": "Financial Statement",
+      "labelAr": "تقارير البيانات المالية",
+      "icon": "FileText",
+      "children": [
+        // ── 2. Financial Statements ──
+        {
+          "id": "financial-statements-group",
+          "labelEn": "Financial Statements",
+          "labelAr": "البيانات المالية",
+          "isGroupHeader": true,
+          "icon": "Landmark"
+        },
+        {
+          "id": "trial-balance",
+          "labelEn": "Trial Balance",
+          "labelAr": "ميزان المراجعة",
+          "icon": "ArrowLeftRight",
+          "url": "/reports/trial-balance",
+          "svgLogo": trialBalanceSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "profit-loss-analysis",
+          "labelEn": "Profit & Loss Accounts",
+          "labelAr": "حسابات الأرباح والخسائر",
+          "icon": "TrendingUp",
+          "url": "/reports/profit-loss-analysis",
+          "svgLogo": profitLossAnalysisSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "balance-sheet-report",
+          "labelEn": "Balance Sheet",
+          "labelAr": "الميزانية العمومية",
+          "icon": "BarChart3",
+          "url": "/reports/balance-sheet",
+          "svgLogo": balanceSheetReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "income-expense-report",
+          "labelEn": "Account Summery",
+          "labelAr": "الإيرادات والمصروفات",
+          "icon": "BarChart3",
+          "url": "/reports/income-expense-report",
+          "svgLogo": balanceSheetReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "income-expentiture-report",
+          "labelEn": "Income & Expenditure",
+          "labelAr": "الإيرادات والمصروفات",
+          "icon": "BarChart3",
+          "url": "/reports/income-expentiture-report",
+          "svgLogo": balanceSheetReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "cash-flow-summary",
+          "labelEn": "Cash Flow",
+          "labelAr": "التدفق النقدي",
+          "icon": "Wallet",
+          "url": "/reports/cash-flow-summary",
+          "svgLogo": fundFlowSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "fund-flow",
+          "labelEn": "Fund Flow",
+          "labelAr": "تدفق الأموال",
+          "icon": "ArrowLeftRight",
+          "url": "/reports/fund-flow",
+          "svgLogo": fundFlowSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "account-group-chart",
+          "labelEn": "Chart of Accounts",
+          "labelAr": "مخطط الحسابات",
+          "icon": "GitBranch",
+          "url": "/reports/account-group-chart",
+          "svgLogo": accountGroupChartSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "day-book-summary",
+          "labelEn": "Daybook Summary",
+          "labelAr": "ملخص دفتر اليوميات",
+          "icon": "BookOpen",
+          "url": "/reports/day-book-summary",
+          "svgLogo": dayBookSummarySvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "cash-book",
+          "labelEn": "Cash Book",
+          "labelAr": "كتاب النقدية",
+          "icon": "Wallet",
+          "url": "/reports/cash-book",
+          "svgLogo": cashBookSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "bank-book",
+          "labelEn": "Bank Book",
+          "labelAr": "كتاب البنك",
+          "icon": "Landmark",
+          "url": "/reports/bank-book",
+          "svgLogo": bankBookSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "day-book-report",
+          "labelEn": "Daybook",
+          "labelAr": "دفتر اليوميات",
+          "icon": "BookText",
+          "url": "/reports/day-book-report",
+          "svgLogo": dayBookReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "ledger-detailed-report",
+          "labelEn": "Detailed Ledger Report",
+          "labelAr": "تقرير دفتر الأستاذ المفصل",
+          "icon": "ScrollText",
+          "url": "/reports/ledger-detailed-report",
+          "svgLogo": ledgerDetailedReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "account-group-report",
+          "labelEn": "Account Group Report",
+          "labelAr": "تقرير مجموعة الحسابات",
+          "icon": "Layers",
+          "url": "/reports/account-group-report",
+          "svgLogo": accountGroupReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "ledger-report",
+          "labelEn": "Ledger Report",
+          "labelAr": "تقرير دفتر الحسابات",
+          "icon": "BookText",
+          "url": "/reports/ledger-report",
+          "svgLogo": accountLedgerReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "account-ledger-report",
+          "labelEn": "Account Ledger Report",
+          "labelAr": "تقرير مجموعة الحسابات",
+          "icon": "Layers",
+          "url": "/reports/account-ledger-report",
+          "svgLogo": accountGroupReportSvg,
+          "group": "financial-statements"
+        },
+
       ]
     },
 
@@ -1840,6 +1935,7 @@ const defaultMenuData = {
           "icon": "Coins",
           "url": "/master/currency",
           "group": "other-settings",
+          "requiresSetting": "multiCurrency",
           "svgLogo": currencyMasterSvg
         },
         {
@@ -1848,6 +1944,7 @@ const defaultMenuData = {
           "labelAr": "تحويل العملة",
           "icon": "Coins",
           "url": "/master/currency-convertion",
+          "requiresSetting": "multiCurrency",
           "group": "other-settings",
           "svgLogo": currencyConvertionSvg
         },
@@ -1864,10 +1961,1323 @@ const defaultMenuData = {
           "id": "reportFileSettings",
           "labelEn": "Report File Settings",
           "labelAr": "إعدادات ملف التقرير",
-          "icon": "Settings2",
+          "icon": "Settings",
           "url": "/settings/report-file-settings",
           "group": "other-settings",
           "svgLogo": reportFileSettingsSvg
+        },
+        {
+          "id": "bulkUpload",
+          "labelEn": "Bulk Upload",
+          "labelAr": "الرفع الجماعي",
+          "icon": "FileUp",
+          "url": "/settings/bulk-upload",
+          "group": "other-settings",
+          "svgLogo": reportFileSettingsSvg
+        },
+        // ...(orgData?.organizationData?.userCount === 1
+        //   ? [
+        {
+          id: "changeuserPassword",
+          labelEn: "Change Password",
+          labelAr: "تغيير كلمة المرور",
+          icon: "Settings",
+          url: "/settings/change-password",
+          group: "other-settings",
+          svgLogo: mainSettingsSvg,
+        },
+        // ]
+        // : []),
+
+        {
+          "id": "mainSettings",
+          "labelEn": "Settings",
+          "labelAr": "الإعدادات",
+          "icon": "Settings",
+          "url": "/settings",
+          "group": "other-settings",
+          "svgLogo": mainSettingsSvg
+        }
+      ]
+    }
+  ].filter(Boolean)
+};
+export const basicMenuData = {
+  "menuItems": [
+    // ╔══════════════════════════════════════════════════╗
+    // ║          MASTER (Basic - products data)         ║
+    // ╚══════════════════════════════════════════════════╝
+    {
+      "id": "company",
+      "labelEn": "Company Details",
+      "labelAr": "الشركة",
+      "icon": "Building2",
+      "children": [
+        {
+          "id": "company-group",
+          "labelEn": "Company Details",
+          "labelAr": "تفاصيل الشركة",
+          "isGroupHeader": true,
+          "icon": "Building2"
+        },
+        {
+          "id": "all-branches",
+          "labelEn": "Branch",
+          "labelAr": "جميع الفروع",
+          "icon": "MapPin",
+          "url": "/all-branches",
+          "group": "company"
+        }
+      ]
+    },
+    {
+      "id": "master",
+      "labelEn": "Master",
+      "labelAr": "الرئيسي",
+      "icon": "Settings",
+      "children": [
+        {
+          "id": "finance-group",
+          "labelEn": "Finance",
+          "labelAr": "المالية",
+          "isGroupHeader": true,
+          "icon": "DollarSign"
+        },
+        {
+          "id": "accountLedger",
+          "labelEn": "Account Ledger",
+          "labelAr": "دفتر الحسابات",
+          "icon": "BookOpen",
+          "url": "/master/account-ledger",
+          "group": "finance",
+          "svgLogo": accountLedgerMasterSvg
+        },
+        {
+          "id": "accountGroup",
+          "labelEn": "Account Group",
+          "labelAr": "مجموعة الحسابات",
+          "icon": "Layers",
+          "url": "/master/account-groups",
+          "group": "finance",
+          "svgLogo": accountGroupMasterSvg
+        },
+
+        {
+          "id": "bank",
+          "labelEn": "Bank",
+          "labelAr": "البنك",
+          "icon": "CreditCard",
+          "url": "/master/bank",
+          "svgLogo": bankMasterSvg,
+          "group": "finance"
+        },
+        {
+          "id": "customer",
+          "labelEn": "Customer",
+          "labelAr": "العميل",
+          "icon": "UserCheck",
+          "url": "/master/customer",
+          "group": "finance",
+          "svgLogo": customerMasterSvg
+        },
+        {
+          "id": "supplier",
+          "labelEn": "Supplier",
+          "labelAr": "المورد",
+          "icon": "Truck",
+          "url": "/master/supplier",
+          "group": "finance",
+          "svgLogo": supplierMasterSvg
+        },
+        {
+          "id": "inventory-group",
+          "labelEn": "Inventory",
+          "labelAr": "إدارة المخزون",
+          "isGroupHeader": true,
+          "icon": "Boxes"
+        },
+        {
+          "id": "productCreation",
+          "labelEn": "Product Creation",
+          "labelAr": "إنشاء المنتج",
+          "shortKey": "Alt+C",
+          "icon": "PackagePlus",
+          "url": "/master/product-creation",
+          "svgLogo": productCreationSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "productList",
+          "labelEn": "Product List",
+          "labelAr": " قائمة المنتجات",
+          // "shortKey": "Alt+L",
+          "icon": "Package",
+          "url": "/master/product-list",
+          "svgLogo": productCreationSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "barcodeGenerator",
+          "labelEn": "Barcode Generator",
+          "labelAr": "مولد الرموز الشريطية",
+          "icon": "QrCode",
+          "url": "/master/barcode-generator",
+          "svgLogo": productCreationSvg,
+          "group": "inventory"
+        },
+
+
+        {
+          "id": "productMainGroup",
+          "labelEn": "Product Main Group",
+          "labelAr": "المجموعة الرئيسية للمنتجات",
+          "icon": "LayoutGrid",
+          "url": "/master/product-main-group",
+          "group": "inventory",
+          "svgLogo": productMainGroupSvg
+        },
+        {
+          "id": "productGroup",
+          "labelEn": "Product Group",
+          "labelAr": "مجموعة المنتجات",
+          "icon": "Layers",
+          "url": "/master/product-group",
+          "group": "inventory",
+          "svgLogo": productGroupSvg
+        },
+        {
+          "id": "unit",
+          "labelEn": "Unit",
+          "labelAr": "الوحدة",
+          "icon": "Ruler",
+          "url": "/master/unit",
+          "group": "inventory",
+          "svgLogo": unitMasterSvg
+        },
+        {
+          "id": "brand",
+          "labelEn": "Brand",
+          "labelAr": "العلامة التجارية",
+          "icon": "Tags",
+          "url": "/master/brand",
+          "group": "inventory",
+          "svgLogo": brandMasterSvg
+        },
+
+        {
+          "id": "taxMaster",
+          "labelEn": "Tax Master",
+          "labelAr": "الضرائب",
+          "icon": "Receipt",
+          "url": "/master/tax-master",
+          "group": "inventory",
+          "requiresSetting": "ActivateTax",
+          "svgLogo": taxMasterSvg
+        },
+        {
+          "id": "sales-group",
+          "labelEn": "Sales",
+          "labelAr": "المبيعات",
+          "isGroupHeader": true,
+          "icon": "DollarSign"
+        },
+        {
+          "id": "route",
+          "labelEn": "Route",
+          "labelAr": "المسار",
+          "icon": "Route",
+          "url": "/master/route",
+          "group": "sales",
+          "svgLogo": routeMasterSvg
+        },
+        {
+          "id": "area",
+          "labelEn": "Area",
+          "labelAr": "المنطقة",
+          "icon": "Map",
+          "url": "/master/area",
+          "group": "sales",
+          "svgLogo": areaMasterSvg
+        },
+        {
+          "id": "market",
+          "labelEn": "Market",
+          "labelAr": "السوق",
+          "icon": "Store",
+          "url": "/master/market",
+          "group": "sales",
+          "svgLogo": marketMasterSvg
+        },
+
+        {
+          "id": "pricingLevel",
+          "labelEn": "Pricing Level",
+          "labelAr": "مستوى التسعير",
+          "icon": "DollarSign",
+          "url": "/master/pricing-level",
+          "group": "sales",
+          "svgLogo": pricingLevelSvg
+        },
+
+      ].filter(Boolean)
+    },
+    // ╔══════════════════════════════════════════════════╗
+    // ║          SALES (Basic - Invoice & Return)         ║
+    // ╚══════════════════════════════════════════════════╝
+    {
+      "id": "sales",
+      "labelEn": "Sales",
+      "labelAr": "المبيعات",
+      "icon": "ShoppingCart",
+      "children": [
+        {
+          "id": "sales-transactions-group",
+          "labelEn": "Transactions",
+          "labelAr": "المعاملات",
+          "isGroupHeader": true,
+          "icon": "ScanLine"
+        },
+        {
+          "id": "salesQuotation",
+          "labelEn": "Sales Quotation",
+          "labelAr": "عرض سعر المبيعات",
+          "icon": "FileText",
+          "url": "/transaction/sales-quotation",
+          "svgLogo": salesQuotationSvg,
+          "group": "sales-transactions"
+        },
+        {
+          "id": "proformaInvoice",
+          "labelEn": "Proforma Invoice",
+          "labelAr": "فاتورة أولية",
+          "icon": "FileCheck",
+          "url": "/transaction/proforma-invoice",
+          "svgLogo": proformaInvoiceSvg,
+          "group": "sales-transactions"
+        },
+        {
+          "id": "deliveryNote",
+          "labelEn": "Delivery Note",
+          "labelAr": "إشعار التسليم",
+          "shortKey": "Ctrl+F10",
+          "icon": "PackageOpen",
+          "url": "/transaction/delivery-note",
+          "svgLogo": deliveryNoteSvg,
+          "group": "sales-transactions"
+        },
+        {
+          "id": "salesInvoice",
+          "labelEn": "Sales Invoice",
+          "shortKey": "Ctrl+F8",
+          "labelAr": "فاتورة مبيعات",
+          "icon": "ReceiptText",
+          "url": "/transaction/sales-invoice",
+          "svgLogo": salesInvoiceSvg,
+          "group": "sales-transactions"
+        },
+        {
+          "id": "salesReturn",
+          "labelEn": "Sales Return",
+          "labelAr": "مرتجع المبيعات",
+          "icon": "RefreshCcw",
+          "url": "/transaction/sales-return",
+          "svgLogo": salesReturnSvg,
+          "group": "sales-transactions"
+        },
+        {
+          "id": "sales-reports-group",
+          "labelEn": "Reports",
+          "labelAr": "التقارير",
+          "isGroupHeader": true,
+          "icon": "BarChart3"
+        },
+        {
+          "id": "sales-quotation-report",
+          "labelEn": "Sales Quotation Report",
+          "labelAr": "تقرير عرض سعر المبيعات",
+          "icon": "FileText",
+          "url": "/reports/sales-quotation-report",
+          "svgLogo": salesQuotationSvg,
+          "group": "sales-reports"
+        },
+        {
+          "id": "proforma-invoice-report",
+          "labelEn": "Proforma Invoice Report",
+          "labelAr": "تقرير الفاتورة المؤقتة",
+          "icon": "FileCheck",
+          "url": "/reports/proforma-invoice-detailed-report",
+          "svgLogo": proformaInvoiceDetailedReportSvg,
+          "group": "sales-reports"
+        },
+        {
+          "id": "delivery-note-report",
+          "labelEn": "Delivery Note Report",
+          "labelAr": "تقرير إشعار التسليم",
+          "icon": "PackageOpen",
+          "url": "/reports/delivery-note-report",
+          "svgLogo": deliveryNoteReportSvg,
+          "group": "sales-reports"
+        },
+        {
+          "id": "sales-report",
+          "labelEn": "Sales Report",
+          "labelAr": "تقرير المبيعات",
+          "icon": "ReceiptText",
+          "url": "/reports/sales-report",
+          "svgLogo": salesReportSvg,
+          "group": "sales-reports"
+        },
+        {
+          "id": "sales-return-report",
+          "labelEn": "Sales Return Report",
+          "labelAr": "تقرير مرتجع المبيعات",
+          "icon": "RefreshCcw",
+          "url": "/reports/sales-return-detailed-report",
+          "svgLogo": salesReturnDetailedReportSvg,
+          "group": "sales-reports"
+        }
+      ]
+    },
+    {
+      "id": "inventory",
+      "labelEn": "Inventory",
+      "labelAr": "المخزون",
+      "icon": "Boxes",
+      "children": [
+        // ── Transactions ──
+        {
+          "id": "inventory-transactions-group",
+          "labelEn": "Transactions",
+          "labelAr": "المعاملات",
+          "isGroupHeader": true,
+          "icon": "ScanLine"
+        },
+        {
+          "id": "physicalStock",
+          "labelEn": "Physical Stock",
+          "labelAr": "المخزون الفعلي",
+          "icon": "PackageCheck",
+          "url": "/transaction/physical-stock",
+          "svgLogo": physicalStockSvg,
+          "group": "inventory-transactions"
+        },
+        {
+          "id": "damageStock",
+          "labelEn": "Damage Stock",
+          "labelAr": "المخزون التالف",
+          "icon": "AlertTriangle",
+          "url": "/transaction/damage-stock",
+          "svgLogo": damageStockSvg,
+          "group": "inventory-transactions"
+        },
+        {
+          "id": "usedStock",
+          "labelEn": "Used Stock",
+          "labelAr": "المخزون المستخدم",
+          "icon": "PackageCheck",
+          "url": "/transaction/used-stock",
+          "svgLogo": usedStockSvg,
+          "group": "inventory-transactions"
+        },
+
+        // ── Reports ──
+        {
+          "id": "inventory-reports-group",
+          "labelEn": "Reports",
+          "labelAr": "التقارير",
+          "isGroupHeader": true,
+          "icon": "BarChart3"
+        },
+        {
+          "id": "physical-stock-report",
+          "labelEn": "Physical Stock Report",
+          "labelAr": "تقرير المخزون الفعلي",
+          "icon": "PackageCheck",
+          "url": "/reports/physical-stock-report",
+          "svgLogo": physicalStockReportSvg,
+          "group": "inventory-reports"
+        },
+        {
+          "id": "damage-stock-report",
+          "labelEn": "Damage Stock Report",
+          "labelAr": "تقرير المخزون التالف",
+          "icon": "AlertTriangle",
+          "url": "/reports/damage-stock-report",
+          "svgLogo": damageStockSvg,
+          "group": "inventory-reports"
+        },
+        {
+          "id": "used-stock-report",
+          "labelEn": "Used Stock Report",
+          "labelAr": "تقرير المخزون المستخدم",
+          "icon": "PackageCheck",
+          "url": "/reports/used-stock-report",
+          "svgLogo": usedStockSvg,
+          "group": "inventory-reports"
+        },
+
+      ]
+    },
+
+    // ╔══════════════════════════════════════════════════╗
+    // ║        PURCHASE (Basic - Invoice & Return)        ║
+    // ╚══════════════════════════════════════════════════╝
+    {
+      "id": "purchase",
+      "labelEn": "Purchase",
+      "labelAr": "المشتريات",
+      "icon": "ShoppingBag",
+      "children": [
+        {
+          "id": "purchase-transactions-group",
+          "labelEn": "Transactions",
+          "labelAr": "المعاملات",
+          "isGroupHeader": true,
+          "icon": "ScanLine"
+        },
+        {
+          "id": "purchaseOrder",
+          "labelEn": "Purchase Order",
+          "labelAr": "أمر شراء",
+          "icon": "BaggageClaim",
+          "url": "/transaction/purchase-order",
+          "svgLogo": purchaseOrderSvg,
+          "group": "purchase-transactions"
+        },
+        {
+          "id": "materialReceipt",
+          "labelEn": "Material Receipt",
+          "labelAr": "استلام المواد",
+          "icon": "PackageCheck",
+          "url": "/transaction/material-receipt",
+          "svgLogo": materialReceiptSvg,
+          "group": "purchase-transactions"
+        },
+        {
+          "id": "purchaseInvoice",
+          "labelEn": "Purchase Invoice",
+          "labelAr": "فاتورة الشراء",
+          "shortKey": "Ctrl+F9",
+          "icon": "Newspaper",
+          "url": "/transaction/purchase-invoice",
+          "svgLogo": purchaseInvoiceSvg,
+          "group": "purchase-transactions"
+        },
+        {
+          "id": "purchaseReturn",
+          "labelEn": "Purchase Return",
+          "labelAr": "مرتجع المشتريات",
+          "icon": "LuRefreshCcwDot",
+          "url": "/transaction/purchase-return",
+          "svgLogo": purchaseReturnSvg,
+          "group": "purchase-transactions"
+        },
+        {
+          "id": "purchase-reports-group",
+          "labelEn": "Reports",
+          "labelAr": "التقارير",
+          "isGroupHeader": true,
+          "icon": "BarChart3"
+        },
+        {
+          "id": "purchase-order-report",
+          "labelEn": "Purchase Order Report",
+          "labelAr": "تقرير أمر الشراء",
+          "icon": "BaggageClaim",
+          "url": "/reports/purchase-order-report",
+          "svgLogo": purchaseOrderReportSvg,
+          "group": "purchase-reports"
+        },
+        {
+          "id": "material-receipt-report",
+          "labelEn": "Material Receipt Report",
+          "labelAr": "تقرير استلام المواد",
+          "icon": "PackageCheck",
+          "url": "/reports/material-receipt-report",
+          "svgLogo": materialReceiptReportSvg,
+          "group": "purchase-reports"
+        },
+        {
+          "id": "purchase-invoice-report",
+          "labelEn": "Purchase Report",
+          "labelAr": "تقرير فاتورة الشراء",
+          "icon": "Newspaper",
+          "url": "/reports/purchase-report",
+          "svgLogo": purchaseReportSvg,
+          "group": "purchase-reports"
+        },
+        {
+          "id": "purchase-return-report",
+          "labelEn": "Purchase Return Report",
+          "labelAr": "تقرير مرتجع المشتريات",
+          "icon": "LuRefreshCcwDot",
+          "url": "/reports/purchase-return-report",
+          "svgLogo": purchaseReturnReportSvg,
+          "group": "purchase-reports"
+        }
+      ]
+    },
+
+    // ╔══════════════════════════════════════════════════╗
+    // ║       FINANCE (Basic - 5 Vouchers + Reports)      ║
+    // ╚══════════════════════════════════════════════════╝
+    {
+      "id": "finance",
+      "labelEn": "Finance",
+      "labelAr": "المالية",
+      "icon": "DollarSign",
+      "children": [
+        // ── Transactions ──
+        {
+          "id": "finance-transactions-group",
+          "labelEn": "Transactions",
+          "labelAr": "المعاملات",
+          "isGroupHeader": true,
+          "icon": "ScanLine"
+        },
+        {
+          "id": "recieptVoucher",
+          "labelEn": "Receipt Voucher",
+          "labelAr": "سند القبض",
+          "shortKey": "Ctrl+F6",
+          "icon": "Banknote",
+          "url": "/transaction/reciept-voucher",
+          "svgLogo": receiptVoucherSvg,
+          "group": "finance-transactions"
+        },
+        {
+          "id": "paymentVoucher",
+          "labelEn": "Payment Voucher",
+          "shortKey": "Ctrl+F5",
+          "labelAr": "سند الدفع",
+          "icon": "Wallet",
+          "url": "/transaction/payment-voucher",
+          "svgLogo": paymentVoucherSvg,
+          "group": "finance-transactions"
+        },
+        {
+          "id": "contraVoucher",
+          "labelEn": "Contra Voucher",
+          "labelAr": "قسيمة كونترا",
+          "shortKey": "Ctrl+F4",
+          "icon": "ArrowLeftRight",
+          "url": "/transaction/contra-voucher",
+          "svgLogo": contraVoucherSvg,
+          "group": "finance-transactions"
+        },
+        {
+          "id": "journalVoucher",
+          "labelEn": "Journal Voucher",
+          "labelAr": "قسيمة اليومية",
+          "shortKey": "Ctrl+F7",
+          "icon": "BookOpen",
+          "url": "/transaction/journal-voucher",
+          "svgLogo": journalVoucherSvg,
+          "group": "finance-transactions"
+        },
+        {
+          "id": "payableVoucher",
+          "labelEn": "Payable Voucher",
+          "labelAr": "قسيمة الدفع",
+          "icon": "CreditCard",
+          "url": "/transaction/payable-voucher",
+          "svgLogo": payableVoucherSvg,
+          "group": "finance-transactions"
+        },
+        {
+          "id": "receivableVoucher",
+          "labelEn": "Receivable Voucher",
+          "labelAr": "قسيمة القبض",
+          "icon": "HandCoins",
+          "url": "/transaction/receivable-voucher",
+          "svgLogo": receivableVoucherSvg,
+          "group": "finance-transactions"
+        },
+
+        // ── Reports ──
+        {
+          "id": "finance-reports-group",
+          "labelEn": "Reports",
+          "labelAr": "التقارير",
+          "isGroupHeader": true,
+          "icon": "BarChart3"
+        },
+
+        {
+          "id": "receipt-report",
+          "labelEn": "Receipt Report",
+          "labelAr": "تقرير الإيصال",
+          "icon": "Receipt",
+          "url": "/reports/receipt-report",
+          "svgLogo": receiptReportSvg,
+          "group": "finance-reports"
+        },
+        {
+          "id": "payment-report",
+          "labelEn": "Payment Report",
+          "labelAr": "تقرير الدفع",
+          "icon": "Wallet",
+          "url": "/reports/payment-report",
+          "svgLogo": paymentReportSvg,
+          "group": "finance-reports"
+        },
+        {
+          "id": "contra-report",
+          "labelEn": "Contra Report",
+          "labelAr": "تقرير كونترا",
+          "icon": "ArrowLeftRight",
+          "url": "/reports/contra-report",
+          "svgLogo": contraReportSvg,
+          "group": "finance-reports"
+        },
+        {
+          "id": "journal-report",
+          "labelEn": "Journal Report",
+          "labelAr": "مجلة",
+          "icon": "BookOpen",
+          "url": "/reports/journal-report",
+          "svgLogo": journalReportSvg,
+          "group": "finance-reports"
+        },
+        {
+          "id": "payable-voucher-report",
+          "labelEn": "Payable Voucher Report",
+          "labelAr": "تقرير سند الدفع",
+          "icon": "CreditCard",
+          "url": "/reports/payable-voucher-report",
+          "svgLogo": payableVoucherReportSvg,
+          "group": "finance-reports"
+        },
+        {
+          "id": "receivable-voucher-report",
+          "labelEn": "Receivable Voucher Report",
+          "labelAr": "تقرير سند القبض",
+          "icon": "HandCoins",
+          "url": "/reports/receivable-voucher-report",
+          "svgLogo": receivableVoucherSvg,
+          "group": "finance-reports"
+        }
+      ]
+    },
+    {
+      "id": "reports",
+      "labelEn": "Reports",
+      "labelAr": "التقارير",
+      "icon": "BarChart3",
+      "children": [
+        // ── 1. Accounts ──
+        {
+          "id": "accounts-group",
+          "labelEn": "Accounts",
+          "labelAr": "الحسابات",
+          "isGroupHeader": true,
+          "icon": "BookOpen"
+        },
+        {
+          "id": "customer-report",
+          "labelEn": "Party Balance",
+          "labelAr": "رصيد الطرف",
+          "icon": "Users",
+          "url": "/reports/customer-report",
+          "svgLogo": customerReportSvg,
+          "group": "accounts"
+        },
+        {
+          "id": "supplier-report",
+          "labelEn": "Supplier Report",
+          "labelAr": "تقرير الموردين",
+          "icon": "Truck",
+          "url": "/reports/supplier-report",
+          "svgLogo": supplierReportSvg,
+          "group": "accounts"
+        },
+        {
+          "id": "customer-statement-report",
+          "labelEn": "Customer Statement",
+          "labelAr": "كشف حساب العميل",
+          "icon": "UserSquare",
+          "url": "/reports/customer-statement-report",
+          "svgLogo": customerStatementReportSvg,
+          "group": "accounts"
+        },
+        {
+          "id": "supplier-statement-report",
+          "labelEn": "Supplier Statement",
+          "labelAr": "كشف حساب المورد",
+          "icon": "FileText",
+          "url": "/reports/supplier-statement-report",
+          "svgLogo": supplierStatementReportSvg,
+          "group": "accounts"
+        },
+        {
+          "id": "ageing-report",
+          "labelEn": "Ageing Report",
+          "labelAr": "تقرير التقادم",
+          "icon": "Clock",
+          "url": "/reports/ageing-report",
+          "svgLogo": ageingReportSvg,
+          "group": "accounts"
+        },
+        {
+          "id": "customer-address-book",
+          "labelEn": "Customer Address Book",
+          "labelAr": "دفتر عناوين العملاء",
+          "icon": "Book",
+          "url": "/reports/customer-address-book",
+          "svgLogo": customerAddressBookSvg,
+          "group": "accounts"
+        },
+        {
+          "id": "supplier-address-book",
+          "labelEn": "Supplier Address Book",
+          "labelAr": "دفتر عناوين الموردين",
+          "icon": "BookMarked",
+          "url": "/reports/supplier-address-book",
+          "svgLogo": supplierAddressBookSvg,
+          "group": "accounts"
+        },
+        {
+          "id": "bill-balance-report",
+          "labelEn": "Bill Balance Report",
+          "labelAr": "تقرير رصيد الفاتورة",
+          "icon": "FileText",
+          "url": "/reports/bill-balance-report",
+          "svgLogo": supplierAddressBookSvg,
+          "group": "accounts"
+        },
+        {
+          "id": "tax-summary-report",
+          "labelEn": "Tax Summary Report",
+          "labelAr": "تقرير ملخص الضرائب",
+          "icon": "Receipt",
+          "url": "/reports/tax-summary-report",
+          "svgLogo": taxSummaryReportSvg,
+          "requiresSetting": "ActivateTax",
+          "group": "accounts"
+        },
+        {
+          "id": "tax-detailed-report",
+          "labelEn": "Tax Detailed Report",
+          "labelAr": "تقرير الضريبة التفصيلي",
+          "icon": "FileText",
+          "url": "/reports/tax-detailed-report",
+          "svgLogo": taxDetailedReportSvg,
+          "requiresSetting": "ActivateTax",
+          "group": "accounts"
+        },
+        {
+          "id": "tax-consolidated-report",
+          "labelEn": "Tax Consolidated Report",
+          "labelAr": "تقرير الضريبة الموحد",
+          "icon": "FileText",
+          "url": "/reports/tax-consolidated-report",
+          "svgLogo": taxConsolidatedReportSvg,
+          "requiresSetting": "ActivateTax",
+          "group": "accounts"
+        },
+        {
+          "id": "costcentre-report",
+          "labelEn": "Cost Centre Report",
+          "labelAr": "تقرير مركز التكلفة",
+          "icon": "Calculator",
+          "url": "/reports/costcentre-report",
+          "svgLogo": costCentreReportSvg,
+          "group": "accounts",
+          "requiresSetting": "costCentre"
+        },
+
+
+
+        // ── 3. Sales ──
+        {
+          "id": "report-sales-group",
+          "labelEn": "Sales",
+          "labelAr": "المبيعات",
+          "isGroupHeader": true,
+          "icon": "ShoppingCart"
+        },
+        {
+          "id": "sales-day-report",
+          "labelEn": "Sales Day Report",
+          "labelAr": "تقرير مبيعات اليوم",
+          "icon": "Calendar",
+          "url": "/reports/sales-day-report",
+          "svgLogo": salesDayReportSvg,
+          "group": "report-sales"
+        },
+        {
+          "id": "sales-profit-report",
+          "labelEn": "Sales Profit Report",
+          "labelAr": "تقرير أرباح المبيعات",
+          "icon": "Calendar",
+          "url": "/reports/sales-profit-report",
+          "svgLogo": salesDayReportSvg,
+          "group": "report-sales"
+        },
+        {
+          "id": "sales-order-payment-report",
+          "labelEn": "Sales Order Payment Report",
+          "labelAr": "تقرير دفع أمر المبيعات",
+          "icon": "Calendar",
+          "url": "/reports/sales-order-payment-report",
+          "svgLogo": salesDayReportSvg,
+          "group": "report-sales"
+        },
+
+        {
+          "id": "sales-summary-report",
+          "labelEn": "Sales Summary Report",
+          "labelAr": "تقرير ملخص المبيعات",
+          "icon": "BarChart3",
+          "url": "/reports/sales-summary-report",
+          "svgLogo": salesSummaryReportSvg,
+          "group": "report-sales"
+        },
+        {
+          "id": "sales-order-vs-product-report",
+          "labelEn": "Sales Order v/s Product",
+          "labelAr": "أمر البيع مقابل المنتج",
+          "icon": "BarChart3",
+          "url": "/reports/sales-order-vs-product-report",
+          "svgLogo": salesOrderVsProductReportSvg,
+          "group": "report-sales"
+        },
+        {
+          "id": "product-wise-sales-summary-report",
+          "labelEn": "Product Wise Sales Summary",
+          "labelAr": "ملخص المبيعات حسب المنتج",
+          "icon": "Package",
+          "url": "/reports/product-wise-sales-summary-report",
+          "svgLogo": productWiseSalesSummaryReportSvg,
+          "group": "report-sales"
+        },
+
+        // ── 4. Sales v/s Salesman ──
+        {
+          "id": "sales-vs-salesman-group",
+          "labelEn": "Sales v/s Salesman",
+          "labelAr": "المبيعات مقابل مندوب المبيعات",
+          "isGroupHeader": true,
+          "icon": "UserCheck"
+        },
+        {
+          "id": "salesman-wise-sales-report",
+          "labelEn": "Salesman Wise Sales",
+          "labelAr": "المبيعات حسب مندوب المبيعات",
+          "icon": "UserCheck",
+          "url": "/reports/salesman-wise-sales-report",
+          "svgLogo": salesmanWiseSalesReportSvg,
+          "group": "sales-vs-salesman"
+        },
+        {
+          "id": "salesman-wise-sales-order-report",
+          "labelEn": "Salesman Wise Sales Order",
+          "labelAr": "أوامر البيع حسب مندوب المبيعات",
+          "icon": "ClipboardList",
+          "url": "/reports/salesman-wise-sales-order-report",
+          "svgLogo": salesmanWiseSalesOrderReportSvg,
+          "group": "sales-vs-salesman"
+        },
+        {
+          "id": "salesman-wise-bills-pending",
+          "labelEn": "Salesman Wise Bill Pending",
+          "labelAr": "الفواتير المعلقة حسب مندوب المبيعات",
+          "icon": "Clock",
+          "url": "/reports/salesman-wise-bills-pending",
+          "svgLogo": salesmanWiseBillsPendingSvg,
+          "group": "sales-vs-salesman"
+        },
+        {
+          "id": "area-wise-sales-report",
+          "labelEn": "Area Wise Sales",
+          "labelAr": "المبيعات حسب المنطقة",
+          "icon": "MapPin",
+          "url": "/reports/area-wise-sales-report",
+          "svgLogo": areaWiseSalesReportSvg,
+          "group": "sales-vs-salesman"
+        },
+        {
+          "id": "product-vs-salesman-report",
+          "labelEn": "Product v/s Salesman",
+          "labelAr": "المنتج مقابل مندوب المبيعات",
+          "icon": "Package",
+          "url": "/reports/product-vs-salesman-report",
+          "svgLogo": productVsSalesmanReportSvg,
+          "group": "sales-vs-salesman"
+        },
+        {
+          "id": "report-purchase-group",
+          "labelEn": "Purchase",
+          "labelAr": "المشتريات",
+          "isGroupHeader": true,
+          "icon": "ShoppingCart"
+        },
+        {
+          "id": "purchase-day-report",
+          "labelEn": "Purchase Day Report",
+          "labelAr": "تقرير مشتريات اليوم",
+          "icon": "Calendar",
+          "url": "/reports/purchase-day-report",
+          "svgLogo": purchaseDayReportSvg,
+          "group": "purchase-reports"
+        },
+
+        // ── 5. Inventory ──
+        {
+          "id": "inventory-group",
+          "labelEn": "Inventory",
+          "labelAr": "المخزون",
+          "isGroupHeader": true,
+          "icon": "Warehouse"
+        },
+        {
+          "id": "price-list-report",
+          "labelEn": "Price List",
+          "labelAr": "قائمة الأسعار",
+          "icon": "ListOrdered",
+          "url": "/reports/price-list-report",
+          "svgLogo": priceListReportSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "stock-value-report",
+          "labelEn": "Stock Value",
+          "labelAr": "قيمة المخزون",
+          "icon": "DollarSign",
+          "url": "/reports/stock-value-report",
+          "svgLogo": stockValueReportSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "fast-moving-report",
+          "labelEn": "Fast Moving",
+          "labelAr": "سريع الحركة",
+          "icon": "Zap",
+          "url": "/reports/fast-moving-stock",
+          "svgLogo": stockReportSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "slow-moving-report",
+          "labelEn": "Slow Moving",
+          "labelAr": "بطيء الحركة",
+          "icon": "Hourglass",
+          "url": "/reports/slow-moving-stock",
+          "svgLogo": stockReportSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "minimum-level-report",
+          "labelEn": "Minimum Level",
+          "labelAr": "الحد الأدنى",
+          "icon": "ArrowDownToLine",
+          "url": "/reports/minimum-level",
+          "svgLogo": stockReportSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "maximum-level-report",
+          "labelEn": "Maximum Level",
+          "labelAr": "الحد الأقصى",
+          "icon": "ArrowUpToLine",
+          "url": "/reports/maximum-level",
+          "svgLogo": stockReportSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "reorder-level-report",
+          "labelEn": "Reorder Level",
+          "labelAr": "مستوى إعادة الطلب",
+          "icon": "RefreshCw",
+          "url": "/reports/reorder-level",
+          "svgLogo": stockReportSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "unused-stock-report",
+          "labelEn": "Unused Stock",
+          "labelAr": "المخزون غير المستخدم",
+          "icon": "PackageX",
+          "url": "/reports/unused-stock",
+          "svgLogo": physicalStockReportSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "product-movement-report",
+          "labelEn": "Product Movement",
+          "labelAr": "حركة المنتج",
+          "icon": "ArrowLeftRight",
+          "url": "/reports/product-movement-report",
+          "svgLogo": productMovementReportSvg,
+          "group": "inventory"
+        },
+        {
+          "id": "product-wise-voucher-search",
+          "labelEn": "Product wise Voucher Search",
+          "labelAr": "بحث القسائم حسب المنتج",
+          "icon": "Search",
+          "url": "/search/product-search-voucher-wise",
+          "svgLogo": productWiseSalesSummaryReportSvg,
+          "group": "inventory"
+        }
+      ]
+    },
+    {
+      "id": "financialStatementsReports",
+      "labelEn": "Financial Statement",
+      "labelAr": "تقارير البيانات المالية",
+      "icon": "FileText",
+      "children": [
+        // ── 2. Financial Statements ──
+        {
+          "id": "financial-statements-group",
+          "labelEn": "Financial Statements",
+          "labelAr": "البيانات المالية",
+          "isGroupHeader": true,
+          "icon": "Landmark"
+        },
+        {
+          "id": "trial-balance",
+          "labelEn": "Trial Balance",
+          "labelAr": "ميزان المراجعة",
+          "icon": "ArrowLeftRight",
+          "url": "/reports/trial-balance",
+          "svgLogo": trialBalanceSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "profit-loss-analysis",
+          "labelEn": "Profit & Loss Accounts",
+          "labelAr": "حسابات الأرباح والخسائر",
+          "icon": "TrendingUp",
+          "url": "/reports/profit-loss-analysis",
+          "svgLogo": profitLossAnalysisSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "balance-sheet-report",
+          "labelEn": "Balance Sheet",
+          "labelAr": "الميزانية العمومية",
+          "icon": "BarChart3",
+          "url": "/reports/balance-sheet",
+          "svgLogo": balanceSheetReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "income-expense-report",
+          "labelEn": "Account Summery",
+          "labelAr": "الإيرادات والمصروفات",
+          "icon": "BarChart3",
+          "url": "/reports/income-expense-report",
+          "svgLogo": balanceSheetReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "income-expentiture-report",
+          "labelEn": "Income & Expenditure",
+          "labelAr": "الإيرادات والمصروفات",
+          "icon": "BarChart3",
+          "url": "/reports/income-expentiture-report",
+          "svgLogo": balanceSheetReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "cash-flow-summary",
+          "labelEn": "Cash Flow",
+          "labelAr": "التدفق النقدي",
+          "icon": "Wallet",
+          "url": "/reports/cash-flow-summary",
+          "svgLogo": fundFlowSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "fund-flow",
+          "labelEn": "Fund Flow",
+          "labelAr": "تدفق الأموال",
+          "icon": "ArrowLeftRight",
+          "url": "/reports/fund-flow",
+          "svgLogo": fundFlowSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "account-group-chart",
+          "labelEn": "Chart of Accounts",
+          "labelAr": "مخطط الحسابات",
+          "icon": "GitBranch",
+          "url": "/reports/account-group-chart",
+          "svgLogo": accountGroupChartSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "day-book-summary",
+          "labelEn": "Daybook Summary",
+          "labelAr": "ملخص دفتر اليوميات",
+          "icon": "BookOpen",
+          "url": "/reports/day-book-summary",
+          "svgLogo": dayBookSummarySvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "cash-book",
+          "labelEn": "Cash Book",
+          "labelAr": "كتاب النقدية",
+          "icon": "Wallet",
+          "url": "/reports/cash-book",
+          "svgLogo": cashBookSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "bank-book",
+          "labelEn": "Bank Book",
+          "labelAr": "كتاب البنك",
+          "icon": "Landmark",
+          "url": "/reports/bank-book",
+          "svgLogo": bankBookSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "day-book-report",
+          "labelEn": "Daybook",
+          "labelAr": "دفتر اليوميات",
+          "icon": "BookText",
+          "url": "/reports/day-book-report",
+          "svgLogo": dayBookReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "ledger-detailed-report",
+          "labelEn": "Detailed Ledger Report",
+          "labelAr": "تقرير دفتر الأستاذ المفصل",
+          "icon": "ScrollText",
+          "url": "/reports/ledger-detailed-report",
+          "svgLogo": ledgerDetailedReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "account-group-report",
+          "labelEn": "Account Group Report",
+          "labelAr": "تقرير مجموعة الحسابات",
+          "icon": "Layers",
+          "url": "/reports/account-group-report",
+          "svgLogo": accountGroupReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "ledger-report",
+          "labelEn": "Ledger Report",
+          "labelAr": "تقرير دفتر الحسابات",
+          "icon": "BookText",
+          "url": "/reports/ledger-report",
+          "svgLogo": accountLedgerReportSvg,
+          "group": "financial-statements"
+        },
+        {
+          "id": "account-ledger-report",
+          "labelEn": "Account Ledger Report",
+          "labelAr": "تقرير مجموعة الحسابات",
+          "icon": "Layers",
+          "url": "/reports/account-ledger-report",
+          "svgLogo": accountGroupReportSvg,
+          "group": "financial-statements"
+        },
+
+      ]
+    },
+    // ==================== GENERAL ====================
+    {
+      "id": "general",
+      "labelEn": "General",
+      "labelAr": "عام",
+      "icon": "Settings",
+      "children": [
+        {
+          "id": "general-group",
+          "labelEn": "General",
+          "labelAr": "عام",
+          "isGroupHeader": true,
+          "icon": "Settings"
+        },
+        {
+          "id": "generalReminder",
+          "labelEn": "Reminders",
+          "labelAr": "التذكيرات",
+          "icon": "Bell",
+          "url": "/general/reminders",
+          "group": "general",
+          "svgLogo": reminderSvg
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "labelEn": "Settings & Tools",
+      "labelAr": "الإعدادات والأدوات",
+      "icon": "Wrench",
+      "children": [
+        {
+          "id": "fin-year-group",
+          "labelEn": "Financial Year",
+          "labelAr": "السنة المالية",
+          "isGroupHeader": true,
+          "icon": "Calendar"
+        },
+        {
+          "id": "financialYearNew",
+          "labelEn": "New",
+          "labelAr": "جديد السنة المالية",
+          "icon": "CalendarPlus",
+          "group": "fin-year",
+          "svgLogo": newFinancialYearSvg
+        },
+        {
+          "id": "financialYearEdit",
+          "labelEn": "Edit",
+          "labelAr": "تعديل السنة المالية",
+          "icon": "CalendarCog",
+          "group": "fin-year",
+          "svgLogo": financialYearEditSvg
+        },
+        {
+          "id": "financialYearChange",
+          "labelEn": "Change",
+          "labelAr": "تغيير السنة المالية",
+          "icon": "CalendarCheck",
+          "url": "/master/financial-year",
+          "group": "fin-year",
+          "svgLogo": financialYearChangeSvg
+        },
+        {
+          "id": "financialYearClose",
+          "labelEn": "Close Financial Year",
+          "labelAr": "إغلاق السنة المالية",
+          "icon": "CalendarX",
+          "group": "fin-year",
+          "svgLogo": financialYearCloseSvg
+        },
+        {
+          "id": "other-settings-group",
+          "labelEn": "Others",
+          "labelAr": "أخرى",
+          "isGroupHeader": true,
+          "icon": "Settings"
+        },
+        {
+          "id": "suffixPrefixSettings",
+          "labelEn": "Suffix Prefix Settings",
+          "labelAr": "إعدادات اللاحقة والبادئة",
+          "icon": "Settings2",
+          "url": "/settings/suffix-prefix-settings",
+          "group": "other-settings",
+          "svgLogo": suffixPrefixSettingsSvg
+        },
+        {
+          id: "changeuserPassword",
+          labelEn: "Change Password",
+          labelAr: "تغيير كلمة المرور",
+          icon: "Settings",
+          url: "/settings/change-password",
+          group: "other-settings",
+          svgLogo: mainSettingsSvg,
         },
         {
           "id": "mainSettings",
@@ -1882,7 +3292,6 @@ const defaultMenuData = {
     }
   ].filter(Boolean)
 };
-
 // Function to fetch user privileges
 const fetchPrivileges = async () => {
   const userGroupId = localStorage.getItem('userRole');
@@ -1921,7 +3330,7 @@ const hasMenuAccess = (privileges, menuLabel) => {
 const filterMenuByPrivileges = (menuData, privileges) => {
   const userGroupId = localStorage.getItem('userRole');
 
-  if (Number(userGroupId) === 1) return menuData;
+  // if (Number(userGroupId) === 1) return menuData;
 
   if (!privileges || privileges.length === 0) {
     return { menuItems: [] };
@@ -1965,9 +3374,9 @@ const getFilteredMenuData = async () => {
   try {
     const userId = Number(localStorage.getItem('userId'));
 
-    if (userId === 1) {
-      return defaultMenuData;
-    }
+    // if (userId === 1) {
+    //   return defaultMenuData;
+    // }
 
     const userGroupId = localStorage.getItem("userRole");
     const response = await axiosInstance.get(`get-privileges-byId/${userGroupId}`);

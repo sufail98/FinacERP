@@ -138,95 +138,125 @@ const formatDate = (date) => {
 
 
 /**
- * Split array into pages with different row counts
+ * Split array into pages with different row counts.
+ *
+ * IMPORTANT: the single-page case (isFirst && isLast) is NOT the same as the
+ * "first page of a multi-page run" case. A single page has to fit the
+ * customer/quotation detail boxes + greeting text at the TOP, and the totals
+ * row + Amount-in-Words + footer terms/signature block at the BOTTOM, all on
+ * one sheet. Reusing firstPageRows (sized only for "more content follows")
+ * reserves too many table rows and squeezes/clips the totals section — which
+ * is exactly the bug that was cutting off the Amount In Words block.
+ * singlePageRows is a dedicated, smaller budget for this case.
  */
-const splitIntoPages = (array, firstPageRows, middlePageRows, lastPageRows) => {
+const splitIntoPages = (array, firstPageRows, middlePageRows, lastPageRows, singlePageRows) => {
     const totalItems = array.length;
-    
+
+    // Fallback keeps old behavior if a caller doesn't pass singlePageRows.
+    const effectiveSingleRows = singlePageRows ?? lastPageRows;
+
     if (totalItems === 0) {
-        return [{ items: [], isFirst: true, isLast: true, maxRows: lastPageRows }];
+        return [{ items: [], isFirst: true, isLast: true, maxRows: effectiveSingleRows }];
     }
-    
-    if (totalItems <= lastPageRows) {
-        return [{ items: array, isFirst: true, isLast: true, maxRows: lastPageRows }];
+
+    if (totalItems <= effectiveSingleRows) {
+        return [{ items: array, isFirst: true, isLast: true, maxRows: effectiveSingleRows }];
     }
-    
-    if (totalItems <= firstPageRows) {
-        return [{ items: array, isFirst: true, isLast: true, maxRows: firstPageRows }];
-    }
-    
+
     const pages = [];
     let currentIndex = 0;
-    
+
     const firstPageItems = Math.min(firstPageRows, totalItems);
-    pages.push({ 
-        items: array.slice(0, firstPageItems), 
-        isFirst: true, 
-        isLast: false, 
-        maxRows: firstPageRows 
+    pages.push({
+        items: array.slice(0, firstPageItems),
+        isFirst: true,
+        isLast: false,
+        maxRows: firstPageRows
     });
     currentIndex = firstPageItems;
-    
+
     while (currentIndex < totalItems) {
         const remainingItems = totalItems - currentIndex;
-        
+
         if (remainingItems <= lastPageRows) {
-            pages.push({ 
-                items: array.slice(currentIndex), 
-                isFirst: false, 
-                isLast: true, 
-                maxRows: lastPageRows 
+            pages.push({
+                items: array.slice(currentIndex),
+                isFirst: false,
+                isLast: true,
+                maxRows: lastPageRows
             });
             break;
         }
-        
+
         const itemsAfterThisPage = remainingItems - middlePageRows;
-        
+
         if (itemsAfterThisPage > 0 && itemsAfterThisPage <= lastPageRows) {
-            pages.push({ 
-                items: array.slice(currentIndex, currentIndex + middlePageRows), 
-                isFirst: false, 
-                isLast: false, 
-                maxRows: middlePageRows 
+            pages.push({
+                items: array.slice(currentIndex, currentIndex + middlePageRows),
+                isFirst: false,
+                isLast: false,
+                maxRows: middlePageRows
             });
             currentIndex += middlePageRows;
         } else if (itemsAfterThisPage <= 0) {
-            pages.push({ 
-                items: array.slice(currentIndex), 
-                isFirst: false, 
-                isLast: true, 
-                maxRows: lastPageRows 
+            pages.push({
+                items: array.slice(currentIndex),
+                isFirst: false,
+                isLast: true,
+                maxRows: lastPageRows
             });
             break;
         } else {
-            pages.push({ 
-                items: array.slice(currentIndex, currentIndex + middlePageRows), 
-                isFirst: false, 
-                isLast: false, 
-                maxRows: middlePageRows 
+            pages.push({
+                items: array.slice(currentIndex, currentIndex + middlePageRows),
+                isFirst: false,
+                isLast: false,
+                maxRows: middlePageRows
             });
             currentIndex += middlePageRows;
         }
     }
-    
+
     if (pages.length > 0) {
         pages[pages.length - 1].isLast = true;
         pages[pages.length - 1].maxRows = lastPageRows;
     }
-    
+
     return pages;
 };
 
 /**
  * Generate the quotation HTML
  */
+/**
+ * Extracts time from CreatedDate (e.g. "2026-07-22 23:32:02.99462")
+ * and formats as 12-hour AM/PM time.
+ */
+const formatTimeFromCreatedDate = (createdDate) => {
+    if (!createdDate) return '';
+    // CreatedDate format: "2026-07-22 23:32:02.99462"
+    const timePart = createdDate.split(' ')[1]; // "23:32:02.99462"
+    if (!timePart) return '';
+
+    const [hourStr, minuteStr] = timePart.split(':');
+    let hours = parseInt(hourStr, 10);
+    const minutes = minuteStr;
+
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 -> 12
+
+    return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+};
 export const generateQuotationHTML = (invoiceData, branchData, time, currentCurrency) => {
-    console.log(invoiceData);
     
-    
+console.log(invoiceData);
 
     const state = store.getState().settings;
     const companyData = state.generalSettings;
+      const activateRoundoff = Boolean(companyData.RoundOff)
+    const saleSettings = state.saleSettings;
+
     const companyName = branchData?.branchName || '';
     const companyCode = branchData?.branchCode || '';
     const companyVatNo = branchData?.taxNo || 300000000000003;
@@ -234,7 +264,7 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
     const headerImage = companyData.branchHeader;
     const footerImage = companyData.branchFooter;
     const decimalPart = companyData.decimalPart || 2;
-    
+
     const showCurrencyPrefix = state.generalSettings.showCurrencyprefix;
     const currencySymbol = currentCurrency ? currentCurrency.currencySymbol : '';
     const fmt = (num) =>
@@ -242,19 +272,20 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
             ? `${currencySymbol} ${Number(num).toFixed(decimalPart)}`
             : Number(num).toFixed(decimalPart);
 
-    const HEADER_HEIGHT = '160px';
-    const FOOTER_HEIGHT = '50px';
+    const HEADER_HEIGHT = '120px';
+    const FOOTER_HEIGHT = '80px';
 
     const {
         invoiceNo,
         date,
+        CreatedDate,
         customerName,
         CustomerVatNo,
         CustomerAddress,
         CustomerPhone = '',
         salesMan = '',
-        contactPerson = '',
-        contactNo = '',
+        contactperson : contactPerson ,
+       contactno : contactNo ,
         deliveredwithin = '',
         deliverysite = '',
         salesDetails = [],
@@ -269,38 +300,72 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
         DeliveryTerms = '',
         quatationvalidity = '',
         narration = '',
+        taxableAmt = 0
     } = invoiceData;
 
     // Calculate totals
     const totalQty = salesDetails.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0);
-    const totalGrossValue = salesDetails.reduce((sum, item) => sum + (parseFloat(item.grossAmount) || 0), 0);
-    const totalDiscount = salesDetails.reduce((sum, item) => sum + (parseFloat(item.discountAmount) || 0), 0);
-    const totalTaxableAmt = salesDetails.reduce((sum, item) => {
-        const gross = parseFloat(item.grossAmount) || 0;
-        const disc = parseFloat(item.discountAmount) || 0;
-        return sum + (gross - disc);
-    }, 0);
-    const totalVATAmt = salesDetails.reduce((sum, item) => sum + (parseFloat(item.taxAmount) || 0), 0);
-    const totalNetAmt = salesDetails.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+  // ← ADD: shared per-line discount calc using qty * rate as the gross basis
+const calcLineDiscount = (item) => {
+    const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    const grossAmt = qty * rate;
+    const discPercent = Number(item.discountPercentage || 0);
+    const discAmt = grossAmt * (discPercent / 100);
+    return discAmt;
+};
+
+const totalGrossValue = salesDetails.reduce((sum, item) => {
+    const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    return sum + (qty * rate);
+}, 0);
+
+const totalDiscount = salesDetails.reduce((sum, item) => sum + calcLineDiscount(item), 0);
+
+const totalTaxableAmt = salesDetails.reduce((sum, item) => {
+    const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    const grossAmt = qty * rate;
+    const disc = calcLineDiscount(item);
+    return sum + (grossAmt - disc);
+}, 0);
+  const totalVATAmt = salesDetails.reduce((sum, item) => sum + (parseFloat(item.taxAmount) || 0), 0);
+const totalNetAmt = salesDetails.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+
+// ✅ FIX — subTotal/totalAmount sometimes come back empty/0 from invoiceData while the
+// locally-summed line-item totals (totalTaxableAmt / totalNetAmt) are correct. Fall back
+// to those computed sums using the raw number, not a formatted string.
+const effectiveSubTotal = (subTotal !== undefined && subTotal !== null && Number(subTotal) !== 0)
+    ? Number(subTotal)
+    : totalTaxableAmt;
+const effectiveGrandTotal = (totalAmount !== undefined && totalAmount !== null && Number(totalAmount) !== 0)
+    ? Number(totalAmount)
+    : totalNetAmt;
 
     const vatRate = salesDetails.length > 0 && salesDetails[0].taxRate ? salesDetails[0].taxRate : 15;
 
     const formattedDate = formatDate(date);
-
-    const FIRST_PAGE_ROWS = 18;
+const formattedTime = formatTimeFromCreatedDate(CreatedDate);
+const formattedDateTime = `${formattedDate} ${formattedTime}`.trim();
+    const FIRST_PAGE_ROWS = 15;
     const MIDDLE_PAGE_ROWS = 25;
-    const LAST_PAGE_ROWS = 18;
+    const LAST_PAGE_ROWS = 10;
+    // Dedicated budget for the "everything fits on one page" case — smaller
+    // than FIRST_PAGE_ROWS because this single page must also carry the full
+    // totals row, Amount-in-Words (EN + AR), and footer terms/signature block.
+    const SINGLE_PAGE_ROWS = 10;
 
     const validProducts = salesDetails.filter(item => item.productCode);
-    
-    const productPages = splitIntoPages(validProducts, FIRST_PAGE_ROWS, MIDDLE_PAGE_ROWS, LAST_PAGE_ROWS);
+
+    const productPages = splitIntoPages(validProducts, FIRST_PAGE_ROWS, MIDDLE_PAGE_ROWS, LAST_PAGE_ROWS, SINGLE_PAGE_ROWS);
     const totalPages = productPages.length || 1;
 
     let cumulativeIndex = 0;
 
     const pagesHTML = productPages.map((pageData, pageIndex) => {
         const { items: pageProducts, isFirst: isFirstPage, isLast: isLastPage, maxRows } = pageData;
-        
+
         const pageStartIndex = cumulativeIndex;
         cumulativeIndex += pageProducts.length;
 
@@ -320,7 +385,18 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                         <div class="company-vat">VAT No: ${companyVatNo}</div>
                     </div>
                 `}
-
+    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', { 
+                day: '2-digit', 
+                month: 'short', 
+                year: 'numeric' 
+            })} ${new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            })}</div>
+        </div>
                 <div class="content-wrapper ${isFirstPage ? 'first-page' : ''} ${isLastPage ? 'last-page' : ''} ${!isFirstPage && !isLastPage ? 'middle-page' : ''}">
                     <div class="content-main">
                         <div class="heading-section">
@@ -342,7 +418,7 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                                 </div>
                                 <div class="detail-row">
                                     <div class="detail-label">Address</div>
-                                    <div class="detail-value">:  ${invoiceData?.customerAddress || 
+                                    <div class="detail-value">:  ${CustomerAddress ||
             [
                 invoiceData?.customerData?.StreetName,
                 invoiceData?.customerData?.BuildingNo,
@@ -365,7 +441,7 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                                 </div>
                                 <div class="detail-row">
                                     <div class="detail-label">Date</div>
-                                    <div class="detail-value">: ${formattedDate}</div>
+                                   <div class="detail-value">: ${formattedDateTime}</div>
                                 </div>
                                 <div class="detail-row">
                                     <div class="detail-label">Sales Man</div>
@@ -401,7 +477,7 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                                     <th class="col-unitprice">Unit Price</th>
                                     <th class="col-gross">Gross Value</th>
                                     <th class="col-disc">Disc</th>
-                                    <th class="col-taxable">Taxable Amt</th>
+                                    <th class="col-taxable">Net Amt</th>
                                     <th class="col-vatperc">VAT %</th>
                                     <th class="col-vatamt">VAT Amt</th>
                                     <th class="col-total">Total Amt</th>
@@ -410,22 +486,29 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                             <tbody>
                                 ${pageProducts.map((item, index) => {
                                     const globalIndex = pageStartIndex + index;
-                                    const grossValue = parseFloat(item.grossAmount) || 0;
-                                    const discAmt = parseFloat(item.discountAmount) || 0;
-                                    const taxableAmt = grossValue - discAmt;
+
+                                    const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    const grossValue = qty * rate;
+    const discAmt = calcLineDiscount(item);
+    const taxableAmt = grossValue - discAmt;
+
                                     return `
                                         <tr class="product-row">
-                                            <td class="text-center">${globalIndex + 1}</td>
-                                            <td class="text-left">${item.productName || ''}</td>
-                                            <td class="text-center">${item.qty || 0}</td>
-                                            <td class="text-right">${parseFloat(item.rate || 0).toFixed(decimalPart)}</td>
-                                            <td class="text-right">${grossValue.toFixed(decimalPart)}</td>
-                                            <td class="text-right">${discAmt.toFixed(decimalPart)}</td>
-                                            <td class="text-right">${taxableAmt.toFixed(decimalPart)}</td>
-                                            <td class="text-center">${item.taxRate || 0}%</td>
-                                            <td class="text-right">${parseFloat(item.taxAmount || 0).toFixed(decimalPart)}</td>
-                                            <td class="text-right">${parseFloat(item.amount || 0).toFixed(decimalPart)}</td>
-                                        </tr>
+            <td class="text-center">${globalIndex + 1}</td>
+            <td class="text-left col-product-cell">
+    <div class="product-name-line">${item.productName || ''}${item.productNameArb ? ' ' + item.productNameArb : ''}</div>
+    ${item.productDescription ? `<div class="product-desc-line">${item.productDescription}</div>` : ''}
+</td>
+            <td class="text-center">${item.qty || 0}</td>
+            <td class="text-right">${rate.toFixed(decimalPart)}</td>
+            <td class="text-right">${grossValue.toFixed(decimalPart)}</td>
+            <td class="text-right">${discAmt.toFixed(decimalPart)}</td>
+            <td class="text-right">${taxableAmt.toFixed(decimalPart)}</td>
+            <td class="text-center">${item.taxRate || 0}%</td>
+            <td class="text-right">${parseFloat(item.taxAmount || 0).toFixed(decimalPart)}</td>
+            <td class="text-right">${parseFloat(item.amount || 0).toFixed(decimalPart)}</td>
+        </tr>
                                     `;
                                 }).join('')}
 
@@ -470,40 +553,56 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                                 <tr class="summary-row">
                                     <td colspan="5" class="summary-left-cell">
                                         <div class="words-label">Amount In Words المبلغ بالكلمات :-</div>
-                                        <div class="words-english">${amountToWordsEnglish(totalAmount || 0)}</div>
-                                        <div class="words-arabic">${amountToWordsArabic(totalAmount || 0)}</div>
+                                    <div class="words-english">${amountToWordsEnglish(effectiveGrandTotal)}</div>
+<div class="words-arabic">${amountToWordsArabic(effectiveGrandTotal)}</div>
                                     </td>
                                     <td colspan="5" class="summary-right-cell">
-                                        <div class="summary-item">
-                                            <span class="summary-label">Sub Total</span>
-                                            <span class="summary-label-ar">المجموع الفرعي</span>
-                                            <span class="summary-value">${fmt(subTotal || 0)}</span>
-                                        </div>
-                                        <div class="summary-item">
+                                  <div class="summary-item">
+    <span class="summary-label">Sub Total</span>
+    <span class="summary-label-ar">المجموع الفرعي</span>
+    <span class="summary-value">${fmt(taxableAmt)}</span>
+</div>  
+                                ${Number(othercharge) !== 0 ? `
+                                    <div class="summary-item">
                                             <span class="summary-label">Other Charge</span>
                                             <span class="summary-label-ar">رسوم أخرى</span>
                                             <span class="summary-value">${fmt(othercharge || 0)}</span>
-                                        </div>
-                                        <div class="summary-item">
+                                        </div> ` : ""}
+
+                                       ${((saleSettings?.showBillDiscountAmount || saleSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0)?`
+                                <div class="summary-item">
                                             <span class="summary-label">Discount Amount</span>
                                             <span class="summary-label-ar">مبلغ الخصم</span>
                                             <span class="summary-value">${fmt(billDiscount || 0)}</span>
+                                        </div>` : ""}
+                                        
+                                        <div class="summary-item">
+                                            <span class="summary-label">Taxable Amount</span>
+                                              <span class="summary-label-ar">للضريبة المبلغ الخاضع </span>
+                                            <span class="summary-value" >${fmt(
+                                                Number(taxableAmt || 0) -
+                                                Number(invoiceData?.billDiscount || 0) +
+                                                Number(othercharge || 0)
+                                            )}</span>
                                         </div>
                                         <div class="summary-item">
                                             <span class="summary-label">VAT @${vatRate}%</span>
                                             <span class="summary-label-ar">ضريبة القيمة المضافة</span>
                                             <span class="summary-value">${fmt(totalTax || 0)}</span>
                                         </div>
-                                        <div class="summary-item">
+                                        
+                                        ${activateRoundoff && Number(roundOff) !== 0 ? `
+                                            <div class="summary-item">
                                             <span class="summary-label">Round Off</span>
                                             <span class="summary-label-ar">التقريب</span>
                                             <span class="summary-value">${fmt(roundOff || 0)}</span>
-                                        </div>
-                                        <div class="summary-item grand-total-item">
+                                        </div>` : ""}
+                                        
+                                      <div class="summary-item grand-total-item">
                                             <span class="summary-label grand-total-label">Grand Total</span>
                                             <span class="summary-label-ar grand-total-label">المجموع الإجمالي</span>
-                                            <span class="summary-value grand-total-value">${fmt(totalAmount || 0)}</span>
-                                        </div>
+                                            <span class="summary-value grand-total-value">${fmt(effectiveGrandTotal)}</span>
+                                     </div>
                                     </td>
                                 </tr>
                             </tfoot>
@@ -511,6 +610,7 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                         </table>
 
                         ${isLastPage ? `
+                           
                         <div class="footer-terms">
                             <div class="footer-left">
                                 <div class="term-item">
@@ -585,8 +685,8 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                     --footer-height: ${FOOTER_HEIGHT};
                     --content-padding-top: 10px;
                     --content-padding-bottom: 10px;
-                    --content-padding-left: 15px;
-                    --content-padding-right: 15px;
+                    --content-padding-left: 40px;
+                    --content-padding-right: 40px;
                     --page-width: 210mm;
                     --page-height: 297mm;
                     --row-height: 22px;
@@ -596,6 +696,46 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                     size: A4; 
                     margin: 0; 
                 }
+                    .print-timestamp {
+                    position: absolute;
+                    bottom: 15mm;
+                    right: 10mm;
+                    writing-mode: vertical-rl;
+                    text-orientation: mixed;
+                    transform: rotate(180deg);
+                    font-size: 8px;
+                    color: black;
+                    z-index: 10;
+                    display: flex;
+                    gap: 3px;
+                    opacity: 0.8;
+                    }
+
+                        .timestamp-label {
+                            font-weight: bold;
+                            color: #444;
+                        }
+
+                        .timestamp-value {
+                            font-weight: normal;
+                            white-space: nowrap;
+                        }
+
+                        @media print {
+                            body { background: white; }
+                            .page {
+                                box-shadow: none;
+                                margin: 0;
+                                width: 210mm;
+                                height: 297mm;
+                            }
+                            
+                            /* Ensure timestamp prints */
+                            .print-timestamp {
+                                -webkit-print-color-adjust: exact;
+                                print-color-adjust: exact;
+                            }
+                        }
                 * { 
                     margin: 0; 
                     padding: 0; 
@@ -618,7 +758,6 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                     position: relative;
                     margin: 0 auto;
                     page-break-after: always;
-                    // overflow: hidden;
                 }
                 .page:last-child { 
                     margin-bottom: 0; 
@@ -798,30 +937,44 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                     vertical-align: middle;
                 }
 
-                .col-slno { width: 4%; }
-                .col-product { width: 24%; }
-                .col-qty { width: 6%; }
-                .col-unitprice { width: 10%; }
-                .col-gross { width: 10%; }
-                .col-disc { width: 8%; }
-                .col-taxable { width: 10%; }
-                .col-vatperc { width: 6%; }
-                .col-vatamt { width: 10%; }
-                .col-total { width: 12%; }
+               .col-slno { width: 4%; }
+.col-product { width: 26%; }
+.col-qty { width: 9%; }
+.col-unitprice { width: 9%; }
+.col-gross { width: 9%; }
+.col-disc { width: 8%; }
+.col-taxable { width: 10%; }
+.col-vatperc { width: 6%; }
+.col-vatamt { width: 10%; }
+.col-total { width: 12%; }
+.col-product-cell {
+    text-align: left;
+    vertical-align: middle;
+}
+.product-name-line {
+    font-weight: 600;
+    font-size: 12px;
+}
+.product-desc-line {
+    font-size: 10px;
+    color: #555;
+    margin-top: 1px;
+    
+}
 
                 .text-center { text-align: center; }
                 .text-left { text-align: left; }
                 .text-right { text-align: right; }
 
-              .product-row td {
-    height: var(--row-height);
-    border-bottom: 1px solid #333;  /* ← ADD THIS LINE */
-}
+                .product-row td {
+                    height: var(--row-height);
+                    border-bottom: 1px solid #333;
+                }
 
-.empty-row td { 
-    height: var(--row-height);
-    border-bottom: none;
-}
+                .empty-row td { 
+                    height: var(--row-height);
+                    border-bottom: none;
+                }
 
                 .continuation-row { 
                     background: #fff8f0; 
@@ -845,9 +998,11 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                     border: 1px solid #333;
                     padding: 6px 8px;
                     vertical-align: top;
+                    height: auto;
                 }
                 .summary-left-cell {
                     width: 50%;
+                    overflow: visible;
                 }
                 .summary-right-cell {
                     width: 50%;
@@ -859,14 +1014,18 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                 }
                 .words-english {
                     margin-bottom: 3px;
-                    font-size: 9px;
-                    line-height: 1.2;
+                    font-size: 12px;
+                    line-height: 1.3;
+                    white-space: normal;
+                    word-wrap: break-word;
                 }
                 .words-arabic {
                     direction: rtl;
                     text-align: right;
-                    font-size: 9px;
-                    line-height: 1.2;
+                    font-size: 12px;
+                    line-height: 1.3;
+                    white-space: normal;
+                    word-wrap: break-word;
                 }
 
                 .summary-item {
@@ -883,8 +1042,7 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                     text-align: right;
                     direction: rtl;
                     margin-right: 6px;
-                    font-size: 10px;
-                    color: #555;
+                    font-size: 12px;
                 }
                 .summary-value {
                     min-width: 60px;
@@ -906,7 +1064,15 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                     font-weight: 900;
                     color: #000;
                 }
-
+   .bank-details { border: 1px solid black;border-top:none !important; }
+                .section-title {
+                    background: #d0d0d0;
+                    padding: 4px 8px;
+                    font-weight: bold;
+                    border-bottom: 1px solid black;
+                    font-size: 10px;
+                }
+         
                 .footer-terms {
                     display: flex;
                     gap: 15px;
@@ -922,10 +1088,11 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
                     flex: 1;
                     display: flex;
                     flex-direction: column;
+                    font-size:12px;
                 }
 
                 .term-item {
-                    font-size: 9px;
+                    font-size: 12px;
                     margin-bottom: 3px;
                 }
                 .term-label {
@@ -941,11 +1108,11 @@ export const generateQuotationHTML = (invoiceData, branchData, time, currentCurr
 
                 .confirm-title {
                     font-weight: bold;
-                    font-size: 10px;
+                    font-size: 12px;
                     margin-bottom: 8px;
                 }
                 .confirm-item {
-                    font-size: 9px;
+                    font-size: 12px;
                     margin-bottom: 8px;
                 }
                 .confirm-label {
@@ -990,7 +1157,7 @@ export const salesQuotationPrintOne = async (invoiceData, branchData, time, curr
             const result = await printSilent(invoiceHTML, savedPrinter, 'a4');
 
             if (result.success) {
-                console.log('✅ [QUOTATION] Printed successfully!');
+                console.success('✅ [QUOTATION] Printed successfully!');
             } else {
                 console.error('❌ [QUOTATION] Print failed:', result.error);
             }
@@ -1267,18 +1434,18 @@ const fallbackPDFGeneration = async (htmlContent, filename) => {
                 setTimeout(() => {
                     try {
                         iframe.contentWindow.print();
-                        
+
                         // Remove iframe after print dialog closes
                         setTimeout(() => {
                             if (iframe.parentNode) {
                                 document.body.removeChild(iframe);
                             }
                         }, 1000);
-                        
-                        resolve({ 
-                            success: true, 
+
+                        resolve({
+                            success: true,
                             message: 'Print dialog opened. Select "Save as PDF" to download.',
-                            filename 
+                            filename
                         });
                     } catch (e) {
                         if (iframe.parentNode) {
@@ -1306,7 +1473,7 @@ export const getQuotationHTML = (invoiceData, branchData) => {
  */
 export const previewQuotation = (invoiceData, branchData, time, currentCurrency) => {
     const invoiceHTML = generateQuotationHTML(invoiceData, branchData, time, currentCurrency);
-    
+
     const previewWindow = window.open('', '_blank');
     if (previewWindow) {
         previewWindow.document.write(invoiceHTML);

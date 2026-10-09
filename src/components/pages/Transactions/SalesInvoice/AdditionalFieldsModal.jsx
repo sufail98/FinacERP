@@ -1,5 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
 const AdditionalFieldsModal = ({
   open,
@@ -19,9 +20,14 @@ const AdditionalFieldsModal = ({
   SearchableDropdown,
   DateInput,
   AddNewBtn,
-  Plus
+  Plus,
+  editMode = false,
 }) => {
+  const { hasAccess: hasTransactionBatchAccess } = usePrivileges("Transaction Batch");
+  const { hasAccess: hasEmployeeAccess, } = usePrivileges("Employee");
+
   if (!open) return null;
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center z-99999999999999999">
@@ -54,40 +60,43 @@ const AdditionalFieldsModal = ({
         {/* Content */}
         <div className="p-2 space-y-1">
           {/* Sales Person Section */}
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-              Sales Information
-            </h3>
+          {hasEmployeeAccess && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                Sales Information
+              </h3>
 
-            <div className="flex gap-1 items-end">
-              <div className="flex-1">
-                <SearchableDropdown
-                  name="employeeId"
-                  label={t?.('salesInvoice.form.label.formHeaderSection.salesMan') || 'Sales Person'}
-                  options={employees?.map((data) => ({
-                    value: data.employeeId,
-                    label: data.employeeName,
-                  }))}
-                  value={formData.employeeId}
-                  onChange={(value) => handleDropdownChange('employeeId', value)}
-                  placeholder="Select sales person..."
-                  searchPlaceholder="Search sales person..."
-                  clearable={true}
-                  className="w-full"
-                  loading={loading?.employees}
-                />
-              </div>
-              <div className="flex-shrink-0">
-                <AddNewBtn
-                  icon={Plus}
-                  onClick={() => {
-                    setEmployeeModalOpen(true);
-                    onClose();
-                  }}
-                />
+              <div className="flex gap-1 items-end">
+                <div className="flex-1">
+                  <SearchableDropdown
+                    name="employeeId"
+                    label={t?.('salesInvoice.form.label.formHeaderSection.salesMan') || 'Sales Person'}
+                    options={employees?.map((data) => ({
+                      value: data.employeeId,
+                      label: data.employeeName,
+                    }))}
+                    value={formData.employeeId}
+                    onChange={(value) => handleDropdownChange('employeeId', value)}
+                    placeholder="Select sales person..."
+                    searchPlaceholder="Search sales person..."
+                    clearable={true}
+                    className="w-full"
+                    loading={loading?.employees}
+                    readOnly={editMode}
+                  />
+                </div>
+                <div className="flex-shrink-0">
+                  <AddNewBtn
+                    icon={Plus}
+                    onClick={() => {
+                      setEmployeeModalOpen(true);
+                      onClose();
+                    }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Reference & Order Details */}
           <div className="space-y-4">
@@ -111,17 +120,19 @@ const AdditionalFieldsModal = ({
                   clearable={true}
                   className="w-full"
                   loading={loading?.costCenters}
+                  readOnly={editMode}
                 />
               )}
 
               <TextInput
                 name="RefNo"
                 label={t?.('salesInvoice.form.label.formHeaderSection.RefNo') || 'Reference No'}
-                type="number"
+                type="text"
                 value={formData.RefNo}
                 onChange={handleInputChange}
                 className="w-full"
                 placeholder="Enter reference number..."
+                readOnly={editMode}
               />
 
               <DateInput
@@ -131,22 +142,26 @@ const AdditionalFieldsModal = ({
                 name="refDate"
                 onChange={handleInputChange}
                 className="w-full"
+                readOnly={editMode}
               />
+              {hasTransactionBatchAccess && (
 
-              <SearchableDropdown
-                name="BatchId"
-                label={t?.('salesInvoice.form.label.formHeaderSection.BatchId') || 'Batch'}
-                options={batches.map(batch => ({
-                  value: batch.batchid,
-                  label: batch.batchname
-                }))}
-                value={formData.BatchId}
-                onChange={(value) => handleDropdownChange('BatchId', value)}
-                placeholder="Select batch..."
-                searchPlaceholder="Search batch..."
-                clearable={true}
-                className="w-full"
-              />
+                <SearchableDropdown
+                  name="BatchId"
+                  label={t?.('salesInvoice.form.label.formHeaderSection.BatchId') || 'Batch'}
+                  options={batches.map(batch => ({
+                    value: batch.batchid,
+                    label: batch.batchname
+                  }))}
+                  value={formData.BatchId}
+                  onChange={(value) => handleDropdownChange('BatchId', value)}
+                  placeholder="Select batch..."
+                  searchPlaceholder="Search batch..."
+                  clearable={true}
+                  className="w-full"
+                  readOnly={editMode}
+                />
+              )}
 
 
               <TextInput
@@ -156,6 +171,7 @@ const AdditionalFieldsModal = ({
                 onChange={handleInputChange}
                 placeholder="Enter order reference..."
                 className="w-full"
+                readOnly={editMode}
               />
 
               <DateInput
@@ -165,6 +181,7 @@ const AdditionalFieldsModal = ({
                 name="orderRefDate"
                 onChange={handleInputChange}
                 className="w-full"
+                readOnly={editMode}
               />
             </div>
           </div>
@@ -190,6 +207,7 @@ const AdditionalFieldsModal = ({
                 clearable
                 className="w-full"
                 loading={loading?.pricingLevel}
+                readOnly={editMode}
               />
 
               <TextInput
@@ -200,6 +218,7 @@ const AdditionalFieldsModal = ({
                 onChange={handleInputChange}
                 placeholder="Enter credit period..."
                 className="w-full"
+                readOnly={editMode}
               />
 
               <DateInput
@@ -209,6 +228,7 @@ const AdditionalFieldsModal = ({
                 name="dueDate"
                 onChange={handleInputChange}
                 className="w-full"
+                readOnly={editMode}
               />
 
               <DateInput
@@ -218,6 +238,7 @@ const AdditionalFieldsModal = ({
                 name="deliveryDate"
                 onChange={handleInputChange}
                 className="w-full"
+                readOnly={editMode}
               />
             </div>
           </div>

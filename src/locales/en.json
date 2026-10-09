@@ -1,12 +1,21 @@
 {
   "loginHeading": "Finac Login",
+  "Printing": "Preparing Print...",
+  "printingDesc": "Please wait while we prepare your invoice for printing...",
   "loginDescription": "Enter your credentials below to login to your account.",
   "loginBtn": "Login",
   "FromDate": "From Date",
+  "ConfirmConvertTitle": "Confirm Convert",
+  "ConfirmConvertToProformaText": "This will create a new Proforma Invoice from this quotation. Do you want to proceed?",
+  "ConfirmConvertToOrderText": "This will create a new Sales Order from this quotation. Do you want to proceed?",
+  "ConfirmConvertToDeliveryNoteText": "This will create a new Delivery Note from this quotation. Do you want to proceed?",
+  "ConfirmConvertToSaleText": "This will create a new Sales Invoice from this quotation. Do you want to proceed?",
+  "YesConvert": "Yes, Convert",
   "ToDate": "To Date",
   "slno": "Customer Code",
   "logoutBtn": "Logout",
-  "printAsPdfTitle":"Print as PDF",
+  "resetBtn": "Reset",
+  "printAsPdfTitle": "Print as PDF",
   "username": "Username",
   "password": "Password",
   "rememberMe": "Remember Me",
@@ -14,6 +23,8 @@
   "hidePassword": "Hide Password",
   "listBtnTitle": "Go to List",
   "searchBarPlaceholder": "Search Menus...",
+  "ConfirmClearTitle":"Confirm Clear",
+  "ConfirmClearText":"Are you sure you want to clear this record?",
   "notfound": "Data not found",
   "approveBtn": "Approve",
   "ConfirmSaveTitle": "Confirm Save",
@@ -22,6 +33,9 @@
   "ConfirmSaveText": "Are you sure you want to save this record?",
   "ConfirmUpdateText": "Are you sure you want to update this record?",
   "ConfirmCloseText": "Any unsaved changes will be lost.",
+  "ConfirmPrintTitle": "Confirm Print",
+  "ConfirmPrintText": "Are you sure you want to print this invoice?",
+  "YesPrint": "Yes Print",
   "YesSave": "Yes, Save",
   "YesUpdate": "Yes, Update",
   "YesClose": "Yes, close",
@@ -49,7 +63,7 @@
   "code": "Code",
   "cancelBtn": "Cancel",
   "deleteBtn": "Delete",
-  "createNewBtn": "Create New",
+  "createNewBtn": "New",
   "search": "Search...",
   "noImage": "No Image",
   "deleteSuccess": "Deleted Successfully",
@@ -76,7 +90,7 @@
   "refreshSuccess": "Data refreshed successfully",
   "saveError": "Error saving record",
   "okBtn": "Ok",
-  "navbar":{
+  "navbar": {
     "refresh": "Refresh"
   },
   "AddNewLedgerModal": {
@@ -173,10 +187,10 @@
     }
   },
   "common": {
-    "addAddLedger":"Create Ledger",
-    "addAddCustomer":"Create New Customer",
-    "addAddSupplier":"Create New Supplier",
-    "editLedger":"Edit Ledger",
+    "addAddLedger": "Create Ledger",
+    "addAddCustomer": "Create New Customer",
+    "addAddSupplier": "Create New Supplier",
+    "editLedger": "Edit Ledger",
     "fromDate": "From Date",
     "toDate": "To Date",
     "filter": "Show",
@@ -189,8 +203,8 @@
     "records": "Records",
     "yesUpdate": "Yes, Update it!",
     "barcodePrinter": "Barcode Printer",
+    "noData":"No Data",
     "noBarcodePrinterConfigured": "No barcode printer configured. Please set one in Printer Settings."
-    
   },
   "logout": {
     "title": "Do You Want to Logout?",
@@ -267,7 +281,7 @@
     }
   },
   "branches": {
-    "title": "Branches",
+    "title": "Branch",
     "breadcrumb": {
       "dashboard": "Dashboard",
       "branch": "Branch",
@@ -887,7 +901,7 @@
       "success": "Account Ledger deleted successfully"
     },
     "form": {
-      "nameArbPlaceholder":"Enter Arabic Name",
+      "nameArbPlaceholder": "Enter Arabic Name",
       "branches": "Branches",
       "branch": "Branch",
       "title": "Add Account Ledger",
@@ -982,7 +996,7 @@
       "contact": "Contact",
       "vatNumber": "VAT Number",
       "crNumber": "CR Number",
-      "tinNumber":"Vat No"
+      "tinNumber": "Vat No"
     },
     "form": {
       "breadcrumb": {
@@ -1019,6 +1033,7 @@
       "StreetNamePlaceholder": "Enter Street Name",
       "supplierOption": "Supplier",
       "customerandsupplieroption": "Customer & Supplier",
+      "other": "Other",
       "group": "Group",
       "groupPlaceholder": "Select group",
       "tradeReceivables": "Trade Receivables",
@@ -1283,7 +1298,7 @@
       "purchaseInvoice": "Purchase Invoice",
       "purchaseReturn": "Purchase Return",
       "materialReceipt": "Material Receipt",
-      "deliveryNote":"Delivery Note"
+      "deliveryNote": "Delivery Note"
     },
     "modal": {
       "titleCreate": "Create Transaction Batch",
@@ -1310,6 +1325,12 @@
     }
   },
   "product": {
+    "duplicate": {
+      "title": "Item Already Exists",
+      "load": "Load the Item",
+      "ok": "Ok",
+      "code": "Code"
+    },
     "list": {
       "ExportLabel": "Export Products",
       "breadcrumb": {
@@ -1749,30 +1770,31 @@
       "printBtn": "Print"
     },
     "form": {
-      "productPurchaseHistoryModal":{
-        "title":"Product Purchase History",
-        "amount":"Amount"
+      "productPurchaseHistoryModal": {
+        "title": "Product Purchase History",
+        "amount": "Amount"
       },
       "additionalFields": {
         "title": "Additional Fields"
       },
       "label": {
         "formHeaderSection": {
+          "quickCustomerSearch":"Customer Quick Search",
           "invoiceNo": "Invoice No",
-          "QuotationNo":"Quotation No",
-          "proformaNo":"Proforma No",
-          "OrderNo":"Order No",
-          "deliveryNotNo":"Delivery Not No",
+          "QuotationNo": "Quotation No",
+          "proformaNo": "Proforma No",
+          "OrderNo": "Order No",
+          "deliveryNotNo": "Delivery Not No",
           "orderNo": "Order No",
-          "taxtype":"Tax Type",
-          "InvoiceNoForReturn":"Invoice no for return",
+          "taxtype": "Tax Type",
+          "InvoiceNoForReturn": "Invoice no for return",
           "ReturnNo": "Return No",
           "date": "Date",
           "salesMan": "Sales Man",
           "costCentreId": "Cost Centre",
           "RefNo": "Reference Number",
           "refDate": "Reference Date",
-          "BatchId": "Batch",
+          "BatchId": "Transaction Batch",
           "orderRefNo": "LPO Number",
           "orderRefDate": "LPO Date",
           "pricingLevelId": "Pricing Level",
@@ -1828,7 +1850,9 @@
         "barcodePlaceholder": "Enter Barcode",
         "columns": {
           "SN": "SN",
-          "bom":"Bom",
+          "bom": "Bom",
+          "origin": "Origin",
+          "weight": "Weight",
           "barcode": "Barcode",
           "ProdName": "Product Name",
           "qty": "Qty",
@@ -1845,8 +1869,8 @@
           "taxAmt": "Tax Amt",
           "grossAmount": "Gross Amt",
           "receivedQuantity": "Received Qty",
-          "beforeTax":"Rate",
-          "discWithTax":"Disc W/Tax"
+          "beforeTax": "Rate",
+          "discWithTax": "Disc W/Tax"
         },
         "prodDetailsLabels": {
           "productCode": "Product Code",
@@ -1873,7 +1897,6 @@
           "additionCost": "Addition Cost",
           "otherDetails": "Other Details"
         },
-       
         "otherChargeLedger": {
           "title": "Select Other Charge Ledger",
           "searchPlaceholder": "Search Ledger",
@@ -1886,7 +1909,6 @@
           "bankAmtLabel": "Bank Amount",
           "cashAmtLabel": "Cash Amount",
           "balanceLabel": "Balance",
-          
           "remark": "Remark"
         },
         "productHistory": {
@@ -1894,7 +1916,7 @@
           "loading": "Loading...",
           "slNo": "Sl No",
           "date": "Date",
-          "time":"Time",
+          "time": "Time",
           "billNo": "Bill No",
           "customer": "Party",
           "qty": "Qty",
@@ -1955,7 +1977,9 @@
         "cashParty": "Cash Party",
         "customerName": "Customer Name",
         "totalAmt": "Total Amount",
-        "partyName":"Party Name"
+        "partyName": "Party Name",
+        "CustomerPhone": "Phone",
+        "paymentMode": "Payment Mode"
       }
     },
     "alert": {
@@ -1966,12 +1990,11 @@
       "invalidSalesRatetext": "Please enter a valid sales rate greater than 0",
       "cashAmountRequired": "Cash amount is required when cash payment mode is selected",
       "bankAmountRequired": "Bank/Card amount is required when card payment mode is selected",
-
-      "duplicateProduct":{
-          "title":"Product Already Selected",
-          "text":"This product is already in the invoice. What would you like to do?",
-          "addQty":"Add to Quantity",
-          "addNew":"Add New Row"
+      "duplicateProduct": {
+        "title": "Product Already Selected",
+        "text": "This product is already in the invoice. What would you like to do?",
+        "addQty": "Add to Quantity",
+        "addNew": "Add New Row"
       },
       "creditLimit": {
         "warnTitle": "Credit Limit Exceeded",
@@ -2018,22 +2041,22 @@
       "title": "Receipt Voucher"
     },
     "againstModal": {
-  "title": "Bill-by-Bill Against",
-  "noData": "No pending bills found.",
-  "total": "Total",
-  "confirm": "Confirm",
-  "addRow":"Add Row",
-  "columns": {
-    "type": "Type",
-    "voucherType": "Voucher Type",
-    "voucherNo": "Voucher No",
-    "voucherDate": "Date",
-    "billAmount": "Bill Amount",
-    "amountToPay": "Amount to Pay",
-    "currency": "Currency",
-    "amount": "Amount"
-  }
-},
+      "title": "Bill-by-Bill Against",
+      "noData": "No pending bills found.",
+      "total": "Total",
+      "confirm": "Confirm",
+      "addRow": "Add Row",
+      "columns": {
+        "type": "Type",
+        "voucherType": "Voucher Type",
+        "voucherNo": "Voucher No",
+        "voucherDate": "Date",
+        "billAmount": "Bill Amount",
+        "amountToPay": "Amount to Pay",
+        "currency": "Currency",
+        "amount": "Amount"
+      }
+    },
     "form": {
       "breadcrumb": {
         "parent": "Receipt Voucher",
@@ -2064,7 +2087,9 @@
         "chequeDate": "Select Cheque Date",
         "narration": "Enter Narration",
         "printType": "Select Print Type",
-        "currency": "Currency"
+        "currency": "Currency",
+        "customerLedger": "Customer Ledger",
+        "supplierLedger": "Supplier Ledger"
       },
       "table": {
         "columns": {
@@ -2216,7 +2241,9 @@
       "messages": {
         "selectLedgerInAllRows": "Please select ledger in all rows",
         "cannotDeleteLastRow": "Cannot delete the last row",
-        "negativeCashWarnTitle": "Negative Cash Balance Warning"
+        "negativeCashWarnTitle": "Negative Cash Balance Warning",
+        "negativeCashBlockTitle": "Transaction Blocked",
+        "lowBalanceCashWarnTitle": "Low Cash Balance Warning"
       }
     },
     "list": {
@@ -2312,7 +2339,7 @@
           "costCentreId": "Cost Centre",
           "RefNo": "Ref No",
           "refDate": "Ref Date",
-          "BatchId": "Batch",
+          "BatchId": "Transaction Batch",
           "orderRefNo": "Order Ref No",
           "orderRefDate": "Order Ref Date",
           "pricingLevelId": "Pricing Level",
@@ -2935,6 +2962,18 @@
       "title": "Sales Quotation",
       "editTitle": "Edit Sales Quotation"
     },
+     "history":{
+      "title":"Quotation history",
+      "slNo":"Sl No",
+      "date":"Date",
+      "billNo":"Bill No",
+      "time":"Time",
+      "customer":"Party",
+      "qty":"Qty",
+      "rate":"Rate",
+      "unit":"Unit",
+      "noData":"No history found"
+    },
     "form": {
       "footerSection": {
         "label": {
@@ -2990,36 +3029,36 @@
       }
     }
   },
-"orderSummeryReport": {
-  "breadcrumb": {
-    "master": "Transaction",
-    "title": "Order Summary Report",
-    "veiwtitle": "Order Details"
+  "orderSummeryReport": {
+    "breadcrumb": {
+      "master": "Transaction",
+      "title": "Order Summary Report",
+      "veiwtitle": "Order Details"
+    },
+    "header": {
+      "orderNo": "Order No",
+      "voucher": "Voucher",
+      "date": "Date",
+      "lpoNo": "LPO No",
+      "customer": "Customer",
+      "employee": "Employee",
+      "total": "Total",
+      "status": "Status"
+    },
+    "table": {
+      "sno": "S.No",
+      "code": "Code",
+      "product": "Product",
+      "productAr": "Product (AR)",
+      "description": "Description",
+      "qty": "Qty",
+      "unit": "Unit",
+      "action": "Action",
+      "convert": "Convert",
+      "noData": "No order details found.",
+      "grandTotal": "Total"
+    }
   },
-  "header": {
-    "orderNo": "Order No",
-    "voucher": "Voucher",
-    "date": "Date",
-    "lpoNo": "LPO No",
-    "customer": "Customer",
-    "employee": "Employee",
-    "total": "Total",
-    "status": "Status"
-  },
-  "table": {
-    "sno": "S.No",
-    "code": "Code",
-    "product": "Product",
-    "productAr": "Product (AR)",
-    "description": "Description",
-    "qty": "Qty",
-    "unit": "Unit",
-    "action": "Action",
-    "convert": "Convert",
-    "noData": "No order details found.",
-    "grandTotal": "Total"
-  }
-},
   "salesOrder": {
     "breadcrumb": {
       "master": "Transaction",
@@ -3074,7 +3113,7 @@
         "selectSupplierMsg": "Please select a supplier to view address",
         "customerPhone": "Customer Phone",
         "customerName": "Customer Name",
-        "date":"Date",
+        "date": "Date",
         "narrtaion": "Narration"
       },
       "gridSection": {
@@ -3138,25 +3177,26 @@
         "ledgerId": "Select Supplier",
         "vendorInvoiceNo": "Vendor Invoice No",
         "invoiceDate": "Invoice Date",
-        "purchaseNo":"Purchase No",
-        "againstReceipt":"Against Receipt",
-        "againstOrder":"Against Order"
-      
+        "purchaseNo": "Purchase No",
+        "againstReceipt": "Against Receipt",
+        "againstOrder": "Against Order"
       },
       "gridSection": {
         "columns": {
-          "purchaseRate": "Purchase Rate"
+          "purchaseRate": "Purchase Rate",
+            "salesRate": "Sales Rate"
         }
       },
-        "messages":{
-          "negativeCashBlockTitle":"Transaction Blocked",
-          "negativeCashWarnTitle":"Low Balance Warning"
-        },
-        "footerSection":{
-          "productHistory":{
-            "title":"History"
-          }
+      "messages": {
+        "negativeCashBlockTitle": "Transaction Blocked",
+        "negativeCashWarnTitle": "Low Balance Warning",
+        "totalAmountError": "Total amount cannot be negative or zero"
+      },
+      "footerSection": {
+        "productHistory": {
+          "title": "History"
         }
+      }
     },
     "list": {
       "columns": {
@@ -3197,7 +3237,7 @@
     "toDate": "To Date",
     "selectCostCentre": "Select Cost Centre",
     "selectAccountPosting": "Select Account Posting",
-    "selectLedger": "Select Ledger",
+    "selectLedger": "Cash/Bank Ledger",
     "selectGroup": "Select Group",
     "generateReportBtn": "Generate Report",
     "resetBtn": "Reset",
@@ -3207,7 +3247,9 @@
     "conditionDeposit": "Deposit",
     "conditionWithdraw": "Withdraw",
     "detailedReport": "Detailed",
-    "postedLabel": "Posted"
+    "postedLabel": "Posted",
+    "SelectingLedger": " Ledger",
+    "selectGodown": "Select Godown"
   },
   "acLedgerReport": {
     "breadcrumb": {
@@ -3216,16 +3258,17 @@
     },
     "grid": {
       "columns": {
-        "SINO": "Sl No",
+        "SINO": "Sl#",
         "Date": "Date",
-        "voucherType": "Voucher Type",
-        "voucherNo": "Voucher No",
+        "voucherType": "Inv-Type",
+        "voucherNo": "Inv-No",
         "ledgerCode": "Ledger Code",
-        "Narration": "Narration",
+        "Narration": "Description",
         "Debit": "Debit",
         "Credit": "Credit",
         "CostCentre": "Cost Centre",
-        "balance": "Balance"
+        "balance": "Balance",
+        "InvoiceNo":"Invoice No"
       }
     }
   },
@@ -3272,6 +3315,9 @@
       "title": "Contra Report",
       "detailedTitle": "Contra Detailed Report"
     },
+    "filters": {
+      "selectLedger": "Bank Ledger"
+    },
     "columns": {
       "SNo": "Sl No",
       "Date": "Date",
@@ -3307,7 +3353,7 @@
     "filters": {
       "fromDate": "From Date",
       "toDate": "To Date",
-      "selectLedger": "Select Ledger",
+      "selectLedger": "Customer Ledger",
       "selectCostCentre": "Select Cost Centre",
       "selectUser": "Select User",
       "paymentMode": "Payment Mode",
@@ -3317,7 +3363,7 @@
       "reset": "Reset"
     }
   },
-   "damageStockReport": {
+  "damageStockReport": {
     "breadcrumb": {
       "group": "Reports",
       "title": "Damage Stock Report",
@@ -3412,7 +3458,7 @@
       "reset": "Reset"
     }
   },
-   "billBalanceReport": {
+  "billBalanceReport": {
     "breadcrumb": {
       "group": "Reports",
       "title": "Bill Balance Report"
@@ -3434,7 +3480,7 @@
       "fromDate": "From Date",
       "toDate": "To Date",
       "selectGroup": "Select Group",
-      "selectLedger": "Select Ledger",
+      "selectLedger": "Customer/Supplier ledger",
       "selectCostCentre": "Select Cost Centre",
       "mainGroup": "Main Group Only",
       "showOpeningBalance": "Show Opening Balance",
@@ -3499,13 +3545,16 @@
       "FromLedger": "From Ledger",
       "ToLedger": "To Ledger",
       "TotalAmount": "Total Amount"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters"
     }
   },
   "receiptReport": {
     "filters": {
       "selectEmployee": "Select Employee"
     },
-    "export":{
+    "export": {
       "label": "Export"
     },
     "breadcrumb": {
@@ -3942,31 +3991,34 @@
     "breadcrumb": {
       "group": "Reports",
       "title": "Payable Voucher Report"
+    },
+    "filter": {
+      "selectLedger": "Supplier Ledger"
     }
   },
- "physicalStockReport": {
-  "breadcrumb": {
-    "group": "Reports",
-    "title": "Physical Stock Report",
-    "detailedTitle": "Physical Stock Detailed Report",
-    "summaryTitle": "Physical Stock Summary Report"
+  "physicalStockReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Physical Stock Report",
+      "detailedTitle": "Physical Stock Detailed Report",
+      "summaryTitle": "Physical Stock Summary Report"
+    },
+    "messages": {
+      "noDataFound": "No data found for the selected filters.",
+      "noDataToExport": "No data to export."
+    },
+    "export": {
+      "label": "Export Report"
+    },
+    "columns": {
+      "voucherAmount": "Voucher Amt",
+      "productCode": "Product Code",
+      "barcode": "Barcode",
+      "qty": "Qty",
+      "rate": "Rate",
+      "amount": "Amount"
+    }
   },
-  "messages": {
-    "noDataFound": "No data found for the selected filters.",
-    "noDataToExport": "No data to export."
-  },
-  "export": {
-    "label": "Export Report"
-  },
-  "columns": {
-    "voucherAmount": "Voucher Amt",
-    "productCode": "Product Code",
-    "barcode": "Barcode",
-    "qty": "Qty",
-    "rate": "Rate",
-    "amount": "Amount"
-  }
-},
   "salesReport": {
     "breadcrumb": {
       "group": "Reports",
@@ -3987,9 +4039,10 @@
       "condition": "Condition",
       "selectCondition": "Select Condition",
       "conditionAll": "All",
-      "conditionCash": "Cash",
-      "conditionCredit": "Credit",
-      "conditionBank": "Bank",
+      "conditionFull": "Full",
+      "conditionPartial": "Partial",
+      "conditionUnpaid": "Unpaid",
+      "conditionDue": "Due",
       "paymentMode": "Payment Mode",
       "allPaymentModes": "All Payment Modes",
       "paymentModeAll": "All",
@@ -4006,7 +4059,9 @@
       "reset": "Reset",
       "loading": "Loading...",
       "summary": "Summary",
-      "detailed": "Detailed"
+      "detailed": "Detailed",
+      "branch": "Branch",
+      "allBranches": "All Branches"
     },
     "grid": {
       "loading": "Loading...",
@@ -4042,6 +4097,16 @@
     "messages": {
       "noDataFound": "No data found for the selected filters",
       "noDataToExport": "No data to export"
+    }
+  },
+  "salesSummaryDataReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Sales Summary Report"
+    },
+    "filters": {
+      "branch": "All Branch",
+      "searchBranch": "Search Branch..."
     }
   },
   "salesSummaryReport": {
@@ -4094,7 +4159,14 @@
         "cash": "Cash",
         "bank": "Bank",
         "credit": "Credit",
-        "doneBy": "Done By"
+        "doneBy": "Done By",
+        "ProfitPercentage": "Profit %",
+        "ProfitAmt": "Profit Amt",
+        "otherCharge": "Other Charge",
+        "paidAmount": "Paid Amt",
+        "balance": "Balance",
+        "profit": "Profit",
+        "roundOff": "Round Off"
       },
       "summary": {
         "records": "Records",
@@ -4152,7 +4224,7 @@
       "records": "records",
       "columns": {
         "date": "Date",
-        "invoiceNo":"Invoice No",
+        "invoiceNo": "Invoice No",
         "narration": "Narration",
         "returnNo": "Return No",
         "supplier": "Supplier",
@@ -4257,7 +4329,9 @@
       "all": "All",
       "show": "Show",
       "reset": "Reset",
-      "loading": "Loading..."
+      "loading": "Loading...",
+      "pending": "Pending",
+      "approved": "Approved"
     },
     "grid": {
       "columns": {
@@ -4279,7 +4353,8 @@
         "totalAmount": "Total Amount",
         "grandAmount": "Grand Amount",
         "approved": "Approved",
-        "doneBy": "Done By"
+        "doneBy": "Done By",
+        "othercharge": "Other Charge"
       },
       "total": "Total"
     },
@@ -4749,7 +4824,8 @@
         "party": "Party",
         "qty": "Qty",
         "rate": "Rate",
-        "amount": "Amount"
+        "amount": "Amount",
+        "Unit": "Unit"
       },
       "summary": {
         "records": "Records",
@@ -4784,6 +4860,27 @@
     },
     "noData": "No data available. Please generate a report.",
     "exportFileName": "Trial_Balance_Report"
+  },
+  "incomeExpenseReport": {
+    "breadcrumb": { "main":"Reports", "group": "Financial Statements", "title": "Account Summery" },
+    "reportType": "Report Type",
+    "income": "Income",
+    "expense": "Expense",
+    "columns": { "sNo": "#", "ledgerName": "Ledger Name", "amount": "Amount" },
+    "noData": "No data available",
+    "total": "Total"
+  },
+  "incomAndExpenteetureReport": {
+    "heading": "Income & Expenditure",
+    "details": "Income & Expenditure Details",
+    "breadcrumb": { "main":"Reports", "group": "Financial Statements", "title": "Income & Expenditure" },
+    "reportType": "Report Type",
+    "income": "Income",
+    "expense": "Expense",
+    "showOpeningInFooter": "Show opening in footer",
+    "columns": { "sNo": "#", "ledgerName": "Ledger Name", "amount": "Amount" },
+    "noData": "No data available",
+    "total": "Total"
   },
   "reportFileSettings": {
     "breadcrumb": {
@@ -4857,25 +4954,25 @@
   "Total": "Total",
   "Export Report": "Export Report",
   "No data to export": "No data to export",
-  "purchaseQuotation":{
+  "purchaseQuotation": {
     "breadcrumb": {
       "group": "Purchase",
       "title": "Purchase Quotation",
       "editTitle": "Edit Purchase Quotation"
     },
-    "form":{
-      "label":{
-        "purchaseQuotationNo":"Purchase Quotation No",
-        "dueDate":"Due Date",
-        "refNo":"Reference No",
-        "DeliveryTerms":"Delivery Terms",
-        "CertificateNo":"Certificate",
-        "PaymentTerms":"Payment Terms",
-        "cancelled":"Cancelled"
+    "form": {
+      "label": {
+        "purchaseQuotationNo": "Purchase Quotation No",
+        "dueDate": "Due Date",
+        "refNo": "Reference No",
+        "DeliveryTerms": "Delivery Terms",
+        "CertificateNo": "Certificate",
+        "PaymentTerms": "Payment Terms",
+        "cancelled": "Cancelled"
       }
     }
   },
-   "acGroupReport": {
+  "acGroupReport": {
     "breadcrumb": {
       "group": "Reports",
       "title": "Account Group Report"
@@ -4890,7 +4987,7 @@
       }
     }
   },
-   "manufacturingJournal": {
+  "manufacturingJournal": {
     "breadcrumb": {
       "master": "Transaction",
       "title": "Manufacturing Journal",
@@ -4937,7 +5034,7 @@
       "productRequired": "At least one raw material is required"
     }
   },
-   "againstModal": {
+  "againstModal": {
     "title": "Bill-by-Bill Against",
     "noData": "No pending bills found.",
     "refresh": "Refresh",
@@ -5069,7 +5166,7 @@
       "label": "Export"
     }
   },
-   "payHead": {
+  "payHead": {
     "addPayhead": "Add Payhead",
     "editPayhead": "Edit Payhead",
     "payheadNameLabel": "Payhead Name",
@@ -5095,7 +5192,7 @@
     "YesClose": "Yes, Close",
     "Cancel": "Cancel"
   },
-   "salarySettings": {
+  "salarySettings": {
     "addTitle": "Add Salary Settings",
     "editTitle": "Edit Salary Settings",
     "loading": "Loading...",
@@ -5103,43 +5200,61 @@
     "saveBtn": "Save",
     "updateBtn": "Update",
     "cancelBtn": "Cancel",
-    
     "employeeLabel": "Employee",
     "employeeRequired": "Employee is required",
     "selectEmployee": "Select Employee",
     "dateLabel": "Date",
     "dateRequired": "Date is required",
-    
     "detailsLabel": "Payhead Details",
     "addRow": "Add Row",
-    
     "payheadLabel": "Payhead",
     "payheadRequired": "Payhead is required",
     "selectPayhead": "-- Select Payhead --",
-    
     "amtOrPerLabel": "Amt / Per",
     "amtOrPerRequired": "Amt/Per is required",
     "amtOrPerPlaceholder": "e.g. amt",
-    
     "amountLabel": "Amount",
     "amountRequired": "Amount is required",
-    
     "payheadOfLabel": "Of",
     "payheadOfTooltip": "Payhead Of (optional)",
-    
     "saveSuccess": "Salary settings saved successfully",
     "updateSuccess": "Salary settings updated successfully",
-    
     "ConfirmSaveTitle": "Confirm Save",
     "ConfirmSaveText": "Are you sure you want to save these salary settings?",
     "ConfirmUpdateTitle": "Confirm Update",
     "ConfirmUpdateText": "Are you sure you want to update these salary settings?",
     "ConfirmCloseTitle": "Close Form?",
     "ConfirmCloseText": "Any unsaved changes will be lost. Do you want to continue?",
-    
     "YesSave": "Yes, Save",
     "YesUpdate": "Yes, Update",
     "YesClose": "Yes, Close",
     "Cancel": "Cancel"
+  },
+  "barcodeGenerator": {
+    "breadcrumb": {
+      "menu": "Master",
+      "title": "Generate Barcode"
+    },
+    "form": {
+      "actions": {
+        "printBtn": "Print Barcode"
+      },
+      "labels": {
+        "productName": "Product Name",
+        "barcode": "Barcode",
+        "price": "Price",
+        "supplierCode": "Supplier Code",
+        "optional": "Optional"
+      }
+    }
+  },
+  "salesProfitReport": {
+    "breadcrumb": {
+      "group": "Reports",
+      "title": "Sales Profit Report"
+    },
+    "export": {
+      "label": "Export Sales Profit Report"
+    }
   }
 }

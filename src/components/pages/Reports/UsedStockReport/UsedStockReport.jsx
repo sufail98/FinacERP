@@ -39,7 +39,7 @@ const UsedStockReport = () => {
 
     useEffect(() => {
         fetchUserData();
-        fetchUnitData();
+     
     }, []);
  const navigate = useNavigate();
     const handleRowClick = (row) => {
@@ -55,20 +55,7 @@ const UsedStockReport = () => {
         }
     };
 
-    const fetchUnitData = async () => {
-        try {
-            const res = await axiosInstance.get("units");
-            setUnitData(res.data.data || []);
-        } catch (err) {
-            console.error("Error fetching units:", err);
-        }
-    };
 
-    const getUnitName = (unitId) => {
-        if (!unitId) return '-';
-        const unit = unitData.find(u => u.unitId === unitId);
-        return unit ? unit.unitName : '-';
-    };
 
     const fetchReport = async () => {
         setLoading(true);
@@ -108,7 +95,7 @@ const UsedStockReport = () => {
                 TotalAmount: row.TotalAmount ? parseFloat(row.TotalAmount).toFixed(dp) : '',
                 Narration: row.Narration || '',
                 UnitId: row.UnitId,
-                UnitName: getUnitName(row.UnitId)
+                UnitName: row.UnitName || ''
             }));
 
             setReportData(mappedData);
@@ -344,7 +331,7 @@ const UsedStockReport = () => {
         return row[key] ?? "-";
     };
 
-    if (loading || privilegeLoading) {
+    if (privilegeLoading) {
         return (
             <div>
                 <BreadCrumb

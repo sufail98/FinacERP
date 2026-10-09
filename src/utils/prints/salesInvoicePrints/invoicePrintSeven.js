@@ -316,8 +316,15 @@ const resolveQRData = (invoiceData, companyName, companyVatNo, time) => {
 let LETTERHEAD_IMAGE_PATH;
 
 export const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrency) => {
+    console.log(invoiceData);
+    
+    
     const state = store.getState().settings;
     const showCurrencyPrefix = state.generalSettings.showCurrencyprefix;
+    const generalSettings = state.generalSettings;
+      const activateRoundoff = Boolean(generalSettings.RoundOff)
+
+
     const currencySymbol = currentCurrency ? currentCurrency.currencySymbol : '';
     
     // ✅ Check if tax should be displayed and QR shown
@@ -326,8 +333,8 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
     
     const fmt = (num) =>
         showCurrencyPrefix
-            ? `${currencySymbol} ${Number(num).toFixed(state.generalSettings.decimalPart || 2)}`
-            : Number(num).toFixed(state.generalSettings.decimalPart || 2);
+            ? `${currencySymbol} ${Number(num).toFixed(2)}`
+            : Number(num).toFixed(2);
 
     LETTERHEAD_IMAGE_PATH = state?.generalSettings?.CompanyLetterPad || '';
     const HEADER_IMAGE = state?.generalSettings?.branchHeader || '';
@@ -336,7 +343,15 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
     const useFullLetterhead = LETTERHEAD_IMAGE_PATH && LETTERHEAD_IMAGE_PATH.trim() !== '';
     const useSeparateHeaderFooter = !useFullLetterhead && (HEADER_IMAGE || FOOTER_IMAGE);
     const salesSettings = state.saleSettings;
-
+    const showLineDiscount = salesSettings?.showLineDiscount || false;
+    const gridColumns = (() => {
+    // base: no, code, desc, unit, qty, rate, total
+    let cols = '28px 55px auto 38px 35px 50px 50px';
+    if (showLineDiscount) cols += ' 40px 50px'; // disc%, discAmt
+    if (showTax) cols += ' 38px 50px';          // vat%, vatAmt
+    cols += ' 50px';                            // amount
+    return cols;
+})();
     const companyName = branchData?.branchName || '';
     const companyVatNo = branchData?.taxNo || 'NA';
 
@@ -345,13 +360,18 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
         date,
         customerName,
         customerVATNo,
+        CustomerPhone,
         paymentMode,
         salesDetails = [],
         subTotal = 0,
         totalTax = 0,
         totalAmount = 0,
         customerData = {},
-        ledgerBalance = 0,  // ✅ Added ledgerBalance
+        ledgerBalance = 0,  
+        othercharge = 0,
+        billDiscount = 0,
+    roundOff = 0,
+
     } = invoiceData;
 
     // ✅ Check if customer name contains 'cash' (case-insensitive)
@@ -404,7 +424,18 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
                 ` : ''}
 
                 <div class="content-wrapper" style="padding-top: ${HEADER_PAD}; padding-bottom: ${FOOTER_PAD};">
-
+    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', { 
+                day: '2-digit', 
+                month: 'short', 
+                year: 'numeric' 
+            })} ${new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            })}</div>
+        </div>
                     ${isFirstPage ? `
                     <h2 class="heading">
                         <span>${headingEn}</span>
@@ -473,7 +504,7 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
                                 <td class="field-label">Country:</td>
                                 <td class="field-value">${invoiceData.customerData?.Country || ''}</td>
                                 <td class="field-label">Phone:</td>
-                                <td class="field-value">${invoiceData.customerData?.phoneNo || ''}</td>
+                                <td class="field-value">${CustomerPhone || ''}</td>
                                 <td class="field-value text-right" colspan="3">${invoiceData.customerData?.CountryArb || ''}</td>
                                 <td class="field-label-ar">البلد</td>
                             </tr>
@@ -517,44 +548,58 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
                     `}
 
                     <!-- PRODUCT DIV LAYOUT -->
-                    <div class="product-container">
-                        <div class="product-header" style="${!showTax ? 'grid-template-columns: 28px 55px auto 38px 35px 50px 50px 50px;' : ''}">
-                            <div class="col-no">رقم<br>SLNO</div>
-                            <div class="col-code">الرمز<br>Code</div>
-                            <div class="col-desc">الوصف<br>Item Description</div>
-                            <div class="col-unit">وحدة<br>Unit</div>
-                            <div class="col-qty">الكمية<br>Qty</div>
-                            <div class="col-rate">سعر الوحدة<br>Rate</div>
-                            <div class="col-total">المجموع<br>Net Value</div>
-                            ${showTax ? `
-                                <div class="col-vat">ضريبة<br>VAT%</div>
-                                <div class="col-vat-amt">مبلغ ضريبة<br>VAT Amount</div>
-                            ` : ''}
-                            <div class="col-amount">الإجمالي<br>Total Amount</div>
-                        </div>
+                    <div class="product-header" style="grid-template-columns: ${gridColumns};">
+    <div class="col-no">رقم<br>SLNO</div>
+    <div class="col-code">الرمز<br>Code</div>
+    <div class="col-desc">الوصف<br>Item Description</div>
+    <div class="col-unit">وحدة<br>Unit</div>
+    <div class="col-qty">الكمية<br>Qty</div>
+    <div class="col-rate">سعر الوحدة<br>Rate</div>
+    <div class="col-total">المجموع<br>Net Value</div>
+    ${showLineDiscount ? `
+        <div class="col-disc">خصم<br>Disc%</div>
+        <div class="col-disc-amt">مبلغ الخصم<br>Disc Amt</div>
+    ` : ''}
+    ${showTax ? `
+        <div class="col-vat">ضريبة<br>VAT%</div>
+        <div class="col-vat-amt">مبلغ ضريبة<br>VAT Amount</div>
+    ` : ''}
+    <div class="col-amount">الإجمالي<br>Total Amount</div>
+</div>
 
                         <div class="product-rows">
                             ${pageProducts.length > 0 ? pageProducts.map((item, index) => {
                                 const globalIndex = pageStartIndex + index;
+
+                                const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    const grossAmt = qty * rate;
+    const discPercent = Number(item.discountPercentage || 0);
+    const discAmt = Number(item.descAmt || ((grossAmt * discPercent) / 100) || 0);
+
                                 return `
-                                    <div class="product-row" style="${!showTax ? 'grid-template-columns: 28px 55px auto 38px 35px 50px 50px 50px;' : ''}">
-                                        <div class="col-no">${globalIndex + 1}</div>
-                                        <div class="col-code">${item.productCode || ''}</div>
-                                        <div class="col-desc">
-                                            <div>${item.productName || ''}</div>
-                                            ${item.productNameArb ? `<div>${item.productNameArb}</div>` : ''}
-                                            ${item.productDescription ? `<div>${item.productDescription}</div>` : ''}
-                                        </div>
-                                        <div class="col-unit">${item.unitName || 'PCS'}</div>
-                                        <div class="col-qty">${item.qty || 0}</div>
-                                        <div class="col-rate">${Number(item.rate || 0).toFixed(state.generalSettings.decimalPart || 2)}</div>
-                                        <div class="col-total">${Number((item.qty || 0) * (item.rate || 0)).toFixed(state.generalSettings.decimalPart || 2)}</div>
-                                        ${showTax ? `
-                                            <div class="col-vat">${item.taxRate || 0}%</div>
-                                            <div class="col-vat-amt">${Number(item.taxAmount || 0).toFixed(state.generalSettings.decimalPart || 2)}</div>
-                                        ` : ''}
-                                        <div class="col-amount">${Number(item.amount || 0).toFixed(state.generalSettings.decimalPart || 2)}</div>
-                                    </div>
+                                    <div class="product-row" style="grid-template-columns: ${gridColumns};">
+            <div class="col-no">${globalIndex + 1}</div>
+            <div class="col-code">${item.productCode || ''}</div>
+            <div class="col-desc">
+                <div>${item.productName || ''}</div>
+                ${item.productNameArb ? `<div>${item.productNameArb}</div>` : ''}
+                ${item.productDescription ? `<div>${item.productDescription}</div>` : ''}
+            </div>
+            <div class="col-unit">${item.unitName || 'PCS'}</div>
+            <div class="col-qty">${item.qty || 0}</div>
+            <div class="col-rate">${rate.toFixed(2)}</div>
+            <div class="col-total">${grossAmt.toFixed(2)}</div>
+            ${showLineDiscount ? `
+                <div class="col-disc">${discPercent.toFixed(2)}%</div>
+                <div class="col-disc-amt">${discAmt.toFixed(2)}</div>
+            ` : ''}
+            ${showTax ? `
+                <div class="col-vat">${item.taxRate || 0}%</div>
+                <div class="col-vat-amt">${Number(item.taxAmount || 0).toFixed(2)}</div>
+            ` : ''}
+            <div class="col-amount">${Number(item.amount || 0).toFixed(2)}</div>
+        </div>
                                 `;
                             }).join('') : ''}
 
@@ -580,6 +625,31 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
                                     </td>
                                     ` : ''}
                                 </tr>
+                                 ${Number(othercharge) !== 0 ? `   <tr>
+                                    <td class="summary-label">Other Charge:</td>
+                                    <td class="summary-value">${fmt(othercharge)}</td>
+                                    <td class="summary-label-ar"><span>رسوم اخرى</span> <span>:</span></td>
+                                    
+                                </tr>` : ""} 
+                                
+                                ${((salesSettings?.showBillDiscountAmount || salesSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0)?`
+                                 <tr>
+                                    <td class="summary-label">Discount Amount:</td>
+                                    <td class="summary-value">${fmt(billDiscount)}</td>
+                                    <td class="summary-label-ar"><span>مقدار الخصم</span> <span>:</span></td>
+                                    
+                                </tr>` : ""}
+                                <tr>
+                                    <td class="summary-label">Taxable Amount:</td>
+                                    <td class="summary-value">
+                                            ${fmt(
+                                                Number(subTotal || 0) -
+                                                Number(invoiceData?.billDiscount || 0) +
+                                                Number(othercharge || 0)
+                                            )}
+                                    </td>
+                                      <td class="summary-label-ar">المبلغ الخاضع للضريبة</td>
+                                 </tr>
                                 ${showTax ? `
                                 <tr>
                                     <td class="summary-label">VAT Amount (SAR):</td>
@@ -587,11 +657,19 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
                                     <td class="summary-label-ar">ضريبة القيمة المضافة</td>
                                 </tr>
                                 ` : ''}
+                                ${(activateRoundoff && Number(roundOff) !== 0) ? `
+                                    <tr>
+                                    <td class="summary-label">Round Off:</td>
+                                    <td class="summary-value">${fmt( roundOff )}</td>
+                                    <td class="summary-label-ar"><span>مبلغ الضريبة</span>  ></td>
+                                    
+                                </tr>` : ""}
                                 <tr>
                                     <td class="summary-label grand-total">Amount Incl. VAT (SAR):</td>
                                     <td class="summary-value grand-total-value">${fmt(totalAmount)}</td>
                                     <td class="summary-label-ar">المبلغ شامل ضريبة القيمة المضافة</td>
                                 </tr>
+
                                 ${(!isCashCustomer && salesSettings.showCustomerBalanceBill) ? `
                                 <tr>
                                     <td class="summary-label customer-balance-label">Customer Balance (SAR):</td>
@@ -651,12 +729,6 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
 
                 </div>
 
-                ${isLastPage && !isEstimate ? `
-                <div style="position: absolute; bottom: 108px; width: 100%; left: 0; font-size: 11px; text-align: center; z-index: 3; font-weight: bold;">
-                    Refunds are accepted within 3 days, Request an exchange within 7 days of purchase
-                </div>
-                ` : ''}
-
             </div>
         `;
     }).join('');
@@ -688,7 +760,46 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
                     page-break-after: always;
                 }
                 .page:last-child { margin-bottom: 0; }
+.print-timestamp {
+    position: absolute;
+    bottom: 5mm;
+    right: 3mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
 
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
                 .letterhead-bg {
                     position: absolute;
                     top: 0;
@@ -866,12 +977,22 @@ export const generateInvoiceHTML = async (invoiceData, branchData, time, current
                     .col-rate { width: 65px; }
                     .col-total { width: 65px; }
                     .col-amount { width: 65px; }
+                    
                 ` : ''}
 
                 .col-no {
                     text-align: center;
                     width: 28px;
                 }
+
+                .col-disc {
+    text-align: center;
+    width: 40px;
+}
+.col-disc-amt {
+    text-align: right;
+    width: 50px;
+}
 
                 .col-code {
                     text-align: center;

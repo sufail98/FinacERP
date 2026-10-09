@@ -7,11 +7,13 @@ import useAuth from '@/redux/hook/auth/useAuth';
 import { Label } from '@/components/ui/label';
 import { useParams } from 'react-router-dom';
 
-const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, cash }) => {
+const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, cash, editMode = false }) => {
   const { salesMasterId } = useParams();
-  const editMode = Boolean(salesMasterId);
+  const isEditMode = editMode || Boolean(salesMasterId);
   const [balance, setBalance] = useState(0);
   const [paymentMode, setPaymentMode] = useState(formData.paymentMode || 'cash');
+  console.log(paymentMode);
+  
   // ✅ Local state for input values to allow free typing
   const [cashInputValue, setCashInputValue] = useState('');
   const [bankInputValue, setBankInputValue] = useState('');
@@ -19,19 +21,28 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
   // ✅ Refs to track if user is currently typing
   const isCashFocused = useRef(false);
   const isBankFocused = useRef(false);
-
+// ✅ Sync local paymentMode state when formData.paymentMode changes externally
+  // (e.g. auto-set to 'credit' on customer change)
+  useEffect(() => {
+    if (isEditMode) return;
+    if (formData.paymentMode && formData.paymentMode !== paymentMode) {
+      setPaymentMode(formData.paymentMode);
+    }
+  }, [formData.paymentMode, isEditMode]);
   const { t } = useTranslation();
   const { generalSettings, salesSettings } = useSelector((state) => state.settings);
 
   // ✅ Memoized payment change handler to prevent recreating on every render
   const handlePaymentChange = useCallback((field, value) => {
+    if (isEditMode) return;
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
-  }, [setFormData]);
+  }, [setFormData, isEditMode]);
 
   const handlePaymentModeChange = (mode) => {
+    if (isEditMode) return;
     if (['card', 'transfer', 'cheque'].includes(mode) && banks.length === 0) {
       return;
     }
@@ -102,7 +113,7 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
     // In edit mode, skip auto-calculation on first render
     // so DB values (CashAmount: 150, BankAmount: 9.99, BillBalanceAmount: 30)
     // are preserved as-is
-    if (editMode && !editModeInitialized.current) {
+    if (isEditMode && !editModeInitialized.current) {
       editModeInitialized.current = true;
       // Just sync the display inputs from formData DB values
       setCashInputValue(
@@ -115,7 +126,7 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
     }
 
     // ✅ In edit mode, don't recalculate payment amounts - preserve DB values
-    if (editMode) {
+    if (isEditMode) {
       return;
     }
 
@@ -159,7 +170,7 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
         }
       }
     }
-  }, [paymentMode, finalGrandTotal, generalSettings?.decimalPart, editMode]);
+  }, [paymentMode, finalGrandTotal, generalSettings?.decimalPart, isEditMode]);
   // ✅ Sync local input values with formData ONLY when NOT focused
   useEffect(() => {
     const cashValue = Number(formData.CashAmount) || 0;
@@ -194,6 +205,7 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
 
   // ✅ FIXED: Only update formData when values actually change
   useEffect(() => {
+    if (isEditMode) return;
     const currentBalance = formData.BillBalanceAmount;
     const currentPaymentMode = formData.paymentMode;
     const currentTotalAmount = formData.totalAmount;
@@ -211,23 +223,8 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
         totalAmount: finalGrandTotal,
       }));
     }
-  }, [balance, paymentMode, finalGrandTotal]);
-  //   // In PaymentMode component (FooterTabData/PaymentMode.jsx)
-  // useEffect(() => {
-  //     if (formData.paymentMode === 'cash') {
-  //         setFormData(prev => ({
-  //             ...prev,
-  //             CashAmount: finalGrandTotal,
-  //             BillBalanceAmount: 0,
-  //         }));
-  //     } else if (formData.paymentMode === 'credit') {
-  //         setFormData(prev => ({
-  //             ...prev,
-  //             BillBalanceAmount: finalGrandTotal,
-  //             CashAmount: 0,
-  //         }));
-  //     }
-  // }, [finalGrandTotal]);
+  }, [balance, paymentMode, finalGrandTotal, isEditMode]);
+
 
   const isCreditBalanceInvalid = paymentMode === 'credit' && balance <= 0;
   const isBankEmpty = banks?.length === 0;
@@ -244,7 +241,9 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
                 value={paymentMode}
                 onChange={(e) => handlePaymentModeChange(e.target.value)}
                 className="border border-themed dark:border-themed rounded px-2 py-1 text-xs w-full bg-primary dark:bg-secondary text-primary dark:text-primary focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                disabled={isEditMode}
               >
+                <option value="null">NA</option>
                 <option value="cash">Cash</option>
                 <option value="card" disabled={isBankEmpty}>
                   Bank {isBankEmpty && '(No bank account)'}
@@ -263,6 +262,7 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
                   value={formData.CashLedgerId || ''}
                   onChange={(e) => handlePaymentChange('CashLedgerId', parseInt(e.target.value))}
                   className="border border-themed dark:border-themed rounded px-2 py-1 text-xs w-20 bg-primary dark:bg-secondary text-primary dark:text-primary focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  disabled={isEditMode}
                 >
                   {cash?.map((data) => (
                     <option key={data?.ledgerId} value={data?.ledgerId}>
@@ -283,6 +283,8 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
                   onBlur={handleCashAmountBlur}
                   placeholder={(0).toFixed(generalSettings?.decimalPart ?? 2)}
                   className="border border-themed dark:border-themed rounded px-2 py-1 text-xs w-24 bg-primary dark:bg-primary text-primary dark:text-primary focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  disabled={isEditMode}
+                  readOnly={isEditMode}
                 />
 
                 <div className="border border-themed dark:border-themed rounded px-2 py-1 text-xs bg-secondary dark:bg-secondary text-right font-medium">
@@ -293,6 +295,8 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
                     value={formData.CashRefNo || ''}
                     onChange={(e) => handlePaymentChange('CashRefNo', e.target.value)}
                     onFocus={handleSelectAll}
+                    disabled={isEditMode}
+                    readOnly={isEditMode}
                   />
                 </div>
               </div>
@@ -306,7 +310,7 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
                   value={formData.BankLedgerId || ''}
                   onChange={(e) => handlePaymentChange('BankLedgerId', parseInt(e.target.value))}
                   className="border border-themed dark:border-themed rounded px-2 py-1 text-xs w-20 bg-primary dark:bg-secondary text-primary dark:text-primary focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-                  disabled={isBankEmpty}
+                  disabled={isEditMode || isBankEmpty}
                 >
                   {banks?.length > 0 ? (
                     banks?.map((data) => (
@@ -331,7 +335,8 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
                   onBlur={handleBankAmountBlur}
                   placeholder={(0).toFixed(generalSettings?.decimalPart ?? 2)}
                   className="border border-themed dark:border-themed rounded px-2 py-1 text-xs w-24 bg-primary dark:bg-primary text-primary dark:text-primary focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-                  disabled={isBankEmpty}
+                  disabled={isEditMode || isBankEmpty}
+                  readOnly={isEditMode}
                 />
 
                 <div className="border border-themed dark:border-themed rounded px-2 py-1 text-xs bg-secondary dark:bg-secondary text-right font-medium">
@@ -342,7 +347,8 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
                     value={formData.BankRefNo || ''}
                     onChange={(e) => handlePaymentChange('BankRefNo', e.target.value)}
                     onFocus={handleSelectAll}
-                    disabled={isBankEmpty}
+                    disabled={isEditMode || isBankEmpty}
+                    readOnly={isEditMode}
                   />
                 </div>
               </div>

@@ -10,10 +10,12 @@ import { useSelector } from 'react-redux';
 import AddBankModal from '../RecieptVoucher/AddBankModal';
 import DateInput from '@/components/elements/theme/DateInput';
 import CrDrLabel from '@/components/common/CrDrLabel';
+import DocumentUpload from '../../../common/DocumentUpload'
 
-const PaymentVoucherFormHeader = ({ voucherNo, editMode, errors, formData, setFormData, handleFormChange, existingPaymentNo, setBankCash, costCenters: costCentres, bankCash, setLedgerBalance, ledgerBalance }) => {
+const PaymentVoucherFormHeader = ({ voucherNo, editMode, errors, formData, setFormData, handleFormChange, existingPaymentNo, setBankCash, costCenters: costCentres, bankCash, setLedgerBalance, ledgerBalance, documents, setDocuments, existingDocuments, setExistingDocuments,
+    removedDocuments, setRemovedDocuments, }) => {
     const [bankModalOpen, setBankModalOpen] = useState(false);
-    const { selectedBranchId, currentCurrency ,currentFinancialYear} = useAuth();
+    const { selectedBranchId, currentCurrency, currentFinancialYear } = useAuth();
     const { generalSettings, financeSettings } = useSelector((state) => state.settings);
     const [fetchBankCashLoading, setFetchBankCashLoading] = useState(false)
     const { t } = useTranslation();
@@ -53,7 +55,19 @@ const PaymentVoucherFormHeader = ({ voucherNo, editMode, errors, formData, setFo
 
         }
     };
+   const shouldRestrictDates = financeSettings?.ShowAllTransactions === false;
+    const today = new Date().toISOString().split("T")[0];
 
+    const minDateFromFinance = shouldRestrictDates && currentFinancialYear?.fromDate
+        ? currentFinancialYear.fromDate.split(' ')[0]
+        : null;
+    const maxDateFromFinance = shouldRestrictDates && currentFinancialYear?.toDate
+        ? currentFinancialYear.toDate.split(' ')[0]
+        : null;
+    const maxDate =
+        maxDateFromFinance && maxDateFromFinance < today
+            ? maxDateFromFinance
+            : today;
 
     return (
         <div className="bg-white dark:bg-[#1e1e1e] dark:border-gray-600 transition-colors">
@@ -78,8 +92,8 @@ const PaymentVoucherFormHeader = ({ voucherNo, editMode, errors, formData, setFo
                             className="w-full"
                             format={generalSettings.dateformat}
                             error={errors.date}
-                            min={currentFinancialYear?.fromDate}
-                            max={currentFinancialYear?.toDate}
+                            min={minDateFromFinance}
+                            max={maxDate}
                         />
                     </div>
                     <div className='flex gap-1 items-end'>
@@ -162,6 +176,16 @@ const PaymentVoucherFormHeader = ({ voucherNo, editMode, errors, formData, setFo
                             className='w-full'
                         />
                     )}
+                    <div className="w-full">
+                        <DocumentUpload
+                            documents={documents}
+                            setDocuments={setDocuments}
+                            existingDocuments={existingDocuments}
+                            setExistingDocuments={setExistingDocuments}
+                            removedDocuments={removedDocuments}
+                            setRemovedDocuments={setRemovedDocuments}
+                        />
+                    </div>
                 </div>
 
             </div>

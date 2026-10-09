@@ -2,19 +2,26 @@ import BreadCrumb from '@/components/common/BreadCrumb';
 import { Eraser, Loader2, Pencil, ReceiptText, SaveAll, SquarePen, Table } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import FormSectionMain from './FormSectionMain';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState , useRef} from 'react';
 import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
 import { useSelector } from 'react-redux';
-import AlertBox from '@/components/common/AlertBox';
+
 import { useNavigate, useParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
 import useFormValidation from '@/lib/hooks/useFormValidation';
-import purchaseInvoicePrintOne from '@/utils/prints/purchaseInvoicePrints/purchaseInvoicePrintOne';
+import purchaseQuotationPrintOne from '@/utils/prints/purchaseQuotationPrints/purchaseQuotationPrintOne';
 import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import { showToast } from '@/utils/toast';
+import PrintDropdown from '@/components/common/PrintDropdown';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const PurchaseQuotationSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Purchase Quotation");
+
     const { purchaseQuotationmasterId } = useParams();
     const editMode = Boolean(purchaseQuotationmasterId);
     const [fetchLoading, setFetchLoading] = useState(false)
@@ -28,10 +35,12 @@ const PurchaseQuotationSkin = () => {
     const [pricingLevel, setPricingLevel] = useState([]);
     const [godowns, setGodowns] = useState([]);
     const [invoiceId, setInvoiceId] = useState('');
-    const [alert, setAlert] = useState(null);
+  
     const { userId, selectedBranchId, currentFinancialYear, currentCurrencyConversion, selectedBranchDetails, currentCurrency } = useAuth();
     const [time, setTime] = useState("");
+     const [isPrinting, setIsPrinting] = useState(false);
     const { generalSettings, purchaseSettings, financeSettings } = useSelector((state) => state.settings);
+     const { purchaseProducts: allProducts } = useSelector((state) => state.products);
     const [resetTableKey, setResetTableKey] = useState(0);
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
     const [batches, setBatches] = useState([]);
@@ -68,6 +77,7 @@ const PurchaseQuotationSkin = () => {
         yearId: currentFinancialYear?.yearId,
         voucherType: "Purchase Quotation",
         printAfterSave: purchaseSettings?.printAfterSave || false,
+         printType: 'a4', 
         date: new Date(),
         dueDate: "",
 
@@ -89,7 +99,7 @@ const PurchaseQuotationSkin = () => {
         costCentreId: 1,
         BatchId: "",
 
-        taxType: "GST",
+        taxType: generalSettings?.taxType,
 
         subTotal: 0,
         billDiscount: 0,
@@ -124,7 +134,7 @@ const PurchaseQuotationSkin = () => {
 
                 discountPercentage: 0,
                 taxId: null,
-                taxType: "GST",
+                taxType: "",
                 taxAmount: 0,
 
                 grossAmount: 0,
@@ -138,27 +148,27 @@ const PurchaseQuotationSkin = () => {
             }
         ]
     });
-     useEffect(() => {
-         if (editMode) return;
+    useEffect(() => {
+        if (editMode) return;
 
-    
-            // If it's past midnight (12 AM), update the date to today
-            setFormData(prev => {
-                const prevDate = new Date(prev.date);
-                const today = new Date();
-    
-                // Compare only date parts (ignore time)
-                const isSameDate =
-                    prevDate.getFullYear() === today.getFullYear() &&
-                    prevDate.getMonth() === today.getMonth() &&
-                    prevDate.getDate() === today.getDate();
-    
-                if (!isSameDate) {
-                    return { ...prev, date: today };
-                }
-                return prev;
-            });
-        }, [time]); // runs every second when time updates
+
+        // If it's past midnight (12 AM), update the date to today
+        setFormData(prev => {
+            const prevDate = new Date(prev.date);
+            const today = new Date();
+
+            // Compare only date parts (ignore time)
+            const isSameDate =
+                prevDate.getFullYear() === today.getFullYear() &&
+                prevDate.getMonth() === today.getMonth() &&
+                prevDate.getDate() === today.getDate();
+
+            if (!isSameDate) {
+                return { ...prev, date: today };
+            }
+            return prev;
+        });
+    }, [time]); // runs every second when time updates
     useEffect(() => {
         setFormData(prev => ({
             ...prev,
@@ -173,11 +183,11 @@ const PurchaseQuotationSkin = () => {
             try {
                 const res = await axiosInstance.post('all-purchase-data', {
                     voucherType: "Purchase Quotation", branchId: selectedBranchId,
-                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Supplier"],
+                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Supplier", "Customer&Supplier"],
                     ledgerId: formData.ledgerId, currencyId: currentCurrency.currencyId
                 })
                 const data = res?.data?.data;
-                
+
                 const filteredCurrencies = data?.currencies?.filter(
                     c => c.branchid_conversion == selectedBranchId
                 ) || [];
@@ -212,7 +222,7 @@ const PurchaseQuotationSkin = () => {
                 setBlillingAddress({
                     name: data?.customeraddress?.ledgerName || '',
                     email: data?.customeraddress?.email || '',
-                    phoneNo: data?.customeraddress?.phoneNo || '',
+                    partyMobile: data?.customeraddress?.partyMobile || '',
                     vatNo: data?.customeraddress?.tinNumber || '',
                     address: data?.customeraddress?.address || ''
                 });
@@ -222,7 +232,7 @@ const PurchaseQuotationSkin = () => {
                     ...prev,
                     partyName: data?.customeraddress?.ledgerName || '',
                     partyAddress: data?.customeraddress?.address || '',
-                    partyMobile: data?.customeraddress?.phoneNo || '',
+                    partyMobile: data?.customeraddress?.partyMobile || '',
                     partyVatNo: data?.customeraddress?.tinNumber || '',
 
                 }));
@@ -279,7 +289,7 @@ const PurchaseQuotationSkin = () => {
             costCentreId: 1,
             BatchId: "",
 
-            taxType: "GST",
+            taxType: generalSettings?.taxType,
 
             subTotal: 0,
             billDiscount: 0,
@@ -314,7 +324,7 @@ const PurchaseQuotationSkin = () => {
 
                     discountPercentage: 0,
                     taxId: null,
-                    taxType: "GST",
+                    taxType: "",
                     taxAmount: 0,
 
                     grossAmount: 0,
@@ -421,8 +431,8 @@ const PurchaseQuotationSkin = () => {
                         billDiscOnProduct: item.billDiscOnProduct,
                         AddCostonProduct: item.AddCostonProduct,
                         otherchargeonproduct: item.otherchargeonproduct,
-                        
-                      
+
+
                         branchId: item.branchId,
                         CreatedDate: item.CreatedDate,
                         CreatedUser: item.CreatedUser,
@@ -463,9 +473,9 @@ const PurchaseQuotationSkin = () => {
                 totalTax: data.totalTax,
                 additionalCost: data.additionalCost,
                 otherChargeLedgerId: data.otherChargeLedgerId,
-                othercharge: data.othercharge,
+                OtherCharge: data.OtherCharge,
                 billDiscount: data.billDiscount,
-                roundOff: data.roundOff,
+                roundoff: data.roundoff,
                 totalAmount: data.totalAmount,
                 paymentMode: data.paymentMode,
                 CashLedgerId: data.CashLedgerId,
@@ -499,6 +509,127 @@ const PurchaseQuotationSkin = () => {
     };
 
 
+    const buildInvoiceDataForPrint = useCallback((invoiceNumber, qrLink, overrideData) => {
+        const base = overrideData || formData;
+
+        const mergedCustomerData = {
+            ...(formData.customerData || {}),
+            ...(base.customerData || {}),
+        };
+
+        const rawDetails = base.quotationDetails || [];
+
+        // Enrich with productName / productNameArb from allProducts by matching productCode
+        const enrichedDetails = rawDetails.map((detail) => {
+            if (detail.productName && detail.productNameArb) return detail;
+
+            const matchedProduct = allProducts?.find(
+                (p) => p.productCode === detail.productCode
+            );
+
+            return {
+                ...detail,
+                productName: detail.productName || matchedProduct?.productName || '',
+                productNameArb: detail.productNameArb || matchedProduct?.productNameArb || '',
+            };
+        });
+
+        return {
+            ...base,
+            invoiceNo: base?.invoiceNo || base?.orderNo || base?.voucherNo || invoiceNumber,
+            taxType: formData.taxType || generalSettings?.taxType,
+            date: base.date,
+            purchaseDetails: enrichedDetails,
+            qr_link: qrLink || base.qr_link,
+            customerData: mergedCustomerData,
+        };
+    }, [formData, allProducts, generalSettings?.taxType]);
+
+    const printToPrinterFn = useCallback((invoiceDataForPrint) => {
+        if (formData.printType === 'a4') {
+            purchaseQuotationPrintOne(invoiceDataForPrint, selectedBranchDetails, time, null, currentCurrency);
+        }
+        // Add more print types here as needed
+    }, [formData.printType, selectedBranchDetails, time, currentCurrency]);
+
+    const fetchInvoiceDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`purchase-quotation/show-byId/${purchaseQuotationmasterId}`);
+        const data = response.data.data[0];
+
+        const resolvedTaxData = taxData;
+
+        const purchaseDetailsWithProducts = (data.details || []).map((item) => {
+            const taxInfo = resolvedTaxData?.find(t => t.taxId === item?.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo?.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productname || item?.productName || '',
+                productNameArb: item?.productNameArb || '',
+                taxRate,
+                qty: parseFloat(item.qty) || 0,
+                freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                rate: parseFloat(item.rate) || 0,
+                discountPercentage: parseFloat(item.discountPercentage) || 0,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
+
+        return {
+            ...data,
+            invoiceNo: data.orderNo || data.invoiceNo,
+            date: data.date ? parseDateFromAPI(data.date) : formData.date,
+            quotationDetails: purchaseDetailsWithProducts,
+        };
+    }, [purchaseQuotationmasterId, taxData, formData.date]);
+
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this invoice?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchInvoiceDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+        } catch (error) {
+            console.error('Error fetching quotation for reprint:', error);
+            showToast.error('Failed to fetch quotation data for printing');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, fetchInvoiceDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchInvoiceDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+        } catch (error) {
+            console.error('Error fetching quotation for PDF reprint:', error);
+            showToast.error('Failed to fetch quotation data for PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [fetchInvoiceDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
+
+    
+
     // Separate useEffect for godowns - depends on branch details
 
 
@@ -528,7 +659,7 @@ const PurchaseQuotationSkin = () => {
     const fetchCustomer = async () => {
         setLoading(prev => ({ ...prev, customers: true }));
         try {
-            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Supplier"], branchId: selectedBranchId });
+            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Supplier", "Customer&Supplier"], branchId: selectedBranchId });
             setCustomers(data.data);
         } catch (err) {
             console.error("Failed to fetch customers:", err);
@@ -584,20 +715,12 @@ const PurchaseQuotationSkin = () => {
 
     const handleSave = useCallback(async () => {
         if (formData.BillBalanceAmount < 0) {
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: t("salesInvoice.alert.billBalanceAmtError"),
-            });
+            showToast.error(t("salesInvoice.alert.billBalanceAmtError"));
             return;
         }
         if (!validateForm(formData, validationRules)) return;
         if (formData.paymentMode === 'credit' && formData.BillBalanceAmount <= 0) {
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: t("salesInvoice.alert.creditPaymentModeError"),
-            });
+            showToast.error(t("salesInvoice.alert.creditPaymentModeError"));
             return;
         }
 
@@ -605,14 +728,13 @@ const PurchaseQuotationSkin = () => {
         if (validationErrors.length > 0) {
             const errorMessage = validationErrors.join('\n');
 
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: errorMessage,
-            });
+            showToast.error(errorMessage);
             return;
         }
-
+        if (formData.totalAmount <= 0) {
+            showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
+            return;
+        }
         if (generalSettings?.askConfirmationSave) {
             const result = await Swal.fire({
                 title: editMode ? t("ConfirmUpdateTitle") : t('ConfirmSaveTitle'),
@@ -631,41 +753,52 @@ const PurchaseQuotationSkin = () => {
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                CreatedUser: userId,
+                ModifiedUser: editMode ? userId : null,
+                quotationDetails: (formData.quotationDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: editMode ? userId : detail?.ModifiedUser ?? null,
+                    CreatedUser: editMode ? detail?.CreatedUser ?? userId : userId,
+                })),
             };
             const api = editMode ? `purchase-quotation/update/${purchaseQuotationmasterId}` : 'purchase-quotation/store'
             const response = await axiosInstance.post(api, dataToSave);
 
-            if (!response.data.error) {
-                setAlert({
-                    id: Date.now(),
-                    type: "success",
-                    message: t("saveSuccess"),
-                });
-                // Get the saved invoice data
-                const savedInvoiceData = dataToSave;
-                const invoiceNumber = invoiceId;
+           if (!response.data.error) {
+                showToast.success(t("saveSuccess"));
 
-                // Print invoice if enabled
+                // const invoiceNumber = editMode ? existingInvoiceNo : (response?.data?.data?.orderNo || invoiceId);
+                const invoiceNumber = editMode
+  ? existingInvoiceNo
+  : (response?.data?.data?.payload?.purchaseQuotationMaster?.orderNo || invoiceId);
+                const freshQuotationData = response?.data?.data?.payload?.purchaseQuotationMaster; // ⚠️ confirm this key against your actual API response shape
+
                 if (formData.printAfterSave) {
-                    // Prepare invoice data for printing
-                    const invoiceDataForPrint = {
-                        ...savedInvoiceData,
-                        invoiceNo: invoiceNumber,
-                        date: savedInvoiceData.date || formData.date,
-                        purchaseDetails: savedInvoiceData.purchaseDetails || formData.purchaseDetails
-                    };
-
-                    // Call print function
+                    const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceNumber, null, freshQuotationData);
                     setTimeout(() => {
-                        if (formData.printType === 'a4') {
-                            purchaseInvoicePrintOne(invoiceDataForPrint, selectedBranchDetails, time, null, currentCurrency);
-                        }
-                        //  else if (formData.printType === 'thermal') {
-                        //     printThermalInvoice(invoiceDataForPrint, selectedBranchDetails, time);
-                        // }
+                        printToPrinterFn(invoiceDataForPrint);
                     }, 500);
+                } else {
+                    const pdfResult = await Swal.fire({
+                        title: 'Print as PDF?',
+                        text: 'Do you want to download this quotation as a PDF?',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: 'Yes, Download PDF',
+                        cancelButtonText: 'No, Just Save',
+                    });
+
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceNumber, null, freshQuotationData);
+                            printToPrinterFn(invoiceDataForPrint);
+                        }, 500);
+                    }
                 }
+
                 if (purchaseSettings.CloseAfterSave) {
                     navigate('/transaction/purchase-quotation/purchase-quotation-list')
                 }
@@ -687,8 +820,7 @@ const PurchaseQuotationSkin = () => {
         } finally {
             setIsSaving(false);
         }
-    }, [formData, time, purchaseSettings, generalSettings, editMode]);
-
+    },  [formData, time, purchaseSettings, generalSettings, editMode, existingInvoiceNo, buildInvoiceDataForPrint, printToPrinterFn, invoiceId, t, navigate]);
     useEffect(() => {
         const handleKeyDown = (e) => {
             // Detect Ctrl+S or Cmd+S
@@ -705,7 +837,7 @@ const PurchaseQuotationSkin = () => {
         };
     }, [handleSave]);
 
-    if (fetchLoading || baseDataloading) {
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary ">
                 <BreadCrumb
@@ -728,10 +860,11 @@ const PurchaseQuotationSkin = () => {
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary ">
-            {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+         
             <BreadCrumb
                 routes={[
                     { title: t("purchaseQuotation.breadcrumb.group"), url: "#" },
@@ -753,7 +886,7 @@ const PurchaseQuotationSkin = () => {
                     },
                     {
                         label: editMode ? t("updateBtn") : t("submitBtn"),
-                         icon: isSaving
+                        icon: isSaving
                             ? Loader2
                             : editMode
                                 ? Pencil
@@ -764,8 +897,50 @@ const PurchaseQuotationSkin = () => {
                         loadingText: t("loadingText"),
                     },
                 ]}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        {!editMode && (
+                            <div className="flex items-center space-x-2">
+                                <Checkbox
+                                    id="printAfterSavePurchaseQuotation"
+                                    checked={formData.printAfterSave || false}
+                                    onCheckedChange={(value) =>
+                                        setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                    }
+                                />
+                                <label
+                                    htmlFor="printAfterSavePurchaseQuotation"
+                                    className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                                >
+                                    {t("salesInvoice.form.footerSection.otherDetails.label.printAfterSave") || "Print After Save"}
+                                </label>
+                            </div>
+                        )}
+                        <select
+                            name="printType"
+                            id="printType"
+                            className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
+                            value={formData.printType || 'a4'}
+                            onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
+                        >
+                            <option value="a4">A4</option>
+                            {/* Add more print types here if purchase quotation gets more templates */}
+                        </select>
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
+            
+
+
             />
             <FormSectionMain
+
                 validationRules={validationRules}
                 handleBlur={handleBlur}
                 setErrors={setErrors}

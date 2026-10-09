@@ -11,10 +11,12 @@ import { useTranslation } from 'react-i18next';
 import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
 import DateInput from '@/components/elements/theme/DateInput';
 import CrDrLabel from '@/components/common/CrDrLabel';
+import LedgerCreationModal from '@/components/common/LedgerCreationModal';
 
-const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, banks, cash, payableVouchrLedgers: ledgers, taxData }) => {
+const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, banks, cash, payableVouchrLedgers: ledgers, taxData, onLedgerCreated }) => {
 
     const { t } = useTranslation();
+    const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
     const { selectedBranchId, currentCurrency } = useAuth();
     const { generalSettings, financeSettings } = useSelector((state) => state.settings);
 
@@ -25,47 +27,48 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
     const [editingRow, setEditingRow] = useState(null);
     const [validationErrors, setValidationErrors] = useState({});
 
-    const calculateRow = (row, changedField = null) => {
-        let amountAfterDiscount, taxAmount, netAmount, discAmt, discPerc;
+  const calculateRow = (row, changedField = null) => {
+    let amountAfterDiscount, taxAmount, netAmount, discAmt, discPerc;
 
-        // Handle discount calculation based on which field changed
-        if (changedField === 'discAmt') {
-            discAmt = row.discAmt;
-            discPerc = row.amount > 0 ? (discAmt / row.amount) * 100 : 0;
-        } else if (changedField === 'discPerc') {
-            discPerc = row.discPerc;
-            discAmt = (row.amount * discPerc) / 100;
+    if (changedField === 'discAmt') {
+        discAmt  = row.discAmt;
+        discPerc = row.grossAmount > 0 ? (discAmt / row.grossAmount) * 100 : 0;
+    } else if (changedField === 'discPerc') {
+        discPerc = row.discPerc;
+        discAmt  = (row.grossAmount * discPerc) / 100;
+    } else {
+        discPerc = row.discPerc;
+        discAmt  = (row.grossAmount * discPerc) / 100;
+    }
+
+    amountAfterDiscount = parseFloat(row.grossAmount) - discAmt;
+
+    if (row.taxId && row.taxRate > 0) {
+        taxAmount = (amountAfterDiscount * row.taxRate) / 100;
+
+        if (row.taxType === 'Included') {
+            netAmount = amountAfterDiscount - taxAmount;
         } else {
-            discPerc = row.discPerc;
-            discAmt = (row.amount * discPerc) / 100;
-        }
-
-        // Calculate amount after discount
-        amountAfterDiscount = row.amount - discAmt;
-
-        // Calculate tax based on tax type
-        if (row.taxType === 'Included' && row.taxId && row.taxRate > 0) {
-            // Tax Type "Included" - Add tax ON TOP of amount after discount
-            taxAmount = (amountAfterDiscount * row.taxRate) / 100;
-            netAmount = amountAfterDiscount + taxAmount;
-        } else {
-            // Tax Type is "Excluded" - No tax calculation
-            taxAmount = 0;
             netAmount = amountAfterDiscount;
         }
+    } else {
+        taxAmount = 0;
+        netAmount = amountAfterDiscount;
+    }
 
-        // Total amount is always the final net amount
-        const totalAmount = netAmount;
+    const finalAmount = row.taxType === 'Included'
+        ? amountAfterDiscount
+        : amountAfterDiscount + taxAmount;
 
-        return {
-            ...row,
-            discAmt: parseFloat(discAmt.toFixed(generalSettings.decimalPart)),
-            discPerc: parseFloat(discPerc.toFixed(generalSettings.decimalPart)),
-            netAmount: parseFloat(netAmount.toFixed(generalSettings.decimalPart)),
-            taxAmount: parseFloat(taxAmount.toFixed(generalSettings.decimalPart)),
-            totalAmount: parseFloat(totalAmount.toFixed(generalSettings.decimalPart))
-        };
+    return {
+        ...row,
+        discAmt:   parseFloat(discAmt.toFixed(generalSettings.decimalPart)),
+        discPerc:  parseFloat(discPerc.toFixed(generalSettings.decimalPart)),
+        netAmount: parseFloat(netAmount.toFixed(generalSettings.decimalPart)),
+        taxAmount: parseFloat(taxAmount.toFixed(generalSettings.decimalPart)),
+        amount:    parseFloat(finalAmount.toFixed(generalSettings.decimalPart)),
     };
+};
 
     // ─────────────────────────────────────────────────────────────────
     // Ledger balance fetch
@@ -83,56 +86,54 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
     };
 
     const emptyRow = (index) => ({
-        id: index + 1,
-        sn: index + 1,
-        ledgerId: '',
-        ledgerName: '',
-        amount: 0,
-        discAmt: 0,
-        discPerc: 0,
-        netAmount: 0,
-        taxId: null,
-        taxRate: 0,
-        taxType: 'Excluded',
-        taxAmount: 0,
-        chequeNo: '',
-        chequeDate: null,
-        narration: '',
-        totalAmount: 0,
-        ledgerBalance: null,   // ← ledger balance field
-    });
+    id: index + 1,
+    sn: index + 1,
+    ledgerId: '',
+    ledgerName: '',
+    grossAmount: 0,      // renamed from "amount" — raw entered amount
+    discAmt: 0,
+    discPerc: 0,
+    netAmount: 0,
+    taxId: null,
+    taxRate: 0,
+    taxType: 'Excluded',
+    taxAmount: 0,
+    chequeNo: '',
+    chequeDate: null,
+    narration: '',
+    amount: 0,            // renamed from "totalAmount" — final payable, maps to API "amount"
+    ledgerBalance: null,
+});
 
     // Then update the useState initialization
-    const [rows, setRows] = useState(() => {
-        if (editMode && propRows && propRows.length > 0) {
-            return propRows.map((item, index) => {
-                const initialRow = {
-                    id: index + 1,
-                    sn: index + 1,
-                    ledgerId: item.ledgerId || '',
-                    ledgerName: item.ledgerName || '',
-                    amount: parseFloat(item.amount) || 0,
-                    discAmt: parseFloat(item.discAmt) || 0,
-                    discPerc: parseFloat(item.discPerc) || 0,
-                    netAmount: parseFloat(item.netAmount) || 0,
-                    taxId: item.taxId || null,
-                    taxRate: parseFloat(item.taxRate) || 0,
-                    taxType: item.taxType || 'Excluded',
-                    taxAmount: parseFloat(item.taxAmount) || 0,
-                    chequeNo: item.chequeNo || '',
-                    chequeDate: item.chequeDate ? new Date(item.chequeDate) : null,
-                    narration: item.narration || '',
-                    totalAmount: parseFloat(item.totalAmount) || 0,
-                    ledgerBalance: null,  // ← will be fetched in useEffect below
-                };
-
-                // IMPORTANT: Recalculate the row to ensure consistency
-                return calculateRow(initialRow);
-            });
-        } else {
-            return Array.from({ length: 4 }, (_, index) => emptyRow(index));
-        }
-    });
+   const [rows, setRows] = useState(() => {
+    if (editMode && propRows && propRows.length > 0) {
+        return propRows.map((item, index) => {
+            const initialRow = {
+                id: index + 1,
+                sn: index + 1,
+                ledgerId: item.ledgerId || '',
+                ledgerName: item.ledgerName || '',
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                discAmt: parseFloat(item.discAmt) || 0,
+                discPerc: parseFloat(item.discountPercentage ?? item.discPerc) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                taxId: item.taxId || null,
+                taxRate: parseFloat(item.taxRate) || 0,
+                taxType: item.taxType || 'Excluded',
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                chequeNo: item.chequeNo || '',
+                chequeDate: item.chequeDate ? new Date(item.chequeDate) : null,
+                narration: item.Narration || item.narration || '',
+                amount: parseFloat(item.amount) || 0,
+                ledgerBalance: null,
+            };
+            return calculateRow(initialRow);
+        });
+    } else {
+        return Array.from({ length: 4 }, (_, index) => emptyRow(index));
+    }
+});
 
     // Fetch balances for all pre-filled ledgers on edit mode mount
     useEffect(() => {
@@ -195,12 +196,7 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
                     updatedRow.taxRate = parseFloat(selectedTax?.rate || 0);
                 }
 
-                // If taxType changed to 'Excluded', reset tax fields
-                if (field === 'taxType' && value === 'Excluded') {
-                    updatedRow.taxId = null;
-                    updatedRow.taxRate = 0;
-                }
-
+                
                 // Pass the changed field to calculateRow for proper discount calculation
                 updatedRow = calculateRow(updatedRow, field);
 
@@ -226,11 +222,7 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
         }
     };
 
-    const handleEditRow = (row) => {
-        setEditingRow(row);
-        setEditModalOpen(true);
-    };
-
+   
     const handleEditSuccess = (updatedData) => {
         const updatedRows = rows.map(row => {
             if (row.id === editingRow.id) {
@@ -286,48 +278,50 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
         }
     };
 
-    useEffect(() => {
-        const filledRows = rows.filter(row => row.ledgerId && row.ledgerId !== '');
+  useEffect(() => {
+    const filledRows = rows.filter(row => row.ledgerId && row.ledgerId !== '');
 
-        const receivableDetails = filledRows.map((row, index) => ({
-            lineIndex: index + 1,
-            ledgerId: row.ledgerId,
-            grossAmount: row.amount,
-            amount: row.amount,
-            discountPercentage: row.discPerc,
-            netAmount: row.netAmount,
-            taxId: row.taxId,
-            taxType: row.taxType,
-            taxAmount: row.taxAmount,
-            chequeNo: row.chequeNo,
-            chequeDate: row.chequeDate,
-            Narration: row.narration,
-            totalAmount: row.totalAmount,
-        }));
+    const receivableDetails = filledRows.map((row, index) => ({
+        lineIndex: index + 1,
+        ledgerId: row.ledgerId,
+        ledgerName: row.ledgerName,
+        grossAmount: row.grossAmount,
+        discAmt: row.discAmt,
+        discPerc: row.discPerc,
+        discountPercentage: row.discPerc,
+        netAmount: row.netAmount,
+        taxId: row.taxId,
+        taxRate: row.taxRate,
+        taxType: row.taxType,
+        taxAmount: row.taxAmount,
+        amount: row.amount,          // final payable — matches API's "amount"
+        chequeNo: row.chequeNo,
+        chequeDate: row.chequeDate,
+        Narration: row.narration,
+    }));
 
-        const totalNetAmount = filledRows.reduce((sum, row) => sum + row.netAmount, 0);
-        const totalTaxAmount = filledRows.reduce((sum, row) => sum + row.taxAmount, 0);
+    const totalNetAmount = filledRows.reduce((sum, row) => sum + row.netAmount, 0);
+    const totalTaxAmount = filledRows.reduce((sum, row) => sum + row.taxAmount, 0);
+    const totalAmount = filledRows.reduce((sum, row) => sum + row.amount, 0);
 
-        setFormData(prev => ({
-            ...prev,
-            receivableDetails,
-            subTotal: totalNetAmount.toFixed(generalSettings.decimalPart),
-            totalTax: totalTaxAmount.toFixed(generalSettings.decimalPart),
-            totalAmount: totalNetAmount.toFixed(generalSettings.decimalPart)
-        }));
-    }, [rows, selectedBranchId]);
+    setFormData(prev => ({
+        ...prev,
+        receivableDetails,
+        totalTax: totalTaxAmount.toFixed(generalSettings.decimalPart),
+        totalAmount: totalAmount.toFixed(generalSettings.decimalPart)
+    }));
+}, [rows, selectedBranchId]);
+const calculateTotals = () => {
+    const totalNetAmount = rows.reduce((sum, row) => sum + row.netAmount, 0);
+    const totalTaxAmount = rows.reduce((sum, row) => sum + row.taxAmount, 0);
+    const grandTotal = rows.reduce((sum, row) => sum + row.amount, 0);
 
-    const calculateTotals = () => {
-        const totalNetAmount = rows.reduce((sum, row) => sum + row.netAmount, 0);
-        const totalTaxAmount = rows.reduce((sum, row) => sum + row.taxAmount, 0);
-        const grandTotal = rows.reduce((sum, row) => sum + row.totalAmount, 0);
-
-        return {
-            totalNetAmount: totalNetAmount.toFixed(generalSettings.decimalPart),
-            totalTaxAmount: totalTaxAmount.toFixed(generalSettings.decimalPart),
-            grandTotal: grandTotal.toFixed(generalSettings.decimalPart)
-        };
+    return {
+        totalNetAmount: totalNetAmount.toFixed(generalSettings.decimalPart),
+        totalTaxAmount: totalTaxAmount.toFixed(generalSettings.decimalPart),
+        grandTotal: grandTotal.toFixed(generalSettings.decimalPart)
     };
+};
 
     const totals = calculateTotals();
 
@@ -380,19 +374,31 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
 
                                 {/* Ledger Name */}
                                 <td className="p-1 border border-themed dark:border-themed w-64">
-                                    <SearchableDropdown
-                                        options={ledgers?.map((ledger) => ({
-                                            value: ledger.ledgerId,
-                                            label: ledger.ledgerName,
-                                        }))}
-                                        value={row.ledgerId}
-                                        onChange={(value) => handleInputChange(row.id, 'ledgerId', value)}
-                                        placeholder={t("payableVoucher.form.gridSection.placeholders.ledgerName")}
-                                        searchPlaceholder="Search Ledger..."
-                                        clearable={true}
-                                        className="w-full"
-                                        loading={loadingLedgers}
-                                    />
+                                    <div className="flex items-start">
+                                        <div className="flex-1 min-w-0">
+                                            <SearchableDropdown
+                                                options={ledgers?.map((ledger) => ({
+                                                    value: ledger.ledgerId,
+                                                    label: ledger.ledgerName,
+                                                }))}
+                                                value={row.ledgerId}
+                                                onChange={(value) => handleInputChange(row.id, 'ledgerId', value)}
+                                                placeholder={t("payableVoucher.form.gridSection.placeholders.ledgerName")}
+                                                searchPlaceholder="Search Ledger..."
+                                                clearable={true}
+                                                className="w-full"
+                                                loading={loadingLedgers}
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsLedgerModalOpen(true)}
+                                            className="p-1.5 ml-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 shrink-0"
+                                            title="Create New Ledger"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
 
                                     {/* Ledger Balance — mirrors JournalVoucherFormTable */}
                                     {financeSettings?.showLedgerbalance && (
@@ -413,32 +419,41 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
                                 </td>
 
                                 {/* Amount */}
-                                <td className="p-1 border border-themed dark:border-themed w-20">
-                                    <input
-                                        ref={el => inputRefs.current[`${row.id}-amount`] = el}
-                                        type="number"
-                                        value={row.amount}
-                                        onFocus={(e) => e.target.select()}
-                                        onChange={(e) => handleInputChange(row.id, 'amount', parseFloat(e.target.value) || 0)}
-                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
-                                    />
+                                <td className="p-1 border border-themed dark:border-themed w-18">
+                                   <input
+        type="number"
+        value={row.grossAmount}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => handleInputChange(row.id, 'grossAmount', parseFloat(e.target.value) || 0)}
+        className="w-full px-2 py-1 text-sm border-0 text-right ..."
+    />
                                 </td>
 
                                 {/* Disc % */}
-                                <td className="p-1 border border-themed dark:border-themed w-17">
+                                <td className="p-1 border border-themed dark:border-themed w-12">
                                     <input
                                         type="number"
-                                        min={0}
-                                        max={100}
+                                       min="0"
+                                        max="100"
+                                        step="0.01"
                                         value={row.discPerc}
                                         onFocus={(e) => e.target.select()}
-                                        onChange={(e) => handleInputChange(row.id, 'discPerc', parseFloat(e.target.value) || 0)}
+                                        // onChange={(e) => handleInputChange(row.id, 'discPerc', parseFloat(e.target.value) || 0)}
+                                         onChange={(e) => {
+            let value = parseFloat(e.target.value);
+
+            if (isNaN(value)) value = 0;
+            if (value > 100) value = 100;
+            if (value < 0) value = 0;
+
+            handleInputChange(row.id, "discPerc", value);
+        }}
                                         className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
                                     />
                                 </td>
 
                                 {/* Disc Amt */}
-                                <td className="p-1 border border-themed dark:border-themed w-20">
+                                <td className="p-1 border border-themed dark:border-themed w-18">
                                     <input
                                         type="number"
                                         value={row.discAmt}
@@ -470,7 +485,6 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
                                                 <select
                                                     value={row.taxId || ''}
                                                     onChange={(e) => handleInputChange(row.id, 'taxId', parseInt(e.target.value))}
-                                                    disabled={row.taxType === 'Excluded'}
                                                     className="w-full px-2 py-1 text-sm border-0 bg-primary dark:bg-secondary text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     <option value="">Select</option>
@@ -492,7 +506,7 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
                                     )
                                 }
                                 {/* Net Amount */}
-                                <td className="p-1 border border-themed dark:border-themed w-20 ">
+                                <td className="p-1 border border-themed dark:border-themed w-18 ">
                                     <span className="text-sm font-medium block text-right px-2 text-primary dark:text-primary">
                                         {row.netAmount.toFixed(generalSettings.decimalPart)}
                                     </span>
@@ -510,7 +524,7 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
                                 </td>
 
                                 {/* Cheque Date */}
-                                <td className="p-1 border border-themed dark:border-themed w-20">
+                                <td className="p-1 border border-themed dark:border-themed w-30">
                                     <div>
                                         <DateInput
                                             value={row.chequeDate
@@ -548,9 +562,9 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
                                 </td>
 
                                 {/* Total Amount */}
-                                <td className="p-1 border border-themed dark:border-themed w-24">
+                                <td className="p-1 border border-themed dark:border-themed w-22">
                                     <span className="text-sm font-bold block text-right px-2 text-red-700 dark:text-red-400">
-                                        {row.totalAmount.toFixed(generalSettings.decimalPart)}
+                                      {row.amount.toFixed(generalSettings.decimalPart)}
                                     </span>
                                 </td>
 
@@ -598,6 +612,15 @@ const ReceivableVoucherTable = ({ formData, setFormData, editMode, rows: propRow
                 }}
                 onSuccess={handleEditSuccess}
                 rowData={editingRow}
+            />
+            
+            <LedgerCreationModal 
+                open={isLedgerModalOpen} 
+                handleClose={() => setIsLedgerModalOpen(false)} 
+                onSuccess={() => {
+                    setIsLedgerModalOpen(false);
+                    if (onLedgerCreated) onLedgerCreated();
+                }} 
             />
         </div>
     );

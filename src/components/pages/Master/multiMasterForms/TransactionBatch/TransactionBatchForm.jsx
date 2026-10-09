@@ -10,6 +10,7 @@ import TextInput from '@/components/elements/theme/TextInput';
 import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
+import { sanitize } from '@/lib/inputSanitizer';
 
 const TransactionBatchForm = ({
   open,
@@ -146,7 +147,11 @@ const TransactionBatchForm = ({
   // Handle text input change
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let updatedValue = value
+    if(["batchName"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+    }
+    setFormData((prev) => ({ ...prev, [name]: updatedValue }));
 
     // Clear error when user starts typing
     if (errors[name]) {

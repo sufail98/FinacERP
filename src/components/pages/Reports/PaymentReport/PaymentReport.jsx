@@ -35,9 +35,9 @@ const PaymentReport = () => {
     /* ------------------------------ Default dates ------------------------------ */
     const getDefaultDates = () => {
         const today    = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+       
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate:   today.toISOString().split('T')[0]
         };
     };
@@ -53,7 +53,7 @@ const PaymentReport = () => {
         costCentreId: null,
         userId:       null,
         detailed:     false,
-        postedStatus: true,
+        postedStatus:null,
         mode:         'Summary'   // 'Summary' | 'Detailed'
     });
 
@@ -65,8 +65,8 @@ const PaymentReport = () => {
         try {
             const [costCentreRes, ledgerRes, usersRes] = await Promise.all([
                 axiosInstance.get("cost-centres").catch(() => ({ data: { data: [] } })),
-                axiosInstance.post("account-ledgers", {
-                    group_ids: [5, 6, 28, 29],
+                axiosInstance.post("bank-account-ledgers", {
+                    group_ids: [5, 8, ],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("users").catch(() => ({ data: { data: [] } }))
@@ -89,7 +89,7 @@ const PaymentReport = () => {
         const requestBody = {
             from_date:      filters.fromDate,
             to_date:        filters.toDate,
-            posted_status:  filters.postedStatus,
+            posted_status:  filters.postedStatus || null,
             ledger_id:      filters.ledgerId    ? parseInt(filters.ledgerId)    : null,
             branch_id:      parseInt(selectedBranchId) || 1,
             currency_id:    parseInt(currentCurrency?.currencyId) || 1,
@@ -357,7 +357,7 @@ const PaymentReport = () => {
     };
 
     const resetFilters = () => {
-        setFilters({ ...getDefaultDates(), ledgerId: null, ledgerName: '', costCentreId: null, userId: null, detailed: false, postedStatus: true, mode: 'Summary' });
+        setFilters({ ...getDefaultDates(), ledgerId: null, ledgerName: '', costCentreId: null, userId: null, detailed: false, postedStatus: null, mode: 'Summary' });
         setReportData(null);
         setAlert(null);
     };
@@ -409,7 +409,7 @@ const PaymentReport = () => {
                     onExportExcel: handleExportExcel,
                     onExportPdf:   handleExportPdf,
                     onExportCsv:   handleExportCsv,
-                    label: t('paymentReport.export.label') || 'Export Report'
+                    label: t('receiptReport.export.label') || 'Export Report'
                 } : null}
             />
 

@@ -34,12 +34,12 @@ const JournalVoucherList = () => {
     const [toDate, setToDate] = useState(getTodayDate());
 
     // Server-side pagination states
-    const [limit, setLimit] = useState(10);
+    const [limit, setLimit] = useState(80);
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState({
         total: 0,
         page: 1,
-        limit: 10,
+        limit: 80,
         total_pages: 1
     });
 
@@ -47,37 +47,13 @@ const JournalVoucherList = () => {
 
     const columns = [
         { key: "SNo", label: "#", sortable: true, align: "right" },
-        { key: "JournalNo", label: t("journalVoucher.list.columns.journalNo"), sortable: true, align: "left" },
-        { key: "date", label: t("journalVoucher.list.columns.date"), sortable: true, align: "left" },
-        { key: "narration", label: t("journalVoucher.list.columns.narration"), sortable: true, align: "left" },
-        { key: "totalAmount", label: t("journalVoucher.list.columns.total"), sortable: true, align: "right" },
+        { key: "JournalNo", label: t("journalVoucher.list.columns.journalNo"), sortable: true, align: "left" ,width:"130px"},
+        { key: "date", label: t("journalVoucher.list.columns.date"), sortable: true, align: "left" ,width:"190px"},
+        { key: "narration", label: t("journalVoucher.list.columns.narration"), sortable: true, align: "left",width:"190px" },
+        { key: "totalAmount", label: t("journalVoucher.list.columns.total"), sortable: true, align: "right",width:"120px" },
     ];
     const renderCell = (key, row) => {
-        if (key === "date") {
-            if (!row.date) return "-";
-
-            const dateObj = new Date(row.date);
-            if (isNaN(dateObj.getTime())) return "-";
-
-            const dateFormat = generalSettings?.dateformat || "dd-MM-yyyy";
-            const separator = dateFormat.includes("/") ? "/" : "-";
-
-            const dd = String(dateObj.getDate()).padStart(2, "0");
-            const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
-            const yyyy = String(dateObj.getFullYear());
-            const hh = String(dateObj.getHours()).padStart(2, "0");
-            const min = String(dateObj.getMinutes()).padStart(2, "0");
-            const ss = String(dateObj.getSeconds()).padStart(2, "0");
-
-            const formattedDate = dateFormat
-                .replace("dd", dd)
-                .replace("MM", mm)
-                .replace("yyyy", yyyy);
-
-            const formattedTime = `${hh}:${min}:${ss}`;
-
-            return `${formattedDate} ${formattedTime}`;
-        }
+     
 
         if (key === "totalAmount") {
             return (
@@ -118,7 +94,32 @@ const JournalVoucherList = () => {
             SNo: index + 1
         }));
     }, [filteredData]);
+const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
+       const formatDate = (dateString) => {
+        if (!dateString) return '';
 
+        const date = new Date(dateString);
+        const dd = String(date.getDate()).padStart(2, '0');
+        const MM = String(date.getMonth() + 1).padStart(2, '0');
+        const yyyy = date.getFullYear();
+
+        const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+        return format
+            .replace('dd', dd)
+            .replace('MM', MM)
+            .replace('yyyy', yyyy);
+    };
     const fetchJournalVouchers = async () => {
         setLoading(true)
         try {
@@ -134,6 +135,11 @@ const JournalVoucherList = () => {
 
             const formattedData = response.data.data.map((item, index) => ({
                 ...item,
+                date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
                 SNo: ((page - 1) * limit) + index + 1,
             }));
              
@@ -306,7 +312,7 @@ const JournalVoucherList = () => {
 
     if (privilegeLoading) {
         return (
-            <div className="bg-primary dark:bg-primary min-h-screen">
+            <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
                     routes={[
                         { title: t("journalVoucher.breadcrumb.master"), url: "#" },
@@ -320,7 +326,7 @@ const JournalVoucherList = () => {
     }
 
     return (
-        <div className="bg-primary dark:bg-primary min-h-screen">
+        <div className="bg-primary dark:bg-primary">
             {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
             <BreadCrumb
                 routes={[

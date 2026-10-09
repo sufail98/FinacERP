@@ -83,7 +83,11 @@ const UsedStockList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((page - 1) * limit) + index + 1,
-                date: formatDate(item.date),
+               date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setUsedStockData(formattedData);
@@ -108,77 +112,8 @@ const UsedStockList = () => {
         }
     };
 
-    const handleFilter = () => {
-        if (fromDate > toDate) {
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: "From Date cannot be greater than To Date",
-            });
-            return;
-        }
-        setPage(1);
-        setSearchTerm(''); // Clear search when filtering
-        fetchAllUsedStocks();
-    };
 
-    const handleReset = async () => {
-        const today = getTodayDate();
-        setFromDate(today);
-        setToDate(today);
-        setPage(1);
-        setLimit(10);
-        setSearchTerm(''); // Clear search on reset
-
-        setFetchLoading(true);
-        try {
-            const payload = {
-                fromDate: today,
-                toDate: today,
-                limits: 10,
-                page: 1,
-                branchId: selectedBranchId
-            };
-
-            const res = await axiosInstance.get('used-stock', payload);
-
-            const formattedData = res.data.data.map((item, index) => ({
-                ...item,
-                SNo: index + 1,
-                date: formatDate(item.date),
-            }));
-
-            setUsedStockData(formattedData);
-
-            if (res.data.meta) {
-                setMeta({
-                    total: res.data.meta.total || 0,
-                    page: res.data.meta.page || 1,
-                    limit: res.data.meta.limit || 10,
-                    total_pages: res.data.meta.total_pages || 1
-                });
-            }
-        } catch (error) {
-            console.error('Error in Reset:', error);
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: error.response?.data?.message || "Error fetching used stocks",
-            });
-        } finally {
-            setFetchLoading(false);
-        }
-    };
-
-    // Handle search input change
-    const handleSearchChange = (e) => {
-        setSearchTerm(e.target.value);
-    };
-
-    // Clear search
-    const clearSearch = () => {
-        setSearchTerm('');
-    };
+   
 
     const handlePageChange = (newPage) => {
         setPage(newPage);
@@ -205,6 +140,17 @@ const UsedStockList = () => {
             .replace('dd', dd)
             .replace('MM', MM)
             .replace('yyyy', yyyy);
+    };
+    const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
     };
 
     const renderCell = (key, row) => {
@@ -259,7 +205,7 @@ const UsedStockList = () => {
     const columns = [
         { key: "SNo", label: t("usedStock.list.columns.sno"), sortable: true, align: "right" },
         { key: "usedStockNo", label: t("usedStock.list.columns.usedstockno"), sortable: true, align: "left" },
-        { key: "date", label: t("usedStock.list.columns.date"), sortable: true, align: "center" },
+        { key: "date", label: t("usedStock.list.columns.date"), sortable: true, align: "left" },
         { key: "totalAmount", label: t("usedStock.list.columns.totalAmt"), sortable: true, align: "right" },
     ];
 
@@ -286,10 +232,10 @@ const UsedStockList = () => {
             <div className="bg-primary dark:bg-primary min-h-screen">
                 <BreadCrumb
                     routes={[
-                        { title: t("damageStock.breadcrumb.master"), url: "#" },
-                        { title: t("damageStock.breadcrumb.title"), url: "#" },
+                        { title: t("usedStock.breadcrumb.master"), url: "#" },
+                        { title: t("usedStock.breadcrumb.title"), url: "#" },
                     ]}
-                    heading={{ icon: AlertTriangle, title: t("damageStock.breadcrumb.title") }}
+                    heading={{ icon: AlertTriangle, title: t("usedStock.breadcrumb.title") }}
                 />
                 <Preloader />
             </div>

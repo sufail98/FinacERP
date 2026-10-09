@@ -188,20 +188,51 @@ const SalesReturnFooterSection = ({ totals, formData, setFormData, otherChargeLe
   };
 
   // Handle percentage change
+  // const handleBillDiscountPercChange = (percValue) => {
+  //   const perc = parseFloat(percValue) || 0;
+  //   setBillDiscountPerc(perc);
+
+  //   const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
+  //   const amount = (grandTotal * perc) / 100;
+  //   const calculatedAmount = parseFloat(amount.toFixed(generalSettings.decimalPart || 2));
+  //   setBillDiscount(calculatedAmount);
+
+  //   // Auto-calculate billDiscountWithTax from percentage
+  //   const taxRate = parseFloat(formData.salesDetails?.[0]?.taxRate) || 15;
+  //   const withTax = calculatedAmount * (1 + taxRate / 100);
+  //   setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings.decimalPart || 2)));
+  // };
   const handleBillDiscountPercChange = (percValue) => {
-    const perc = parseFloat(percValue) || 0;
-    setBillDiscountPerc(perc);
+  const decimalPart = generalSettings?.decimalPart || 2;
 
-    const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
-    const amount = (grandTotal * perc) / 100;
-    const calculatedAmount = parseFloat(amount.toFixed(generalSettings.decimalPart || 2));
-    setBillDiscount(calculatedAmount);
+  let perc = parseFloat(percValue) || 0;
 
-    // Auto-calculate billDiscountWithTax from percentage
-    const taxRate = parseFloat(formData.salesDetails?.[0]?.taxRate) || 15;
-    const withTax = calculatedAmount * (1 + taxRate / 100);
-    setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings.decimalPart || 2)));
-  };
+  // Restrict 0 - 100
+  perc = Math.min(Math.max(perc, 0), 100);
+
+  // Restrict decimal places
+  perc = Number(perc.toFixed(decimalPart));
+
+  setBillDiscountPerc(perc);
+
+  const grandTotal =
+    parseFloat(totals?.grandTotal || 0) +
+    parseFloat(totals?.totalTax || 0);
+
+  const amount = (grandTotal * perc) / 100;
+  const calculatedAmount = Number(amount.toFixed(decimalPart));
+
+  setBillDiscount(calculatedAmount);
+
+  const taxRate =
+    parseFloat(formData.salesDetails?.[0]?.taxRate) || 15;
+
+  const withTax = calculatedAmount * (1 + taxRate / 100);
+
+  setBillDiscountWithTaxInput(
+    Number(withTax.toFixed(decimalPart))
+  );
+};
 
   // Handle amount change
   const handleBillDiscountAmountChange = (amountValue) => {
@@ -301,60 +332,119 @@ const SalesReturnFooterSection = ({ totals, formData, setFormData, otherChargeLe
   }, [totals, additionalCost, additionalCostType, billDiscount, roundOff, roundOffType, otherChargeAmt]);
 
   // ✅ FIXED: Distribute bill discount to sales details with infinite loop prevention
-  useEffect(() => {
-    const details = salesDetailsRef.current;
-    const currentLength = details ? details.length : 0;
+  // useEffect(() => {
+  //   const details = salesDetailsRef.current;
+  //   const currentLength = details ? details.length : 0;
 
-    if (details && details.length > 0) {
-      const afterBillDisc = distributeBillDiscount(billDiscount, details);
-      const updatedSalesDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
+  //   if (details && details.length > 0) {
+  //     const afterBillDisc = distributeBillDiscount(billDiscount, details);
+  //     const updatedSalesDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
 
-      const detailsString = JSON.stringify(
-        updatedSalesDetails.map(d => ({
-          b: d.billDiscOnProduct,
-          o: d.otherchargeonproduct
-        }))
-      );
+  //     const detailsString = JSON.stringify(
+  //       updatedSalesDetails.map(d => ({
+  //         b: d.billDiscOnProduct,
+  //         o: d.otherchargeonproduct
+  //       }))
+  //     );
 
-      const rowCountChanged = currentLength !== prevDetailsLengthRef.current;
-      prevDetailsLengthRef.current = currentLength;
+  //     const rowCountChanged = currentLength !== prevDetailsLengthRef.current;
+  //     prevDetailsLengthRef.current = currentLength;
 
-      if (detailsString !== lastDistributedDetails.current || rowCountChanged) {
-        lastDistributedDetails.current = detailsString;
-        setFormData(prev => ({
-          ...prev,
-          additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
-          billDiscount,
-          billDiscountWithTax: billDiscountWithTaxInput,
-          roundOff: roundOffType === "+" ? roundOff : -roundOff,
-          othercharge: otherChargeAmt,
-          OtherChargeRemark: otherChargeRemark,
-          salesDetails: updatedSalesDetails
-        }));
-      }
-    } else {
-      prevDetailsLengthRef.current = currentLength;
-      setFormData(prev => ({
-        ...prev,
-        additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
-        billDiscount,
-        billDiscountWithTax: billDiscountWithTaxInput,
-        roundOff: roundOffType === "+" ? roundOff : -roundOff,
-        othercharge: otherChargeAmt,
-        OtherChargeRemark: otherChargeRemark
-      }));
-    }
-  }, [
+  //     if (detailsString !== lastDistributedDetails.current || rowCountChanged) {
+  //       lastDistributedDetails.current = detailsString;
+  //       setFormData(prev => ({
+  //         ...prev,
+  //         additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
+  //         billDiscount,
+  //         billDiscountWithTax: billDiscountWithTaxInput,
+  //         roundOff: roundOffType === "+" ? roundOff : -roundOff,
+  //         othercharge: otherChargeAmt,
+  //         OtherChargeRemark: otherChargeRemark,
+  //         salesDetails: updatedSalesDetails
+  //       }));
+  //     }
+  //   } else {
+  //     prevDetailsLengthRef.current = currentLength;
+  //     setFormData(prev => ({
+  //       ...prev,
+  //       additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
+  //       billDiscount,
+  //       billDiscountWithTax: billDiscountWithTaxInput,
+  //       roundOff: roundOffType === "+" ? roundOff : -roundOff,
+  //       othercharge: otherChargeAmt,
+  //       OtherChargeRemark: otherChargeRemark
+  //     }));
+  //   }
+  // }, [
+  //   billDiscount,
+  //   otherChargeAmt,       // ← add this
+  //   additionalCost,
+  //   additionalCostType,
+  //   roundOff,
+  //   roundOffType,
+  //   otherChargeRemark,
+  //   billDiscountWithTaxInput,
+  //   formData.salesDetails,
+  // ]);
+
+  // ✅ FIXED: Distribute bill discount to sales details with infinite loop prevention
+useEffect(() => {
+  const details = salesDetailsRef.current;
+  const currentLength = details ? details.length : 0;
+
+  const rowCountChanged = currentLength !== prevDetailsLengthRef.current;
+  prevDetailsLengthRef.current = currentLength;
+
+  // Scalar footer fields must always sync, regardless of whether the
+  // per-row bill-discount/other-charge distribution actually changed.
+  const baseUpdate = {
+    additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
     billDiscount,
-    otherChargeAmt,       // ← add this
-    additionalCost,
-    additionalCostType,
-    roundOff,
-    roundOffType,
-    otherChargeRemark,
-    billDiscountWithTaxInput,
-    formData.salesDetails,
-  ]);
+    billDiscountWithTax: billDiscountWithTaxInput,
+    roundOff: roundOffType === "+" ? roundOff : -roundOff,
+    othercharge: otherChargeAmt,
+    OtherChargeRemark: otherChargeRemark,
+  };
+
+  if (details && details.length > 0) {
+    const afterBillDisc = distributeBillDiscount(billDiscount, details);
+    const updatedSalesDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
+
+    const detailsString = JSON.stringify(
+      updatedSalesDetails.map(d => ({
+        b: d.billDiscOnProduct,
+        o: d.otherchargeonproduct
+      }))
+    );
+
+    // Only decides whether salesDetails needs replacing — must NOT gate baseUpdate.
+    const distributionChanged = detailsString !== lastDistributedDetails.current || rowCountChanged;
+    if (distributionChanged) {
+      lastDistributedDetails.current = detailsString;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      ...baseUpdate,
+      ...(distributionChanged ? { salesDetails: updatedSalesDetails } : {}),
+    }));
+  } else {
+    setFormData(prev => ({
+      ...prev,
+      ...baseUpdate,
+    }));
+  }
+}, [
+  billDiscount,
+  otherChargeAmt,
+  additionalCost,
+  additionalCostType,
+  roundOff,
+  roundOffType,
+  otherChargeRemark,
+  billDiscountWithTaxInput,
+  formData.salesDetails,
+]);
 
   useEffect(() => {
     setFormData(prev => ({
@@ -516,9 +606,17 @@ const SalesReturnFooterSection = ({ totals, formData, setFormData, otherChargeLe
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
+                              min="0"
+                          max="100"
+                           step="0.01"
                             value={billDiscountPerc}
                             onChange={(e) => handleBillDiscountPercChange(e.target.value)}
                             onFocus={handleSelectAll}
+                             onKeyDown={(e) => {
+    if (["-", "+", "e", "E"].includes(e.key)) {
+      e.preventDefault();
+    }
+  }}
                             className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                             placeholder="%"
                           />

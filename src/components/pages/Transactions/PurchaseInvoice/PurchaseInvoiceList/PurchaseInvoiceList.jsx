@@ -63,7 +63,17 @@ const PurchaseInvoiceList = () => {
             .replace('MM', MM)
             .replace('yyyy', yyyy);
     };
-
+const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
     // Main fetch function
     const fetchAllSales = useCallback(async (params = {}) => {
         setFetchLoading(true);
@@ -89,7 +99,11 @@ const PurchaseInvoiceList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((currentPage - 1) * currentLimit) + index + 1,
-                date: formatDate(item.date),
+               date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setSalesData(formattedData);
@@ -289,7 +303,7 @@ const PurchaseInvoiceList = () => {
     const columns = [
         { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "right"},
         { key: "invoiceNo", label: t("purchaseInvoice.list.columns.invoiceNo"), sortable: true, align: "left", width: "80px" },
-        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "center", width: "120px" },
+        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "left", width: "120px" },
         { key: "ledgerName", label: t("salesInvoice.list.columns.customerName"), sortable: true, align: "left" ,width: "200px"},
         { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right" , width: "150px"},
     ];

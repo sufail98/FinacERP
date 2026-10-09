@@ -34,6 +34,26 @@ const numberToWordsEnglish = (num) => {
     return result.trim();
 };
 
+/**
+ * Fetch any URL (same-origin or CORS-enabled) and return a base64 data URL.
+ * Falls back to the original URL string so regular printing still works.
+ */
+const toDataURL = async (url) => {
+    if (!url || !url.trim()) return '';
+    try {
+        const res = await fetch(url, { mode: 'cors' });
+        const blob = await res.blob();
+        return await new Promise((resolve) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result);
+            r.onerror = () => resolve(url);  // fallback
+            r.readAsDataURL(blob);
+        });
+    } catch {
+        return url;
+    }
+};
+
 const numberToWordsArabic = (num) => {
     const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
     const tens = ['', 'عشرة', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
@@ -110,55 +130,84 @@ const formatDate = (date) => {
 };
 
 /**
- * Split array into pages with different row counts
+ * Estimate row height based on product name length
  */
-const splitIntoPages = (array, firstPageRows, middlePageRows, lastPageRows) => {
+const estimateRowHeight = (product) => {
+    const baseHeight = 28;
+    const englishName = product.productName || '';
+    const arabicName = product.productNameArb || '';
+    const description = product.productDescription || '';
+
+    const englishLines = Math.ceil(englishName.length / 45);
+    const arabicLines = Math.ceil(arabicName.length / 45);
+    const descLines = description ? Math.ceil(description.length / 45) : 0;
+
+    const totalLines = englishLines + arabicLines + descLines;
+
+    return baseHeight + Math.max(0, totalLines - 1) * 14;
+};
+
+/**
+ * Smart pagination with FIXED middle page row count
+ */
+const splitIntoPagesByHeight = (array, firstPageBudget, middlePageRowCount, lastPageBudget) => {
     const totalItems = array.length;
 
     if (totalItems === 0) {
-        return [{ items: [], isFirst: true, isLast: true, maxRows: lastPageRows }];
-    }
-
-    if (totalItems <= lastPageRows) {
-        return [{ items: array, isFirst: true, isLast: true, maxRows: lastPageRows }];
-    }
-
-    if (totalItems <= firstPageRows) {
-        return [{ items: array, isFirst: true, isLast: true, maxRows: firstPageRows }];
+        return [{ items: [], isFirst: true, isLast: true, maxRows: 0 }];
     }
 
     const pages = [];
     let currentIndex = 0;
 
-    const firstPageItems = Math.min(firstPageRows, totalItems);
-    pages.push({ items: array.slice(0, firstPageItems), isFirst: true, isLast: false, maxRows: firstPageRows });
-    currentIndex = firstPageItems;
+    let firstPageItems = [];
+    let firstPageHeight = 0;
+
+    while (currentIndex < totalItems) {
+        const rowHeight = estimateRowHeight(array[currentIndex]);
+
+        if (firstPageHeight + rowHeight > firstPageBudget && firstPageItems.length > 0) {
+            break;
+        }
+
+        firstPageItems.push(array[currentIndex]);
+        firstPageHeight += rowHeight;
+        currentIndex++;
+    }
+
+    pages.push({
+        items: firstPageItems,
+        isFirst: true,
+        isLast: currentIndex >= totalItems,
+        maxRows: firstPageItems.length
+    });
+
+    if (currentIndex >= totalItems) {
+        return pages;
+    }
 
     while (currentIndex < totalItems) {
         const remainingItems = totalItems - currentIndex;
+        const pageSize = Math.min(middlePageRowCount, remainingItems);
+        const isLastPage = (currentIndex + pageSize >= totalItems);
 
-        if (remainingItems <= lastPageRows) {
-            pages.push({ items: array.slice(currentIndex), isFirst: false, isLast: true, maxRows: lastPageRows });
-            break;
-        }
-
-        const itemsAfterThisPage = remainingItems - middlePageRows;
-
-        if (itemsAfterThisPage > 0 && itemsAfterThisPage <= lastPageRows) {
-            pages.push({ items: array.slice(currentIndex, currentIndex + middlePageRows), isFirst: false, isLast: false, maxRows: middlePageRows });
-            currentIndex += middlePageRows;
-        } else if (itemsAfterThisPage <= 0) {
-            pages.push({ items: array.slice(currentIndex), isFirst: false, isLast: true, maxRows: lastPageRows });
-            break;
+        if (isLastPage) {
+            pages.push({
+                items: array.slice(currentIndex),
+                isFirst: false,
+                isLast: true,
+                maxRows: remainingItems
+            });
+            currentIndex += remainingItems;
         } else {
-            pages.push({ items: array.slice(currentIndex, currentIndex + middlePageRows), isFirst: false, isLast: false, maxRows: middlePageRows });
-            currentIndex += middlePageRows;
+            pages.push({
+                items: array.slice(currentIndex, currentIndex + pageSize),
+                isFirst: false,
+                isLast: false,
+                maxRows: pageSize
+            });
+            currentIndex += pageSize;
         }
-    }
-
-    if (pages.length > 0) {
-        pages[pages.length - 1].isLast = true;
-        pages[pages.length - 1].maxRows = lastPageRows;
     }
 
     return pages;
@@ -229,7 +278,7 @@ export const generateQRCodeData = (invoiceData, companyName, vatNo, time) => {
 };
 
 /**
- * ✅ Generate high-quality QR code as SVG string
+ * Generate high-quality QR code as SVG string
  */
 const generateQRCodeSVG = async (data, size = 110) => {
     try {
@@ -248,7 +297,7 @@ const generateQRCodeSVG = async (data, size = 110) => {
 };
 
 /**
- * ✅ Generate high-quality QR code as PNG data URL (fallback)
+ * Generate high-quality QR code as PNG data URL (fallback)
  */
 const generateQRCodeDataURL = async (data, size = 500) => {
     try {
@@ -266,7 +315,7 @@ const generateQRCodeDataURL = async (data, size = 500) => {
 };
 
 /**
- * ✅ Resolve QR data — reprint uses saved qr_link, new invoice generates fresh
+ * Resolve QR data — reprint uses saved qr_link, new invoice generates fresh
  */
 const resolveQRData = (invoiceData, companyName, companyVatNo, time) => {
     if (invoiceData.qr_link && invoiceData.qr_link.trim() !== '') {
@@ -285,64 +334,87 @@ const resolveQRData = (invoiceData, companyName, companyVatNo, time) => {
     }
 };
 
-/**
- * Generate the invoice HTML - WITH LETTERHEAD BACKGROUND OR SEPARATE HEADER/FOOTER
- */
-const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrency) => {
-    const state = store.getState().settings;
-    const generalSettings = state.generalSettings;
-    
-    
-    // ✅ Get letterhead paths from Redux state
-    const LETTERHEAD_IMAGE_PATH = generalSettings?.CompanyLetterPad || '';
-    const HEADER_IMAGE = generalSettings?.branchHeader || '';
-    const FOOTER_IMAGE = generalSettings?.branchFooter || '';
-    
-    // ✅ Determine which mode to use
-    const useFullLetterhead = LETTERHEAD_IMAGE_PATH && LETTERHEAD_IMAGE_PATH.trim() !== '';
-    const useSeparateHeaderFooter = !useFullLetterhead && (HEADER_IMAGE || FOOTER_IMAGE);
-    
-    const companyName = branchData?.branchName || '';
-    const companyCode = branchData?.branchCode || '';
-    const companyVatNo = branchData?.taxNo || 300000000000003;
+let LETTERHEAD_IMAGE_PATH;
 
+/**
+ * Generate the Sales Return (Tax Credit Note) HTML — same design language as Invoice Twelve
+ */
+export const generateSalesReturnTwoHTML = async (invoiceData, branchData, time, currentCurrency) => {
+
+    const state = store.getState().settings;
+    const showCurrencyPrefix = state.generalSettings.showCurrencyprefix;
+    const currencySymbol = currentCurrency ? currentCurrency.currencySymbol : '';
+    const salesSettings = state.saleSettings;
+    const generalSettings = state.generalSettings;
+    const activateRoundoff = Boolean(generalSettings.RoundOff);
+
+    // Check if tax should be displayed
+    const showTax = invoiceData.taxType !== "NA";
+
+    const fmt = (num) =>
+        showCurrencyPrefix
+            ? `${currencySymbol} ${Number(num).toFixed(2)}`
+            : Number(num).toFixed(2);
+
+    LETTERHEAD_IMAGE_PATH = state?.generalSettings?.CompanyLetterPad || '';
+    const HEADER_IMAGE = state?.generalSettings?.branchHeader || '';
+    const FOOTER_IMAGE = state?.generalSettings?.branchFooter || '';
+
+    const [letterheadSrc, headerSrc, footerSrc] = await Promise.all([
+        toDataURL(LETTERHEAD_IMAGE_PATH),
+        toDataURL(HEADER_IMAGE),
+        toDataURL(FOOTER_IMAGE),
+    ]);
+
+    const useFullLetterhead = !!letterheadSrc;
+    const useSeparateHeaderFooter = !useFullLetterhead && (headerSrc || footerSrc);
+
+    const companyName = branchData?.branchName || '';
+    const companyVatNo = branchData?.taxNo || 'NA';
+    console.log(invoiceData);
+    
     const {
         invoiceNo,
         date,
-        customerName,
+        partyName,
         customerVATNo,
         CustomerAddress,
-        paymentMode,
+        CustomerPhone,
         salesDetails = [],
         subTotal = 0,
         billDiscount = 0,
         totalTax = 0,
         totalAmount = 0,
         customerData = {},
+        againstInvoiceNo = '',
+        othercharge = 0,
+        roundOff = 0,
+        orderRefNo,
+        RefNo,
+        bankDetails = {},
     } = invoiceData;
-
+    console.log(customerData);
+    
+    // Generate QR (Sales Return / Tax Credit Note always shows QR)
     const qrData = resolveQRData(invoiceData, companyName, companyVatNo, time);
     const qrCodeSVG = await generateQRCodeSVG(qrData, 110);
     const qrCodeDataURL = await generateQRCodeDataURL(qrData, 500);
 
-    const showCurrencyPrefix = state.generalSettings.showCurrencyprefix;
-    const currencySymbol = currentCurrency ? currentCurrency.currencySymbol : '';
-    const fmt = (num) =>
-        showCurrencyPrefix
-            ? `${currencySymbol} ${Number(num).toFixed(state.generalSettings.decimalPart)}`
-            : Number(num).toFixed(state.generalSettings.decimalPart);
+    const FIRST_PAGE_HEIGHT = 120;
+    const MIDDLE_PAGE_HEIGHT = 1000;
+    const LAST_PAGE_HEIGHT = 300;
 
-    // ✅ Dynamic padding based on mode
-    const HEADER_PAD = useFullLetterhead ? '140px' : (useSeparateHeaderFooter ? '160px' : '20px');
-    const FOOTER_PAD = useFullLetterhead ? '98px' : (useSeparateHeaderFooter ? '120px' : '20px');
+    const productPages = splitIntoPagesByHeight(
+        salesDetails,
+        FIRST_PAGE_HEIGHT,
+        11,
+        LAST_PAGE_HEIGHT
+    );
 
-    // Row configurations
-    const FIRST_PAGE_ROWS = 23;
-    const MIDDLE_PAGE_ROWS = 34;
-    const LAST_PAGE_ROWS = 10;
-
-    const productPages = splitIntoPages(salesDetails, FIRST_PAGE_ROWS, MIDDLE_PAGE_ROWS, LAST_PAGE_ROWS);
     const totalPages = productPages.length || 1;
+
+    const HEADER_PAD = useFullLetterhead ? '140px' : (useSeparateHeaderFooter ? '100px' : '20px');
+    const FOOTER_PAD = useFullLetterhead ? '105px' : (useSeparateHeaderFooter ? '70px' : '20px');
 
     let cumulativeIndex = 0;
 
@@ -355,22 +427,33 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
         return `
             <div class="page">
                 ${useFullLetterhead ? `
-                    <!-- ✅ Full Letterhead background -->
-                    <img class="letterhead-bg" src="${LETTERHEAD_IMAGE_PATH}" alt="letterhead">
+                    <img class="letterhead-bg" src="${letterheadSrc}" alt="letterhead">
                 ` : useSeparateHeaderFooter ? `
-                    <!-- ✅ Separate Header Image -->
-                    ${HEADER_IMAGE ? `<img class="header-img" src="${HEADER_IMAGE}" alt="header">` : ''}
-                    
-                    <!-- ✅ Separate Footer Image -->
-                    ${FOOTER_IMAGE ? `<img class="footer-img" src="${FOOTER_IMAGE}" alt="footer">` : ''}
+                    ${headerSrc ? `<img class="header-img" src="${headerSrc}" alt="header">` : ''}
+                    ${footerSrc ? `<img class="footer-img" src="${footerSrc}" alt="footer">` : ''}
                 ` : ''}
 
-                <!-- ✅ Content wrapper — positioned over the white body area -->
+                <!-- Vertical Print Timestamp -->
+                <div class="print-timestamp">
+                    <div class="timestamp-label">Printed on:</div>
+                    <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        })} ${new Date().toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        })}</div>
+                </div>
+
                 <div class="content-wrapper" style="padding-top: ${HEADER_PAD}; padding-bottom: ${FOOTER_PAD};">
+
                     ${isFirstPage ? `
+
                     <h2 class="heading">
                         <span>TAX CREDIT NOTE</span>
-                        <span style="margin: 0 5px;font-size: 18px;">/</span>
+                        <span style=" font-size: 18px;">/</span>
                         <span>سند ائتمان ضريبي</span>
                     </h2>
 
@@ -379,28 +462,92 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                             <span class="inv-label">Return No:</span>
                             <span class="inv-number">${invoiceNo || ''}</span>
                         </div>
-                     
+                        <div class="invoice-center">
+                            <span class="sale-type">${againstInvoiceNo ? `Ref Invoice: ${againstInvoiceNo}` : ''}</span>
+                        </div>
                         <div class="invoice-right">
                             <span class="inv-number-ar">${invoiceNo || ''}</span>
                             <span class="inv-label-ar">رقم الفاتورة</span>
                         </div>
                     </div>
-
+  <div class="client-details-box">
+                        <div class="box-title">Our Details: <span class="ar">بياناتنا</span></div>
+                        <table class="info-table">
+                            <tr>
+                                <td class="field-label" colspan="1">Name:</td>
+                                <td class="field-value" colspan="7">${branchData?.branchName || ''}</td>
+                            </tr>
+                            <tr>
+                                <td class="field-value text-right" colspan="7">${branchData?.branchNameFL || ''}</td>
+                                <td class="field-label-ar" colspan="1">الإسم:</td>
+                            </tr>
+                            <tr>
+                                <td class="field-label">Street Name:</td>
+                                <td class="field-value" colspan="3">${branchData?.StreetName || ''}</td>
+                                <td class="field-value text-right" colspan="3">${branchData?.streetNameFL || ''}</td>
+                                <td class="field-label-ar">إسم الشارع</td>
+                            </tr>
+                            <tr>
+                                <td class="field-label">Building No:</td>
+                                <td class="field-value">${branchData?.buildingNo || ''}</td>
+                                <td class="field-label">City:</td>
+                                <td class="field-value">${branchData?.cityName || ''}</td>
+                                <td class="field-value text-right">${branchData?.cityNameFL || ''}</td>
+                                <td class="field-label-ar">المدينة</td>
+                                <td class="field-value text-right">${branchData?.buildingNoFL || ''}</td>
+                                <td class="field-label-ar">رقم المبنى</td>
+                            </tr>
+                            <tr>
+                                <td class="field-label">District:</td>
+                                <td class="field-value" colspan="3">${branchData?.district || ''}</td>
+                                <td class="field-value text-right" colspan="3">${branchData?.districtFL || ''}</td>
+                                <td class="field-label-ar">الحي</td>
+                            </tr>
+                            <tr>
+                                <td class="field-label">Postal Code:</td>
+                                <td class="field-value">${branchData?.postalCode || ''}</td>
+                                <td class="field-label">Addl. No:</td>
+                                <td class="field-value">${branchData?.AdditionalNo || ''}</td>
+                                <td class="field-value text-right">${branchData?.additionalNumber || ''}</td>
+                                <td class="field-label-ar">الرقم الإضافي</td>
+                                <td class="field-value text-right">${branchData?.postalCode || ''}</td>
+                                <td class="field-label-ar">الرمز البريدي</td>
+                            </tr>
+                            <tr>
+                                <td class="field-label">Country:</td>
+                                <td class="field-value">${branchData?.country || ''}</td>
+                                <td class="field-label">Phone:</td>
+                                <td class="field-value">${branchData?.phoneNo || ''}</td>
+                                <td class="field-value text-right" colspan="3">${branchData?.countryFL || ''}</td>
+                                <td class="field-label-ar">البلد</td>
+                            </tr>
+                            <tr>
+                                <td class="field-label">VAT Number:</td>
+                                <td class="field-value vatNoValue" style="font-weight: 800;">${branchData?.taxNo || ''}</td>
+                                <td class="field-label">CRN:</td>
+                                <td class="field-value">${customerData?.crNo || ''}</td>
+                                <td class="field-value text-right">${customerData?.crNo || ''}</td>
+                                <td class="field-label-ar">رقم السجل</td>
+                                <td class="field-value text-right vatNoValue" style="font-weight: 800;">${branchData?.taxNo || ''}</td>
+                                <td class="field-label-ar">الرقم الضريبي</td>
+                            </tr>
+                        </table>
+                    </div>
                     <div class="client-details-box">
                         <div class="box-title">Client Details: <span class="ar">تفاصيل شركة العميل</span></div>
                         <table class="info-table">
                             <tr>
                                 <td class="field-label" colspan="1">Name:</td>
-                                <td class="field-value" colspan="7">${customerName || ''}</td>
+                                <td class="field-value" colspan="7">${partyName || ''}</td>
                             </tr>
                             <tr>
-                                <td class="field-value text-right" colspan="7">${customerData.nameArb || ''}</td>
+                                <td class="field-value text-right" colspan="7">${customerData?.nameArb || ''}</td>
                                 <td class="field-label-ar" colspan="1">الإسم:</td>
                             </tr>
                             <tr>
                                 <td class="field-label">Street Name:</td>
-                                <td class="field-value" colspan="3">${customerData.StreetName || ''}</td>
-                                <td class="field-value text-right" colspan="3">${customerData.StreetNameArb || ''}</td>
+                                <td class="field-value" colspan="3">${customerData?.StreetName || ''}</td>
+                                <td class="field-value text-right" colspan="3">${customerData?.StreetNameArb || ''}</td>
                                 <td class="field-label-ar">إسم الشارع</td>
                             </tr>
                             <tr>
@@ -433,18 +580,18 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                                 <td class="field-label">Country:</td>
                                 <td class="field-value">${invoiceData.customerData?.Country || ''}</td>
                                 <td class="field-label">Phone:</td>
-                                <td class="field-value">${invoiceData.customerData?.phoneNo || ''}</td>
+                                <td class="field-value">${CustomerPhone || ''}</td>
                                 <td class="field-value text-right" colspan="3">${invoiceData.customerData?.CountryArb || ''}</td>
                                 <td class="field-label-ar">البلد</td>
                             </tr>
                             <tr>
                                 <td class="field-label">VAT Number:</td>
-                                <td class="field-value" style="font-weight: 800;">${customerVATNo || ''}</td>
+                                <td class="field-value vatNoValue" style="font-weight: 800;">${customerVATNo || ''}</td>
                                 <td class="field-label">CRN:</td>
-                                <td class="field-value">${customerData.cstNumber || ''}</td>
-                                <td class="field-value text-right">${customerData.cstNumber || ''}</td>
+                                <td class="field-value">${customerData?.cstNumber || ''}</td>
+                                <td class="field-value text-right">${customerData?.cstNumber || ''}</td>
                                 <td class="field-label-ar">رقم السجل</td>
-                                <td class="field-value text-right" style="font-weight: 800;">${customerVATNo || ''}</td>
+                                <td class="field-value text-right vatNoValue" style="font-weight: 800;">${customerVATNo || ''}</td>
                                 <td class="field-label-ar">الرقم الضريبي</td>
                             </tr>
                         </table>
@@ -453,16 +600,20 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                     <div class="dates-section-box">
                         <table class="dates-full-table">
                             <tr>
-                                <td class="date-header">تاريخ الفاتورة<br>Invoice Date</td>
+                                <td class="date-header">تاريخ الفاتورة<br>Return Date</td>
                                 <td class="date-header">تاريخ التسليم<br>Supply Date</td>
+                                <td class="date-header">رقم الفاتورة المرجعية<br>Ref Invoice No</td>
                                 <td class="date-header">رقم امر الشراء<br>PO No / Contract</td>
+                                <td class="date-header">فترة الفاتورة<br>Remarks</td>
                                 <td class="date-header">رقم المرجع<br>Reference No / Project</td>
                             </tr>
                             <tr>
                                 <td class="date-data">${formatDate(date)}</td>
                                 <td class="date-data">${formatDate(date)}</td>
-                                <td class="date-data"></td>
-                                <td class="date-data"></td>
+                                <td class="date-data">${againstInvoiceNo || ''}</td>
+                                <td class="date-data">${orderRefNo || ''}</td>
+                                <td class="date-data">${invoiceData?.narration ? invoiceData?.narration : ""}</td>
+                                <td class="date-data">${RefNo || ''}</td>
                             </tr>
                         </table>
                     </div>
@@ -475,69 +626,107 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                         Return No: ${invoiceNo} | Page ${pageIndex + 1} of ${totalPages}
                     </div>
                     `}
-                                                                      
-                    <table class="product-table">
-                        <thead>
-                            <tr>
-                                <th class="col-no">رقم<br>SLNO</th>
-                                <th class="col-code">الرمز<br>Code</th>
-                                <th class="col-desc">الوصف<br>Item Description</th>
-                                <th class="col-unit">وحدة<br>Unit</th>
-                                <th class="col-qty">الكمية<br>Qty</th>
-                                <th class="col-rate">سعر الوحدة<br>Rate</th>
-                                <th class="col-total">المجموع<br>Net Value</th>
-                                <th class="col-vat">ضريبة<br>VAT%</th>
-                                <th class="col-vat-amt">مبلغ ضريبة<br>VAT Amount</th>
-                                <th class="col-amount">الإجمالي<br>Total Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${pageProducts.length > 0 ? pageProducts.map((item, index) => {
-                                const globalIndex = pageStartIndex + index;
-                                return `
-                                    <tr>
-                                        <td class="text-center">${globalIndex + 1}</td>
-                                        <td class="text-center">${item.productCode || ''}</td>
-                                        <td class="text-left">
-                                            ${item.productName || ''} <br/>
-                                            ${item.productNameArb || ''}
-                                        </td>
-                                        <td class="text-center">${item.unitName || 'PCS'}</td>
-                                        <td class="text-center">${item.qty || 0}</td>
-                                        <td class="text-right">${Number(item.rate || 0).toFixed(state.generalSettings.decimalPart)}</td>
-                                        <td class="text-right">${Number((item.qty || 0) * (item.rate || 0)).toFixed(state.generalSettings.decimalPart)}</td>
-                                        <td class="text-center">${item.taxRate || 0}%</td>
-                                        <td class="text-right">${Number(item.taxAmount || 0).toFixed(state.generalSettings.decimalPart)}</td>
-                                        <td class="text-right">${Number(item.amount || 0).toFixed(state.generalSettings.decimalPart)}</td>
-                                    </tr>
-                                `;
-                            }).join('') : ''}
 
-                            ${!isLastPage && pageProducts.length > 0 ? `
-                                <tr class="continuation-row">
-                                    <td colspan="10" class="text-center"><strong>Continued on next page... (Page ${pageIndex + 1} of ${totalPages})</strong></td>
-                                </tr>
-                            ` : ''}
-                        </tbody>
-                    </table>
-
+                  <div class="product-table-wrapper">
+    <table class="product-table">
+<thead>
+    <tr>
+        <th class="col-no" style="border-right:none;">#</th>
+        <th class="col-code">الرمز (SKU)<br>Code (SKU)</th>
+        <th class="col-desc">تفاصيل السلع أو الخدمات<br>Nature of Goods or Services</th>
+        <th class="col-unit">وحدة<br>Unit</th>
+        <th class="col-qty">الكمية<br>Qty</th>
+        <th class="col-rate">سعر الوحدة (ريال سعودي)<br>Unit Rate (SAR)</th>
+        <th class="col-total">السعر الإجمالي
+غير شامل ضريبة القيمة المضافة (ريال سعودي)<br>Total Price
+excl. VAT (SAR)</th>
+        ${showTax ? `
+            <th class="col-vat">ضريبة<br>VAT%</th>
+            <th class="col-vat-amt">مبلغ ضريبة القيمة المضافة (ريال سعودي)<br>VAT Amount (SAR)</th>
+        ` : ''}
+        <th class="col-amount" style="border-left:none;">إجمالي المبلغ
+شاملاً ضريبة القيمة المضافة (ريال سعودي)<br>Total Amount
+Incl.VAT (SAR)</th>
+    </tr>
+</thead>
+<tbody>
+   ${pageProducts.map((item, index) => {
+            const globalIndex = pageStartIndex + index;
+            return `
+        <tr>
+            <td class="text-center" style="border-right:none;">${globalIndex + 1}</td>
+            <td class="text-right">${item.productCode || ''}</td>
+            <td class="text-right">
+                ${item.productName || ''}
+                ${item.productNameArb ? `<br/>${item.productNameArb}` : ''}
+                ${item.productDescription ? `<br/>${item.productDescription}` : ''}
+            </td>
+            <td class="text-center">${item.unitName || 'PCS'}</td>
+            <td class="text-center">${item.qty || 0}</td>
+            <td class="text-right">${Number(item.rate || 0).toFixed(2)}</td>
+            <td class="text-right">${Number((item.qty || 0) * (item.rate || 0)).toFixed(2)}</td>
+            ${showTax ? `
+                <td class="text-center">${item.taxRate || 0}%</td>
+                <td class="text-right">${Number(item.taxAmount || 0).toFixed(2)}</td>
+            ` : ''}
+            <td class="text-right"  style="border-left:none;">${Number(item.amount || 0).toFixed(2)}</td>
+        </tr>
+        `;
+        }).join('')}
+</tbody>
+    </table>
+</div>
                     ${isLastPage ? `
-                    <div class="summary-section" style="margin-top: 15px;">
+                    <div class="summary-section">
                         <div class="summary-qr-container">
                             <table class="summary-table">
                                 <tr>
                                     <td class="summary-label">Total excl. VAT (SAR):</td>
                                     <td class="summary-value">${fmt(subTotal)}</td>
                                     <td class="summary-label-ar">الإجمالي غير شامل ضريبة القيمة المضافة</td>
-                                    <td class="qr-cell" rowspan="4">
+                                    <td class="qr-cell" rowspan="7">
                                         ${qrCodeSVG ? qrCodeSVG : `<img src="${qrCodeDataURL}" alt="QR Code" class="qr-code">`}
                                     </td>
                                 </tr>
+                                ${Number(othercharge) !== 0 ? `<tr>
+                                    <td class="summary-label">Other Charge</td>
+                                    <td class="summary-value">${fmt(othercharge)}</td>
+                                    <td class="summary-label-ar"><span>رسوم اخرى</span> <span>:</span></td>
+                                    
+                                </tr>` : ""}  
+                                  
+                                 ${((salesSettings?.showBillDiscountAmount || salesSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0)?`
+                                   <tr>
+                                    <td class="summary-label">Bill Discount (SAR):</td>
+                                    <td class="summary-value">${fmt(billDiscount)}</td>
+                                    <td class="summary-label-ar">خصم الفاتورة (ريال سعودي)</td>
+                                </tr>` : ""}
+                                
+                                <tr>
+                                    <td class="summary-label">Taxable Amount</td>
+                                    <td class="summary-value">
+                                            ${fmt(
+                                                Number(subTotal || 0) -
+                                                Number(invoiceData?.billDiscount || 0) +
+                                                Number(othercharge || 0)
+                                            )}
+                                    </td>
+                                      <td class="summary-label-ar">المبلغ الخاضع للضريبة</td>
+                                 </tr>
+                                ${showTax ? `
                                 <tr>
                                     <td class="summary-label">VAT Amount (SAR):</td>
                                     <td class="summary-value">${fmt(totalTax)}</td>
                                     <td class="summary-label-ar">ضريبة القيمة المضافة</td>
                                 </tr>
+                                ` : ''}
+                                ${(activateRoundoff && Number(roundOff) !== 0) ? `
+                                    <tr>
+                                    <td class="summary-label">Round Off:</td>
+                                    <td class="summary-value">${fmt( roundOff )}</td>
+                                    <td class="summary-label-ar"><span>مبلغ الضريبة</span></td>
+                                    
+                                </tr>` : ""}
                                 <tr>
                                     <td class="summary-label grand-total">Amount Incl. VAT (SAR):</td>
                                     <td class="summary-value grand-total-value">${fmt(totalAmount)}</td>
@@ -549,35 +738,36 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                                         <span class="ar">${amountToWords(totalAmount || 0).arabic}</span>
                                     </td>
                                 </tr>
+                               
                             </table>
                         </div>
 
                         <div class="bank-signature-section">
-                            <div class="bank-details">
-                                <div class="section-title">Bank Details / التفاصيل المصرفية</div>
-                                <table class="bank-table">
-                                    <tr>
-                                        <td class="bank-label">Bank Name</td>
-                                        <td class="bank-value">${branchData?.bankName || ''}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="bank-label">Account Name</td>
-                                        <td class="bank-value">${companyName}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="bank-label">Account No.</td>
-                                        <td class="bank-value">${branchData?.accountNo || ''}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="bank-label">IBAN</td>
-                                        <td class="bank-value">${branchData?.iban || ''}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="bank-label">Branch</td>
-                                        <td class="bank-value">${branchData?.branch || ''}</td>
-                                    </tr>
-                                </table>
-                            </div>
+                          <div class="bank-details">
+    <div class="section-title">Bank Details / التفاصيل المصرفية</div>
+    <table class="bank-table">
+        <tr>
+            <td class="bank-label">Bank Name</td>
+            <td class="bank-value">${(bankDetails?.bankname || '').trim() || '-'}</td>
+        </tr>
+        <tr>
+            <td class="bank-label">Account Name</td>
+            <td class="bank-value">${bankDetails?.bankaccname || '-'}</td>
+        </tr>
+        <tr>
+            <td class="bank-label">Account No.</td>
+            <td class="bank-value">${bankDetails?.accountNo || '-'}</td>
+        </tr>
+        <tr>
+            <td class="bank-label">IBAN</td>
+            <td class="bank-value">${bankDetails?.ibanno || '-'}</td>
+        </tr>
+        <tr>
+            <td class="bank-label">Branch</td>
+            <td class="bank-value">${bankDetails?.bankBranchName || '-'}</td>
+        </tr>
+    </table>
+</div>
 
                             <div class="signature-boxes">
                                 <div class="signature-box">
@@ -592,8 +782,10 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                         </div>
                     </div>
                     ` : ''}
-                </div><!-- end content-wrapper -->
-            </div><!-- end page -->
+
+                </div>
+
+            </div>
         `;
     }).join('');
 
@@ -605,17 +797,30 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>TAX CREDIT NOTE - ${invoiceNo}</title>
             <style>
-                /* ── Reset ──────────────────────────────────────────────────── */
                 @page { size: A4; margin: 0; }
                 * { margin: 0; padding: 0; box-sizing: border-box; }
+@font-face {
+    font-family: 'Inter';
+    src: url(data:font/woff2;base64,YOUR_BASE64_FONT_DATA) format('woff2');
+    font-weight: 400;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'Inter';
+    src: url(data:font/woff2;base64,YOUR_BOLD_BASE64_FONT_DATA) format('woff2');
+    font-weight: 700;
+    font-style: normal;
+}
+
 
                 body {
                     background: #f0f0f0;
-                    font-family: Arial, sans-serif;
+                    font-family: Inter;
                     font-size: 11px;
+                     font-family: 'Inter', Arial, sans-serif; /* always add a fallback */
+    font-size: 11px;
                 }
 
-                /* ── Page shell — exactly A4 ────────────────────────────────── */
                 .page {
                     width: 210mm;
                     height: 297mm;
@@ -627,7 +832,39 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                 }
                 .page:last-child { margin-bottom: 0; }
 
-                /* ✅ Full Letterhead background */
+                /* Vertical Print Timestamp in Right Corner */
+                .print-timestamp {
+                    position: absolute;
+                    bottom: 15mm;
+                    right: 9mm;
+                    writing-mode: vertical-rl;
+                    text-orientation: mixed;
+                    transform: rotate(180deg);
+                    font-size: 8px;
+                    color: black;
+                    z-index: 10;
+                    display: flex;
+                    gap: 3px;
+                    opacity: 0.8;
+                }
+.product-table td.text-right,
+.product-table td.text-center {
+    direction: ltr;
+    unicode-bidi: embed;
+}
+.product-table td.text-left {
+    unicode-bidi: plaintext;
+}
+                .timestamp-label {
+                    font-weight: bold;
+                    color: #444;
+                }
+
+                .timestamp-value {
+                    font-weight: normal;
+                    white-space: nowrap;
+                }
+
                 .letterhead-bg {
                     position: absolute;
                     top: 0;
@@ -639,276 +876,258 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                     display: block;
                 }
 
-                /* ✅ Separate Header Image */
                 .header-img {
                     position: absolute;
                     top: 0;
                     left: 0;
                     width: 100%;
-                    height: 150px;
-                    object-fit: contain;
+                    height: 100px;
+                    object-fit: fill;
                     object-position: center top;
                     z-index: 1;
                     display: block;
                 }
 
-                /* ✅ Separate Footer Image */
                 .footer-img {
                     position: absolute;
                     bottom: 0;
                     left: 0;
                     width: 100%;
-                    height: 110px;
+                    height: 100px;
                     object-fit: contain;
                     object-position: center bottom;
                     z-index: 1;
                     display: block;
                 }
 
-                /* ✅ Content wrapper — sits above the background image */
                 .content-wrapper {
                     position: relative;
                     z-index: 2;
                     padding-left: 15px;
                     padding-right: 15px;
                 }
+                .vat-no-section{
+                    display:flex;
+                    justify-content:space-between;
+                    align-items:center;
+                    font-size:12px;
+                    font-weight: bold;
+                    margin-top: 8px;
 
-                /* ── Heading ────────────────────────────────────────────────── */
+                }
                 .heading {
                     text-align: center;
-                    font-size: 18px;
+                    font-size: 16px;
                     font-weight: bold;
-                    margin-bottom: 10px;
-                    padding: 8px;
-                    width: 95%;
+                    margin-bottom: 2px;
+                    padding: 6px;
+                    width: 100%;
                     margin: auto;
+                    border-bottom:2px solid black
                 }
 
-                /* ── Invoice header row ─────────────────────────────────────── */
                 .invoice-header-row {
                     display: flex;
-                    margin-bottom: 10px;
+                    margin-bottom: 2px;
                     align-items: center;
-                    min-height: 20px;
+                    min-height: 14px;
                 }
-                .invoice-left {
-                    flex: 1;
-                    padding: 5px 10px;
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                }
-                .invoice-center {
-                    flex: 0 0 auto;
-                    padding: 5px 20px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }
-                .invoice-right {
-                    flex: 1;
-                    padding: 5px 10px;
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    justify-content: flex-end;
-                }
-                .inv-label { font-weight: bold; font-size: 11px; }
-                .inv-number { font-weight: bold; font-size: 13px; }
+                .invoice-left  { flex: 1; padding: 4px 8px; display: flex; align-items: center; gap: 8px; }
+                .invoice-center{ flex: 0 0 auto; padding: 4px 16px; display: flex; align-items: center; justify-content: center; }
+                .invoice-right { flex: 1; padding: 4px 8px; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+                .inv-label, .inv-label-ar { font-weight: bold; font-size: 11px; }
+                .inv-number, .inv-number-ar { font-weight: bold; font-size: 13px; }
                 .invoice-left .inv-label,
                 .invoice-left .inv-number,
                 .invoice-right .inv-number-ar,
                 .invoice-right .inv-label-ar { color: brown; }
                 .sale-type { font-weight: bold; font-size: 12px; }
-                .inv-label-ar { font-weight: bold; font-size: 11px; }
-                .inv-number-ar { font-weight: bold; font-size: 13px; }
 
-                /* ── Client details box ─────────────────────────────────────── */
                 .client-details-box {
-                    border: 0.5px solid gray;
                     margin-bottom: 2px;
-                    border-radius: 6px;
                     overflow: hidden;
                 }
+
                 .box-title {
                     background: #d0d0d0;
-                    padding: 5px 10px;
+                    padding: 2px 8px;
                     font-weight: bold;
                     font-size: 11px;
+                    border:0.5px solid black;
+                    border-bottom:none !important;
                 }
                 .box-title .ar { float: right; }
                 .info-table { width: 100%; border-collapse: collapse; }
                 .info-table td {
-                    padding: 4px 6px;
-                    border: 0.5px solid gray;
+                    padding: 2px 5px;
+                    border: 0.5px solid black;
                     font-size: 10px;
                 }
-                .field-label { font-weight: bold; background: #e8e8e8; }
-                .field-value { font-weight: normal; }
-                .field-label-ar { text-align: right; font-weight: bold; background: #e8e8e8; }
+                .field-label     { font-weight: bold; background: #e8e8e8; white-space: nowrap; }
+                .field-value     { font-weight: normal; }
+                .field-label-ar  { text-align: right; font-weight: bold; background: #e8e8e8; white-space: nowrap; }
 
-                /* ── Dates section ──────────────────────────────────────────── */
                 .dates-section-box {
-                    border: 0.5px solid gray;
-                    margin-bottom: 2px;
+                    // border: 0.5px solid black;
+                    border-bottom:none !important;
                     margin-top: 2px;
-                    border-radius: 6px;
                     overflow: hidden;
                 }
                 .dates-full-table { width: 100%; border-collapse: collapse; }
                 .dates-full-table td {
-                    padding: 5px 8px;
-                    border: 0.5px solid gray;
+                    padding: 2px 6px;
+                    border: 0.5px solid black;
                     font-size: 10px;
                     text-align: center;
                 }
-                .date-header {
-                    font-weight: bold;
-                    font-size: 9px;
-                    line-height: 1.4;
-                    background: #d0d0d0;
-                }
-                .date-data { text-align: center; font-size: 10px; font-weight: bold; }
+                .date-header { font-weight: bold; font-size: 9px; line-height: 1.4; background: #d0d0d0; }
+                .date-data   { text-align: center; font-size: 10px; font-weight: bold; }
 
-                /* ── Product table ──────────────────────────────────────────── */
-                .product-table {
+                /* Product table wrapper to prevent stretching */
+                .product-table-wrapper {
+                    margin-bottom: 0;
+                    min-height:180px;
+                    border-left:1px solid black;
+                    border-right:1px solid black;
+                    border-bottom:1px solid black;
+                }
+
+               .product-table {
                     width: 100%;
                     border-collapse: collapse;
-                    border: 1px solid gray;
-                    margin-top: 2px;
+                    table-layout: fixed;
+                    direction: rtl;
                 }
+                
                 .product-table thead { background: #c0c0c0; }
                 .product-table th {
-                    border: 1px solid gray;
-                    padding: 6px 4px;
+                    border: 0.5px solid black;
+                    border-top:none !important;
+                    padding: 5px 3px;
                     font-size: 9px;
                     font-weight: bold;
                     text-align: center;
                     line-height: 1.3;
                 }
                 .product-table td {
-                    border: 1px solid gray;
-                    padding: 5px 6px;
+                    border: 1px solid black;
+                    padding: 4px 5px;
                     font-size: 10px;
+                    vertical-align: top;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
                 }
-                .col-no      { width: 28px;  }
-                .col-code    { width: 55px;  }
-                .col-desc    { 
-                    width: auto;
+                
+                /* Ensure tbody doesn't stretch */
+                .product-table tbody {
+                    vertical-align: top;
+                }
+                .product-table tbody tr {
+    height: auto !important;
+}
+               .product-table tbody tr:last-child {
+    border-bottom: none; /* let the wrapper's border-bottom (1px) handle it */
+}
+                
+                ${!showTax ? `
+                    .col-no      { width: 35px; }
+                    .col-code    { width: 65px; }
+                    .col-desc    { width: 150px; }
+                    .col-unit    { width: 45px; }
+                    .col-qty     { width: 45px; }
+                    .col-rate    { width: 65px; }
+                    .col-total   { width: 70px; }
+                    .col-amount  { width: 70px; }
+                ` : `
+                    .col-no      { width: 28px; }
+                    .col-code    { width: 55px; }
+                    .col-desc    { width: 150px; }
+                    .col-unit    { width: 38px; }
+                    .col-qty     { width: 35px; }
+                    .col-rate    { width: 50px; }
+                    .col-total   { width: 50px; }
+                    .col-vat     { width: 38px; }
+                    .col-vat-amt { width: 50px; }
+                    .col-amount  { width: 50px; }
+                `}
+
+                .col-desc {
                     white-space: normal;
                     line-height: 1.4;
                 }
-                .col-unit    { width: 38px;  }
-                .col-qty     { width: 35px;  }
-                .col-rate    { width: 50px;  }
-                .col-total   { width: 50px;  }
-                .col-vat     { width: 38px;  }
-                .col-vat-amt { width: 50px;  }
-                .col-amount  { width: 50px;  }
                 .text-center { text-align: center; }
-                .text-left { text-align: left; }
-                .text-right { text-align: right; }
+                .text-left   { text-align: left; }
+                .text-right  { text-align: right; }
                 .continuation-row { background: #ffe6e6; }
 
-                /* ── Summary section ────────────────────────────────────────── */
-                .summary-section {
-                    position: relative;
-                    z-index: 2;
+                .summary-section { 
+                    position: relative; 
+                    z-index: 2; 
                 }
+                
                 .summary-qr-container {
-                    border: 0.5px solid gray;
-                    margin-bottom: 2px;
-                    margin-top: 2px;
-                    border-radius: 6px;
+                    margin-top: 0;
                     overflow: hidden;
                 }
-                .summary-table { width: 100%; border-collapse: collapse; }
-                .summary-table td {
-                    padding: 7px 10px;
-                    border: 0.5px solid gray;
-                    font-size: 10px;
-                }
-                .summary-label { font-weight: bold; width: 150px; background: #e8e8e8; }
-                .summary-value { text-align: right; font-weight: bold; width: 100px; }
-                .summary-label-ar { text-align: right; font-size: 10px; background: #e8e8e8; }
-                .grand-total { background: #e8e8e8; }
-                .grand-total-value { background: #d0d0d0; font-size: 12px; }
+       .summary-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.summary-table td {
+    padding: 6px 8px;
+    border: 0.5px solid black;
+    border-top:none !important;
+    font-size: 10px;
+}
+.summary-label    { font-weight: bold; width: 30%; background: #e8e8e8; }
+.summary-value    { text-align: center; font-weight: bold; width: 30%; }
+.summary-label-ar { text-align: right; font-size: 10px; background: #e8e8e8; font-weight: bold; width: 30%; }
+.grand-total      { background: #e8e8e8; }
+.grand-total-value{ background: #d0d0d0; font-size: 12px; text-align: center; }
 
                 .qr-cell {
-                    width: 130px;
+                    width: 170px;
                     text-align: center;
                     vertical-align: middle;
                     background: #fff;
                 }
-                .qr-cell svg {
-                    width: 110px;
-                    height: 110px;
-                    display: inline-block;
-                    shape-rendering: crispEdges;
-                    image-rendering: pixelated;
-                }
-                .qr-cell img.qr-code {
-                    width: 110px;
-                    height: 110px;
-                    image-rendering: pixelated;
-                    -ms-interpolation-mode: nearest-neighbor;
-                }
+                .qr-cell svg { width: 130px; height: 130px; display: inline-block; shape-rendering: crispEdges; image-rendering: pixelated; }
+                .qr-cell img.qr-code { width: 130px; height: 130px; image-rendering: pixelated; -ms-interpolation-mode: nearest-neighbor; }
 
                 .amount-words {
-                    padding: 8px 10px !important;
-                    font-size: 9px !important;
+                    padding: 6px 8px !important;
+                    font-size: 12px !important;
                     line-height: 1.5;
-                    background: #fff;
                 }
-                .amount-words .ar {
-                    display: block;
-                    text-align: right;
-                    margin-top: 3px;
-                }
+                .amount-words .ar { display: block; text-align: right; margin-top: 3px;font-size: 12px !important; }
 
-                /* ── Bank + signature ───────────────────────────────────────── */
                 .bank-signature-section {
                     display: grid;
                     grid-template-columns: 1.5fr 1fr;
-                    gap: 10px;
-                    margin-top: 10px;
                 }
-                .bank-details { border: 1px solid gray; }
+                .bank-details { border: 1px solid black;border-top:none !important;border-right:none !important; }
                 .section-title {
                     background: #d0d0d0;
-                    padding: 5px 10px;
+                    padding: 4px 8px;
                     font-weight: bold;
-                    border-bottom: 1px solid gray;
+                    border-bottom: 1px solid black;
                     font-size: 10px;
                 }
                 .bank-table { width: 100%; border-collapse: collapse; }
-                .bank-table td {
-                    padding: 5px 8px;
-                    border-bottom: 1px solid gray;
-                    font-size: 9px;
-                }
+                .bank-table td { padding: 4px 6px; border-bottom: 1px solid black; font-size: 11px; }
                 .bank-table tr:last-child td { border-bottom: none; }
                 .bank-label { font-weight: bold; width: 90px; }
-                .bank-value { font-weight: normal; }
 
                 .signature-boxes {
                     display: grid;
                     grid-template-columns: 1fr 1fr;
-                    gap: 0;
-                    border: 1px solid gray;
+                    border: 1px solid black;
+                    border-top:none !important;
                 }
-                .signature-box {
-                    border: none;
-                    display: flex;
-                    flex-direction: column;
-                    min-height: 80px;
-                }
-                .signature-box + .signature-box { border-left: 1px solid gray; }
+                .signature-box { display: flex; flex-direction: column; min-height: 70px; }
+                .signature-box + .signature-box { border-left: 1px solid black; }
                 .sig-label {
                     background: #d0d0d0;
-                    padding: 5px 10px;
+                    padding: 4px 8px;
                     font-weight: bold;
-                    border-bottom: 1px solid gray;
+                    border-bottom: 1px solid black;
                     font-size: 10px;
                     text-align: center;
                 }
@@ -920,29 +1139,22 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                     text-align: center;
                     font-size: 9px;
                     line-height: 1.5;
-                    padding: 10px;
-                    min-height: 50px;
+                    padding: 8px;
                 }
 
-                /* ── Print overrides ────────────────────────────────────────── */
                 @media print {
-                    body { 
-                        background: white; 
-                        padding: 0; 
-                    }
-                    .page { 
-                        box-shadow: none; 
+                    body { background: white; }
+                    .page {
+                        box-shadow: none;
                         margin: 0;
                         width: 210mm;
                         height: 297mm;
                     }
-                    .qr-cell svg {
-                        shape-rendering: crispEdges;
-                        image-rendering: pixelated;
-                    }
-                    .qr-cell img {
-                        image-rendering: pixelated;
-                        -ms-interpolation-mode: nearest-neighbor;
+                    
+                    /* Ensure timestamp prints */
+                    .print-timestamp {
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
                     }
                 }
             </style>
@@ -955,10 +1167,10 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
 };
 
 /**
- * Main print invoice function - SILENT PRINT
+ * Main print sales return function - SILENT PRINT
  */
 export const salesReturnInvoicePrintTwo = async (invoiceData, branchData, time, currentCurrency) => {
-    const invoiceHTML = await generateInvoiceHTML(invoiceData, branchData, time, currentCurrency);
+    const invoiceHTML = await generateSalesReturnTwoHTML(invoiceData, branchData, time, currentCurrency);
 
     if (isElectron()) {
         try {
@@ -966,14 +1178,45 @@ export const salesReturnInvoicePrintTwo = async (invoiceData, branchData, time, 
             const result = await printSilent(invoiceHTML, savedPrinter, 'a4');
 
             if (result.success) {
-                // console.log('✅ [SALES RETURN TYPE 3] Printed successfully!');
+                // console.log('✅ [SALES RETURN TYPE 12] Printed successfully!');
             } else {
-                console.error('❌ [SALES RETURN TYPE 3] Print failed:', result.error);
+                console.error('❌ [SALES RETURN TYPE 12] Print failed:', result.error);
             }
 
             return result;
         } catch (error) {
-            console.error('❌ [SALES RETURN TYPE 3] Error:', error);
+            console.error('❌ [SALES RETURN TYPE 12] Error:', error);
+            return { success: false, error: error.message };
+        }
+    } else {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(invoiceHTML);
+            printWindow.document.close();
+            printWindow.onload = () => {
+                printWindow.print();
+            };
+        }
+        return { success: true };
+    }
+};
+
+export const saveSalesReturnTwoAsPDF = async (invoiceData, branchData, time, currentCurrency) => {
+    const invoiceHTML = await generateSalesReturnTwoHTML(invoiceData, branchData, time, currentCurrency);
+    const invoiceNumber = invoiceData.invoiceNo || 'credit-note';
+    const filename = `${invoiceNumber}.pdf`;
+
+    if (isElectron()) {
+        try {
+            const result = await window.electronAPI.savePDF(invoiceHTML, filename);
+            if (result.success) {
+                return result;
+            } else {
+                console.error('❌ [SALES RETURN] PDF save failed:', result.error);
+                return result;
+            }
+        } catch (error) {
+            console.error('❌ [SALES RETURN] Error saving PDF:', error);
             return { success: false, error: error.message };
         }
     } else {

@@ -1,7 +1,7 @@
 import BreadCrumb from '@/components/common/BreadCrumb';
-import { Eraser, PackageCheck, Pencil, SaveAll, SquarePen, Table } from 'lucide-react';
+import { Archive, ArchiveRestore, Eraser, PackageCheck, Pencil, SaveAll, SquarePen, Table } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
@@ -15,8 +15,15 @@ import PhysicalStockTable from './PhysicalStockTable';
 import { Checkbox } from '@/components/ui/checkbox';
 import DateInput from '@/components/elements/theme/DateInput';
 import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
+import { showToast } from '@/utils/toast';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import PrintDropdown from '@/components/common/PrintDropdown';
+import printPhysicalStock, { savePhysicalStockAsPDF } from '../../../../utils/prints/physicalStockPrints/physicalStockPrintOne';
 
 const PhysicalStockSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Physical Stock");
+
     const { physicalStockId } = useParams();
     const editMode = Boolean(physicalStockId);
     const [fetchLoading, setFetchLoading] = useState(false);
@@ -24,15 +31,22 @@ const PhysicalStockSkin = () => {
     const [existingVoucherNo, setExistingVoucherNo] = useState('');
     const { t } = useTranslation();
     const [isSaving, setIsSaving] = useState(false);
-    const [employees, setEmployees] = useState([]);
     const [voucherId, setVoucherId] = useState('');
     const [alert, setAlert] = useState(null);
-    const { userId, selectedBranchId, currentFinancialYear, currentCurrency } = useAuth();
+    const { userId, selectedBranchId, currentFinancialYear, currentCurrency, selectedBranchDetails } = useAuth();
     const [time, setTime] = useState("");
     const { generalSettings, saleSettings } = useSelector((state) => state.settings);
     const [resetTableKey, setResetTableKey] = useState(0);
     const [godowns, setGodowns] = useState([])
     const [baseDataloading, setBaseDataloading] = useState(false)
+    const [isPrinting, setIsPrinting] = useState(false);
+    // ===== HOLD INVOICE STATE =====
+    const [heldStocks, setHeldStocks] = useState([]);
+    const [showHeldStocks, setShowHeldStocks] = useState(false);
+    const [restoredHeldStockId, setRestoredHeldStockId] = useState(null);
+    const { inventoryProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products)
+
+
 
 
     useEffect(() => {
@@ -65,28 +79,26 @@ const PhysicalStockSkin = () => {
         branchId: selectedBranchId,
         CreatedUser: userId,
         GodownId: '',
+        printAfterSave: saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : true,
         physicalDetails: []
     });
+
     useEffect(() => {
         if (editMode) return;
 
-        // If it's past midnight (12 AM), update the date to today
+        const today = new Date();
         setFormData(prev => {
-            const prevDate = new Date(prev.date);
-            const today = new Date();
+            const prevDate = prev.date instanceof Date ? prev.date : new Date(prev.date);
+            const hasValidDate = prevDate instanceof Date && !Number.isNaN(prevDate.getTime());
 
-            // Compare only date parts (ignore time)
-            const isSameDate =
-                prevDate.getFullYear() === today.getFullYear() &&
-                prevDate.getMonth() === today.getMonth() &&
-                prevDate.getDate() === today.getDate();
-
-            if (!isSameDate) {
+            if (!hasValidDate) {
                 return { ...prev, date: today };
             }
+
             return prev;
         });
-    }, [time]); // runs every second when time updates
+    }, [editMode]);
+
     useEffect(() => {
         const getSalesRequiredData = async () => {
             setBaseDataloading(true)
@@ -95,7 +107,7 @@ const PhysicalStockSkin = () => {
                     voucherType: "Physical Stock",
                     branchId: selectedBranchId,
                     yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Supplier"],
+                    ledgerTypes: ["Supplier", "Customer&Supplier"],
                     ledgerId: formData.ledgerId,
                     currencyId: currentCurrency?.currencyId
                 })
@@ -103,7 +115,16 @@ const PhysicalStockSkin = () => {
 
                 setVoucherId(data?.voucherdata?.voucherCode)
                 setGodowns(data?.godowns)
+                setFormData((prev) => {
+                    const defaultGodown = data?.godowns?.find(g => g.IsDefault);
 
+                    return {
+                        ...prev,
+                        GodownId: defaultGodown
+                            ? defaultGodown.GodownId
+                            : data?.godowns?.[0]?.GodownId || 1,
+                    };
+                });
             } catch (error) {
                 console.error('error fetching default data', error)
             } finally {
@@ -167,6 +188,28 @@ const PhysicalStockSkin = () => {
             getPhysicalStockById();
         }
     }, [editMode]);
+
+    const buildStockDataForPrint = useCallback((voucherNumber, overrideData) => {
+        const base = overrideData || formData;
+        return {
+            voucherNo: editMode ? existingVoucherNo : voucherNumber,
+            date: base.date,
+            narration: base.narration,
+            stockDetails: (base.physicalDetails || []).map(item => {
+                const matchedProduct = allProducts?.find(
+                    p => String(p.productCode) === String(item.productCode)
+                );
+                return {
+                    barcode: item.barcode || item.productDetails?.barcode || matchedProduct?.barcode || '',
+                    productName: matchedProduct?.productName || item.productName || '',
+                    currentStock: item.currentQty ?? 0,
+                    qty: item.qty ?? 0,
+                    rate: item.rate ?? 0,
+                    amount: item.amount ?? ((item.qty || 0) * (item.rate || 0)),
+                };
+            }),
+        };
+    }, [formData, editMode, existingVoucherNo, allProducts]);
 
 
     const getPhysicalStockById = async () => {
@@ -317,6 +360,7 @@ const PhysicalStockSkin = () => {
                 postedDate: data.postedDate ? parseDateFromAPI(data.postedDate) : "",
                 branchId: data.branchId,
                 CreatedUser: data.CreatedUser,
+                ModifiedUser: data.ModifiedUser,
                 GodownId: salesDetailsWithProducts[0]?.GodownId || '',
                 physicalDetails: salesDetailsWithProducts,
             }));
@@ -362,6 +406,120 @@ const PhysicalStockSkin = () => {
         return errors;
     };
 
+    // ===== HOLD PHYSICAL STOCK LOGIC =====
+    useEffect(() => {
+        const savedHeldStocks = localStorage.getItem('heldPhysicalStocks');
+        if (savedHeldStocks) {
+            const allHeldStocks = JSON.parse(savedHeldStocks);
+            const branchHeldStocks = allHeldStocks.filter(item => item.branchId === selectedBranchId);
+            setHeldStocks(branchHeldStocks);
+        }
+    }, [selectedBranchId]);
+
+    useEffect(() => {
+        const savedHeldStocks = localStorage.getItem('heldPhysicalStocks');
+        const allHeldStocks = savedHeldStocks ? JSON.parse(savedHeldStocks) : [];
+        const otherBranchStocks = allHeldStocks.filter(item => item.branchId !== selectedBranchId);
+        const updatedAllStocks = [...otherBranchStocks, ...heldStocks];
+        if (updatedAllStocks.length > 0) {
+            localStorage.setItem('heldPhysicalStocks', JSON.stringify(updatedAllStocks));
+        } else {
+            localStorage.removeItem('heldPhysicalStocks');
+        }
+    }, [heldStocks, selectedBranchId]);
+
+    const holdCurrentStock = useCallback(() => {
+        const hasData = formData.physicalDetails.some(detail => detail.productCode && detail.qty > 0);
+        if (!hasData) {
+            showToast.warning("No data to hold. Please add products with quantity first.");
+            return;
+        }
+        const heldStock = {
+            id: Date.now(),
+            timestamp: new Date().toISOString(),
+            voucherId: voucherId,
+            refNo: formData.RefNo || '',
+            itemCount: formData.physicalDetails.filter(d => d.productCode).length,
+            branchId: selectedBranchId,
+            formData: { ...formData }
+        };
+        setHeldStocks(prev => [...prev, heldStock]);
+        showToast.success(`Physical stock held successfully. Total held: ${heldStocks.length + 1}`);
+        clearForm(true);
+    }, [formData, voucherId, heldStocks.length, selectedBranchId]);
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') {
+                e.preventDefault();
+                holdCurrentStock();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [holdCurrentStock]);
+
+    const restoreHeldStock = (heldStock) => {
+        const hasValidEntries = formData.physicalDetails.some(detail => detail.productCode && detail.qty > 0);
+        if (hasValidEntries) {
+            const currentHeld = {
+                id: Date.now(),
+                timestamp: new Date().toISOString(),
+                voucherId: voucherId,
+                refNo: formData.RefNo || '',
+                itemCount: formData.physicalDetails.filter(d => d.productCode && d.qty > 0).length,
+                branchId: selectedBranchId,
+                formData: { ...formData }
+            };
+            setHeldStocks(prev => [...prev.filter(item => item.id !== heldStock.id), currentHeld]);
+        } else {
+            setHeldStocks(prev => prev.filter(item => item.id !== heldStock.id));
+        }
+        setFormData(heldStock.formData);
+        setVoucherId(heldStock.voucherId);
+        setResetTableKey(prev => prev + 1);
+        setShowHeldStocks(false);
+        setRestoredHeldStockId(heldStock.id);
+        showToast.success("Physical stock restored successfully");
+    };
+
+    const deleteHeldStock = (id) => {
+        setHeldStocks(prev => prev.filter(item => item.id !== id));
+        showToast.success("Held physical stock deleted");
+    };
+
+    const HeldStocksPanel = () => {
+        if (!showHeldStocks || heldStocks.length === 0) return null;
+        return (
+            <div className="fixed top-20 right-4 z-50 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[70vh] overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
+                    <h3 className="font-semibold text-lg text-gray-800 dark:text-gray-200">Held Physical Stocks ({heldStocks.length})</h3>
+                    <button onClick={() => setShowHeldStocks(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">✕</button>
+                </div>
+                <div className="overflow-y-auto p-4 space-y-3">
+                    {heldStocks.map((item) => (
+                        <div key={item.id} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1">
+                                    <p className="font-semibold text-gray-800 dark:text-gray-200">Voucher: {item.voucherId}</p>
+                                    {item.refNo && <p className="text-sm text-gray-600 dark:text-gray-400">Ref No: {item.refNo}</p>}
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{item.itemCount} items</p>
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{new Date(item.timestamp).toLocaleString()}</p>
+                            <div className="flex gap-2">
+                                <button onClick={() => restoreHeldStock(item)} className="flex-1 px-3 py-2 bg-blue-500 text-white rounded hover:main-bg text-sm font-medium transition-colors">Restore</button>
+                                <button onClick={() => deleteHeldStock(item.id)} className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm font-medium transition-colors">Delete</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
     const handleSave = useCallback(async () => {
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
@@ -405,7 +563,8 @@ const PhysicalStockSkin = () => {
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                ...(editMode ? { ModifiedUser: userId } : {})
             };
 
             const api = editMode
@@ -415,6 +574,36 @@ const PhysicalStockSkin = () => {
 
             if (!response.data.error) {
                 setAlert({ id: Date.now(), type: "success", message: t("saveSuccess") });
+
+                // ✅ Remove held record if this save originated from a restored held stock
+                if (restoredHeldStockId) {
+                    setHeldStocks(prev => prev.filter(item => item.id !== restoredHeldStockId));
+                    setRestoredHeldStockId(null);
+                }
+
+                const savedVoucherNo = response?.data?.data?.voucherNo || response?.data?.data?.physicalStockNo || voucherId;
+                const stockDataForPrint = buildStockDataForPrint(savedVoucherNo, response?.data?.data || formData);
+
+                if (formData?.printAfterSave) {
+                    printPhysicalStock(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+                } else {
+                    const pdfResult = await Swal.fire({
+                        title: t('Print as PDF?') || 'Print as PDF?',
+                        text: t('Do you want to download this as a PDF?') || 'Do you want to download this as a PDF?',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
+                        cancelButtonText: t('No, Just Save') || 'No, Just Save',
+                    });
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            savePhysicalStockAsPDF(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+                        }, 500);
+                    }
+                }
+
                 if (saleSettings?.CloseAfterSave) {
                     navigate('/transaction/physical-stock/list');
                 }
@@ -431,22 +620,80 @@ const PhysicalStockSkin = () => {
         } finally {
             setIsSaving(false);
         }
-    }, [formData, generalSettings, editMode]);
+    }, [formData, generalSettings, editMode, restoredHeldStockId]);
+
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const stockDataForPrint = buildStockDataForPrint(existingVoucherNo, formData);
+            await printPhysicalStock(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+        } catch (error) {
+            console.error('Error reprinting physical stock:', error);
+            showToast.error('Failed to print');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, buildStockDataForPrint, existingVoucherNo, formData, selectedBranchDetails, time, currentCurrency]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const stockDataForPrint = buildStockDataForPrint(existingVoucherNo, formData);
+            await savePhysicalStockAsPDF(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+        } catch (error) {
+            console.error('Error saving PDF for physical stock:', error);
+            showToast.error('Failed to save PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [buildStockDataForPrint, existingVoucherNo, formData, selectedBranchDetails, time, currentCurrency]);
+
+    const ctrlSPressed = useRef(false);
 
     useEffect(() => {
+        if (editMode) return;
+
         const handleKeyDown = (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
                 e.preventDefault();
+
+                if (ctrlSPressed.current) return;
+
+                ctrlSPressed.current = true;
                 handleSave();
             }
         };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [handleSave]);
 
-    if (fetchLoading || baseDataloading) {
+        const handleKeyUp = (e) => {
+            if (e.key.toLowerCase() === "s") {
+                ctrlSPressed.current = false;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+        };
+    }, [handleSave, editMode]);
+
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary ">
                 <BreadCrumb
@@ -474,10 +721,12 @@ const PhysicalStockSkin = () => {
     }
     const handleInputChange = (e) => {
         const { name, value } = e.target;
+
         setFormData(prev => ({
             ...prev,
             [name]: value
         }));
+
     };
     const handleDropdownChange = (name, value) => {
         setFormData(prev => ({
@@ -485,10 +734,12 @@ const PhysicalStockSkin = () => {
             [name]: value
         }));
     };
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary">
             {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+            <HeldStocksPanel />
             <BreadCrumb
                 routes={[
                     { title: t("physicalStock.breadcrumb.master"), url: "#" },
@@ -505,6 +756,20 @@ const PhysicalStockSkin = () => {
                         type: "secondary",
                         onClick: handleListNavigate,
                     },
+                    !editMode && {
+                        label: `Hold Stock${heldStocks.length > 0 ? ` (${heldStocks.length})` : ''}`,
+                        icon: Archive,
+                        type: "secondary",
+                        title: "Hold the current physical stock entry (CTRL + H)",
+                        onClick: holdCurrentStock,
+                    },
+                    heldStocks.length > 0 && !editMode && {
+                        label: "Restore",
+                        icon: ArchiveRestore,
+                        type: "tertiary",
+                        title: "View and restore held physical stock entries",
+                        onClick: () => setShowHeldStocks(!showHeldStocks),
+                    },
                     {
                         label: t("clearBtn"),
                         icon: Eraser,
@@ -513,13 +778,41 @@ const PhysicalStockSkin = () => {
                     },
                     {
                         label: editMode ? t("updateBtn") : t("submitBtn"),
- icon: editMode ? Pencil : SaveAll,
+                        icon: editMode ? Pencil : SaveAll,
                         type: "primary",
                         onClick: handleSave,
                         loading: isSaving,
                         loadingText: t("loadingText"),
                     },
-                ]}
+                ].filter(Boolean)}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        {/* {!editMode && ( */}
+                            <div className="flex items-center space-x-2">
+                                <Checkbox
+                                    id="printAfterSavePhysicalStock"
+                                    checked={formData.printAfterSave || false}
+                                    onCheckedChange={(value) =>
+                                        setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                    }
+                                />
+                                <label
+                                    htmlFor="printAfterSavePhysicalStock"
+                                    className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                                >
+                                    {t("Direct Print") || "Print After Save"}
+                                </label>
+                            </div>
+                        {/* )} */}
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
             />
 
             <div className='p-2 space-y-2 bg-primary dark:bg-primary'>

@@ -10,6 +10,8 @@ import Swal from "sweetalert2";
 import { useTranslation } from "react-i18next";
 import FormattedDate from "@/components/common/FormattedDate";
 import { useNavigate } from "react-router-dom";
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
 const StaffAttendanceMasterList = () => {
   const [data, setData] = useState([]);
@@ -18,6 +20,7 @@ const StaffAttendanceMasterList = () => {
   const { t } = useTranslation();
   const { selectedBranchId } = useAuth();
   const navigate = useNavigate();
+   const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Staff Attendance");
 
   useEffect(() => {
     fetchData();
@@ -64,6 +67,12 @@ const StaffAttendanceMasterList = () => {
   }, [navigate]);
 
   const handleDelete = async (id) => {
+
+     if (!privileges?.can_delete) {
+            setAlert({ key: new Date(), type: "error", message: t("deletePermission") });
+            return;
+        }
+
     const result = await Swal.fire({
       title: t("delete.title") || "Are you sure?",
       text: t("delete.text") || "You won't be able to revert this!",
@@ -116,17 +125,18 @@ const StaffAttendanceMasterList = () => {
       sortable: true,
       render: (row) => row.narration || row.Narration || "-",
     },
-    {
-      key: "employeeCount",
-      label: "Employee Count",
-      sortable: true,
-      render: (row) =>
-        row.employeeCount ?? row.EmployeeCount ?? (row.details ? row.details.length : "-"),
-    },
+    // {
+    //   key: "employeeCount",
+    //   label: "Employee Count",
+    //   sortable: true,
+    //   render: (row) =>
+    //     row.employeeCount ?? row.EmployeeCount ?? (row.details ? row.details.length : "-"),
+    // },
   ];
 
-  const actions = [
-    {
+  const actions = [] 
+  if(privileges?.can_edit){
+    actions.push( {
       icon: <Edit className="h-4 w-4" />,
       onClick: (row) => {
         const id = row.attendanceMasterId;
@@ -135,8 +145,10 @@ const StaffAttendanceMasterList = () => {
       className:
         "text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300",
       tooltip: "Edit",
-    },
-    {
+    })
+  }
+  if(privileges?.can_delete){
+    actions.push({
       icon: <Trash2 className="h-4 w-4" />,
       className:
         "text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300",
@@ -145,30 +157,38 @@ const StaffAttendanceMasterList = () => {
         handleDelete(id);
       },
       tooltip: "Delete",
-    },
-  ];
+    },)
+  }
 
-  if (loading)
-    return (
-      <div>
-        <BreadCrumb
-          routes={[
-            { title: "Payroll", url: "#" },
-            { title: "Staff Attendance", url: "#" },
-          ]}
-          heading={{ icon: CalendarCheck, title: "Staff Attendance List" }}
-          actions={[
-            {
-              label: "Create New",
-              type: "primary",
-              icon: Plus,
-              onClick: () => navigate("/payroll/staff-attendance/add-new"),
-            },
-          ]}
-        />
-        <Preloader />
-      </div>
-    );
+  if (privilegeLoading || loading) {
+        return <div>
+            <BreadCrumb
+                routes={[
+                    { title: "Payroll", url: "#" },
+                    { title: "Staff Attendance", url: "#" },
+                ]}
+                heading={{ icon: CalendarCheck, title: "Staff Attendance List" }}
+            />
+            <Preloader />
+        </div>
+    }
+
+     if (!hasAccess) {
+        return (
+            <div>
+                <BreadCrumb
+                    routes={[
+                        { title: "Payroll", url: "#" },
+                        { title: "Staff Attendance", url: "#" },
+                    ]}
+                    heading={{ icon: CalendarCheck, title: "Staff Attendance List" }}
+                />
+                <NoAcessComponent message={message} />
+            </div>
+        );
+    }
+
+  
 
   return (
     <div>
@@ -180,14 +200,15 @@ const StaffAttendanceMasterList = () => {
           { title: "Staff Attendance", url: "#" },
         ]}
         heading={{ icon: CalendarCheck, title: "Staff Attendance List" }}
-        actions={[
+        actions={
+          privileges?.can_add ? [
           {
             label: `${t("createNewBtn") || "Create New"} (Ctrl+C)`,
             type: "primary",
             icon: Plus,
             onClick: () => navigate("/payroll/staff-attendance/add-new"),
           },
-        ]}
+        ] : []}
       />
 
       <div className="w-full bg-white dark:bg-[#1e1e1e] px-2 py-2 transition-colors">

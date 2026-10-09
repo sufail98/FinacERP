@@ -66,7 +66,17 @@ const DeliveryNoteList = () => {
             .replace('MM', MM)
             .replace('yyyy', yyyy);
     };
-
+    const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
     // Main fetch function
     const fetchAllSales = useCallback(async (params = {}) => {
         setFetchLoading(true);
@@ -97,7 +107,11 @@ const DeliveryNoteList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((currentPage - 1) * currentLimit) + index + 1,
-                date: formatDate(item.date),
+                date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setSalesData(formattedData);
@@ -137,16 +151,14 @@ const DeliveryNoteList = () => {
     }, [page, limit, fetchAllSales]);
 
     // Fetch when date range, voucher code, or customer search changes
-    useEffect(() => {
-        setPage(1);
-        fetchAllSales({
-            page: 1,
-            fromDate,
-            toDate,
-            voucherCode,
-            customerSearch
-        });
-    }, [fromDate, toDate, voucherCode, customerSearch]);
+   useEffect(() => {
+    setPage(1);
+    fetchAllSales({
+        page: 1,
+        voucherCode,
+        customerSearch
+    });
+}, [voucherCode, customerSearch]);
 
     // Debounced search for voucher code
     const handleVoucherCodeChange = (e) => {
@@ -205,25 +217,30 @@ const DeliveryNoteList = () => {
     };
 
     // Filter button click - only for date filtering
-    const handleFilter = () => {
-        if (voucherCode?.trim() || customerSearch?.trim()) {
-            // If search exists, just reset to page 1
-            setPage(1);
-            return;
-        }
+ const handleFilter = () => {
+    if (voucherCode?.trim() || customerSearch?.trim()) {
+        // search mode is already live via the effect above
+        return;
+    }
 
-        // Validate dates
-        if (fromDate > toDate) {
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: "From Date cannot be greater than To Date",
-            });
-            return;
-        }
+    if (fromDate > toDate) {
+        setAlert({
+            id: Date.now(),
+            type: "error",
+            message: "From Date cannot be greater than To Date",
+        });
+        return;
+    }
 
-        setPage(1);
-    };
+    setPage(1);
+    fetchAllSales({
+        page: 1,
+        fromDate,
+        toDate,
+        voucherCode: '',
+        customerSearch: ''
+    });
+};
 
     // Reset everything
     const handleReset = async () => {
@@ -343,7 +360,7 @@ const DeliveryNoteList = () => {
     const columns = [
         { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "right", width: "80px" },
         { key: "deliveryNoteNo", label: t("deliveryNote.list.columns.DlvryNoteNo"), sortable: true, align: "left", width: "120px" },
-        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "center", width: "120px" },
+        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "left", width: "120px" },
         { key: "LedgerName", label: t("salesInvoice.list.columns.cashParty"), sortable: true, align: "left", width: "180px" },
         { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right", width: "150px" },
     ];

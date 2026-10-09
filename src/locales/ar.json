@@ -3408,5 +3408,13 @@
     },
     "noData": "لا توجد بيانات متاحة. يرجى إنشاء التقرير.",
     "exportFileName": "تقرير_ميزان_المراجعة"
+  },
+  "incomeExpenseReport": {
+    "breadcrumb": { "group": "التقارير", "title": "تقرير الدخل والمصروفات" },
+    "reportType": "نوع التقرير",
+    "income": "الدخل",
+    "expense": "المصروفات",
+    "columns": { "sNo": "#", "ledgerName": "اسم الحساب", "amount": "المبلغ" },
+    "noData": "لا توجد بيانات متاحة"
   }
 }

@@ -70,6 +70,21 @@ const formatDate = (date) => {
     return `${day}-${month}-${year}`;
 };
 
+const getPrintedDateTime = () => {
+    const now = new Date();
+    const datePart = now.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+    });
+    const timePart = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+    return `${datePart} ${timePart}`;
+};
+
 /**
  * Generate QR code data for Saudi Arabia ZATCA compliance
  */
@@ -203,6 +218,10 @@ const generateQRCodeDataURL = async (data) => {
 const generateThermalHTML = async (invoiceData, branchData, time, currentCurrency) => {
     const state = store.getState().settings;
     const companyData = state.generalSettings;
+    const salesSettings = state.saleSettings;
+    const activateRoundoff = Boolean(companyData.RoundOff)
+     const showLineDiscount = salesSettings?.showLineDiscount || false;
+
     const companyName = branchData?.branchName || '';
     const companyNameFL = branchData?.branchNameFL || '';
     const addressFL = branchData?.addressFL || '';
@@ -224,8 +243,17 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
         billDiscount = 0,
         totalTax = 0,
         totalAmount = 0,
-        narration = ''
+        narration = '',
+        roundOff = 0,
     } = invoiceData;
+
+     const calcLineDiscount = (item) => {
+        const qty = Number(item.qty || 0);
+        const rate = Number(item.rate || 0);
+        const grossAmt = qty * rate;
+        const discPercent = Number(item.discountPercentage || 0);
+        return grossAmt * (discPercent / 100);
+    };
 
     // Generate QR code data
     const qrCodeData = generateQRCodeData(invoiceData, companyName, companyVatNo);
@@ -477,6 +505,10 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
                     <span class="info-label">Payment: <span style="font-weight:300">${paymentMode === 'cash' ? 'Cash' : 'Credit'}</span></span>
                     <span class="info-label">Time: <span style="font-weight:300">${time || ''}</span></span>
                 </div>
+                <div class="info-row">
+                    <span class="info-label">Printed On:</span>
+                    <span style="font-weight:300">${getPrintedDateTime()}</span>
+                </div>
             </div>
 
             <!-- Customer Info -->
@@ -520,7 +552,8 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
                     ${salesDetails.map((item, index) => {
                         const hasArabicName = item.productNameArb && item.productNameArb.trim() !== '';
                         const rowSpan = hasArabicName ? 3 : 2;
-                        
+                          const discAmt = calcLineDiscount(item);
+
                         return `
                         <tr>
                             <td rowspan="${rowSpan}" style="text-align: center; vertical-align: middle; font-weight: bold; font-size: 11px; border-right: 1px solid #ddd;">${index + 1}</td>
@@ -542,6 +575,13 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
                             <td style="text-align: center; font-size: 11px;">${(item.taxAmount || 0).toFixed(2)}</td>
                             <td style="text-align: right; font-size: 11px; font-weight: bold;">${(item.amount || 0).toFixed(2)}</td>
                         </tr>
+                        ${showLineDiscount && discAmt > 0 ? `
+                        <tr style="border-bottom: 1px dashed #ccc;">
+                            <td colspan="5" style="text-align: right; font-size: 9px; color: #666; padding: 0px 2px 2px 2px;">
+                                Disc: (-${discAmt.toFixed(2)})
+                            </td>
+                        </tr>
+                        ` : ''}
                         `;
                     }).join('')}
                 </tbody>
@@ -553,16 +593,29 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
                     <span>Sub Total:</span>
                     <span>${fmt(subTotal)}</span>
                 </div>
-                ${billDiscount > 0 ? `
-                <div class="total-row">
+                    ${((salesSettings?.showBillDiscountAmount || salesSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0)?`
+                                  <div class="total-row">
                     <span>Discount:</span>
                     <span>- ${billDiscount || 0}</span>
+                </div> ` : ""}
+               
+                <div class="total-row">
+                    <span>Taxable Amount:</span>
+                    <span>${fmt(
+                                 Number(subTotal || 0) -
+                                 Number(invoiceData?.billDiscount || 0) 
+                            )}</span>
                 </div>
-                ` : ''}
                 <div class="total-row">
                     <span>VAT Amount:</span>
                     <span>${fmt(totalTax)}</span>
                 </div>
+                ${activateRoundoff && Number(roundOff) !== 0 ? `
+                     <div class="total-row">
+                    <span>Round Off:</span>
+                    <span>${fmt(roundOff)}</span>
+                </div>` : ""}
+
                 <div class="total-row grand-total">
                     <span>GRAND TOTAL:</span>
                     <span>${fmt(totalAmount)}</span>

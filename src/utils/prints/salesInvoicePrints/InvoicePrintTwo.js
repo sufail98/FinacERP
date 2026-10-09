@@ -119,20 +119,30 @@ const splitIntoPages = (array, firstPageRows, middlePageRows, lastPageRows) => {
         return [{ items: [], isFirst: true, isLast: true, maxRows: lastPageRows }];
     }
 
-    if (totalItems <= lastPageRows) {
-        return [{ items: array, isFirst: true, isLast: true, maxRows: lastPageRows }];
-    }
+    // if (totalItems <= lastPageRows) {
+    //     return [{ items: array, isFirst: true, isLast: true, maxRows: lastPageRows }];
+    // }
+    if (totalItems <= Math.min(firstPageRows, lastPageRows)) {
+    return [{ items: array, isFirst: true, isLast: true, maxRows: lastPageRows }];
+}
 
     if (totalItems <= firstPageRows) {
         return [{ items: array, isFirst: true, isLast: true, maxRows: firstPageRows }];
     }
 
-    const pages = [];
-    let currentIndex = 0;
+    // Case 2: two pages — first page fixed 16, second page (last) takes the rest up to 26
+    const remainingAfterFirst = totalItems - firstPageRows;
+    if (remainingAfterFirst <= middlePageRows) {
+        return [
+            { items: array.slice(0, firstPageRows), isFirst: true, isLast: false, maxRows: firstPageRows },
+            { items: array.slice(firstPageRows), isFirst: false, isLast: true, maxRows: middlePageRows },
+        ];
+    }
 
-    const firstPageItems = Math.min(firstPageRows, totalItems);
-    pages.push({ items: array.slice(0, firstPageItems), isFirst: true, isLast: false, maxRows: firstPageRows });
-    currentIndex = firstPageItems;
+    // Case 3: more than two pages — first 16, middle pages 26 each, last page max 11
+    const pages = [];
+    pages.push({ items: array.slice(0, firstPageRows), isFirst: true, isLast: false, maxRows: firstPageRows });
+    let currentIndex = firstPageRows;
 
     while (currentIndex < totalItems) {
         const remainingItems = totalItems - currentIndex;
@@ -142,23 +152,17 @@ const splitIntoPages = (array, firstPageRows, middlePageRows, lastPageRows) => {
             break;
         }
 
-        const itemsAfterThisPage = remainingItems - middlePageRows;
+        // Would putting a full middle page leave too little (or too much) for the last page?
+        const itemsAfterThisMiddlePage = remainingItems - middlePageRows;
 
-        if (itemsAfterThisPage > 0 && itemsAfterThisPage <= lastPageRows) {
-            pages.push({ items: array.slice(currentIndex, currentIndex + middlePageRows), isFirst: false, isLast: false, maxRows: middlePageRows });
-            currentIndex += middlePageRows;
-        } else if (itemsAfterThisPage <= 0) {
-            pages.push({ items: array.slice(currentIndex), isFirst: false, isLast: true, maxRows: lastPageRows });
+        if (itemsAfterThisMiddlePage <= lastPageRows) {
+            // This becomes the final page instead of a middle page, sized to fit exactly
+            pages.push({ items: array.slice(currentIndex), isFirst: false, isLast: true, maxRows: Math.max(lastPageRows, remainingItems) });
             break;
-        } else {
-            pages.push({ items: array.slice(currentIndex, currentIndex + middlePageRows), isFirst: false, isLast: false, maxRows: middlePageRows });
-            currentIndex += middlePageRows;
         }
-    }
 
-    if (pages.length > 0) {
-        pages[pages.length - 1].isLast = true;
-        pages[pages.length - 1].maxRows = lastPageRows;
+        pages.push({ items: array.slice(currentIndex, currentIndex + middlePageRows), isFirst: false, isLast: false, maxRows: middlePageRows });
+        currentIndex += middlePageRows;
     }
 
     return pages;
@@ -290,23 +294,28 @@ const resolveQRData = (invoiceData, companyName, companyVatNo, time) => {
  * ✅ Now async for QR generation, handles reprint qr_link
  */
 const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurrency) => {
+    // console.log(invoiceData);
 
     const state = store.getState().settings;
     const generalSettings = state.generalSettings;
+    const salesSettings = state.saleSettings;
+    const showLineDiscount = salesSettings?.showLineDiscount || false;
+        const activateRoundoff = Boolean(generalSettings.RoundOff)
+
     const showCurrencyPrefix = generalSettings.showCurrencyprefix;
     const currencySymbol = currentCurrency ? currentCurrency.currencySymbol : '';
-    
+
     // ✅ Check if tax should be displayed
     const showTax = invoiceData.taxType !== "NA";
     // ✅ Check if this is an estimate
     const isEstimate = invoiceData.taxType === "NA";
-    
+
     const fmt = (num) =>
         showCurrencyPrefix
             ? `${currencySymbol} ${Number(num).toFixed(state.generalSettings.decimalPart)}`
             : Number(num).toFixed(state.generalSettings.decimalPart);
     const companyData = state.generalSettings;
-    const salesSettings = state.saleSettings;
+    
     const headerImage = companyData.branchHeader;
     const footerImage = companyData.branchFooter;
     const companyName = branchData?.branchName || '';
@@ -325,7 +334,11 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
         billDiscount = 0,
         totalTax = 0,
         totalAmount = 0,
-        ledgerBalance = 0,  // ✅ Added ledgerBalance
+        taxableAmt = 0,     // ✅ ADDED — needed as subTotal/totalAmount fallback
+        ledgerBalance = 0,
+        othercharge = 0,
+        roundOff = 0,
+
     } = invoiceData;
 
     // ✅ Check if customer name contains 'cash' (case-insensitive)
@@ -334,7 +347,7 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
     // ✅ Only generate QR if not an estimate
     let qrCodeSVG = '';
     let qrCodeDataURL = '';
-    
+
     if (!isEstimate) {
         const qrData = resolveQRData(invoiceData, companyName, companyVatNo, time);
         qrCodeSVG = await generateQRCodeSVG(qrData, 120);
@@ -344,15 +357,30 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
     const totalQty = salesDetails.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0);
     const totalVAT = salesDetails.reduce((sum, item) => sum + (parseFloat(item.taxAmount) || 0), 0);
 
-    const FIRST_PAGE_ROWS = 22;
+    const totalLineDiscount = salesDetails.reduce((sum, item) => {
+    const gross = Number(item.qty || 0) * Number(item.rate || 0);
+    const disc = gross - Number(item.netAmount || 0);
+    return sum + Math.max(0, disc);
+}, 0);
+
+
+const effectiveSubTotal = (subTotal !== undefined && subTotal !== null && Number(subTotal) !== 0)
+    ? Number(subTotal)
+    : Number(taxableAmt) || 0;
+const effectiveGrandTotal = (totalAmount !== undefined && totalAmount !== null && Number(totalAmount) !== 0)
+    ? Number(totalAmount)
+    : Number(taxableAmt) || 0;
+
+
+    const FIRST_PAGE_ROWS = 10;
     const MIDDLE_PAGE_ROWS = 30;
     const LAST_PAGE_ROWS = 14;
 
     const productPages = splitIntoPages(salesDetails, FIRST_PAGE_ROWS, MIDDLE_PAGE_ROWS, LAST_PAGE_ROWS);
     const totalPages = productPages.length || 1;
 
-    const topPadding = headerImage ? '140px' : '90px';
-    const bottomPadding = footerImage ? '100px' : '100px';
+    const topPadding = headerImage ? '110px' : '90px';
+    const bottomPadding = footerImage ? '70px' : '100px';
     const lastPageBottomPadding = footerImage ? '320px' : '235px';
 
     let cumulativeIndex = 0;
@@ -383,12 +411,23 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                         <div class="company-vat">VAT No: ${companyVatNo}</div>
                     </div>
                 `}
-
-                <div class="content-wrapper ${isLastPage ? 'last-page' : ''}" style="padding: ${topPadding} 15px ${isLastPage ? lastPageBottomPadding : bottomPadding} 15px;">
+    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        })} ${new Date().toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        })}</div>
+        </div>
+                <div class="content-wrapper ${isLastPage ? 'last-page' : ''}" style="padding: ${topPadding} 30px ${isLastPage ? lastPageBottomPadding : bottomPadding} 30px;">
                     ${isFirstPage ? `
                     <h2 class="heading">
                         <span>${headingEn}</span>
-                        <span>${headingAr}</span>
+                        <span class="heading-ar">${headingAr}</span>
                     </h2>
 
                     <div class="header-section">
@@ -407,7 +446,7 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                                    <td class="bold">
   ${paymentMode === 'cash'
                     ? 'Cash Sale'
-                    : paymentMode === 'card'
+                    : paymentMode === 'bank'
                         ? 'Bank Sale'
                         : 'Credit Sale'
                 }
@@ -433,16 +472,16 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
   ${(CustomerAddress
                     ? `${CustomerAddress}<br>${invoiceData?.customerData?.AddressArabic || ''}`
                     : `
-        ${invoiceData?.customerData?.BuildingNo || ''}<br>
-        ${invoiceData?.customerData?.BuildingNoArb ? `${invoiceData?.customerData?.BuildingNoArb}<br>` : ''}
-        ${invoiceData?.customerData?.StreetName || ''}<br>
-        ${invoiceData?.customerData?.StreetNameArb ? `${invoiceData?.customerData?.StreetNameArb}<br>` : ''}
-        ${invoiceData?.customerData?.CityName || ''}<br>
-        ${invoiceData?.customerData?.CityNameArb ? `${invoiceData?.customerData?.CityNameArb}<br>` : ''}
-        ${invoiceData?.customerData?.District || ''}<br>
-        ${invoiceData?.customerData?.DistrictArb ? `${invoiceData?.customerData?.DistrictArb}<br>` : ''}
-        ${invoiceData?.customerData?.Country || ''}<br>
-        ${invoiceData?.customerData?.CountryArb ? `${invoiceData?.customerData?.CountryArb}<br>` : ''}
+        ${invoiceData?.customerData?.BuildingNo || ''},
+        ${invoiceData?.customerData?.BuildingNoArb ? `${invoiceData?.customerData?.BuildingNoArb},` : ''}
+        ${invoiceData?.customerData?.StreetName || ''},
+        ${invoiceData?.customerData?.StreetNameArb ? `${invoiceData?.customerData?.StreetNameArb},` : ''}
+        ${invoiceData?.customerData?.CityName || ''},
+        ${invoiceData?.customerData?.CityNameArb ? `${invoiceData?.customerData?.CityNameArb},` : ''}
+        ${invoiceData?.customerData?.District || ''},
+        ${invoiceData?.customerData?.DistrictArb ? `${invoiceData?.customerData?.DistrictArb},` : ''}
+        ${invoiceData?.customerData?.Country || ''},
+        ${invoiceData?.customerData?.CountryArb ? `${invoiceData?.customerData?.CountryArb},` : ''}
       `)
                 }
 </td>
@@ -467,6 +506,10 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                             <div class="col-qty"><div>الكمية</div><div>QTY</div></div>
                             <div class="col-qty"><div>وحدة</div><div>UNIT</div></div>
                             <div class="col-price"><div>سعر الوحدة</div><div>UNIT PRICE</div></div>
+                            ${showLineDiscount ? `
+                                <div class="col-disc-percent"><div>خصم %</div><div>DISC %</div></div>
+                                <div class="col-disc-amt"><div>مبلغ الخصم</div><div>DISC AMT</div></div>
+                            ` : ''}
                             ${showTax ? `
                             <div class="col-vat-percent"><div>ضريبة %</div><div>VAT %</div></div>
                             <div class="col-vat-amt"><div>مبلغ الضريبة</div><div>VAT AMT</div></div>
@@ -477,40 +520,53 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                         <div class="product-body">
                             ${pageProducts.map((item, index) => {
                     const globalIndex = pageStartIndex + index;
+
+                      const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    const grossAmt = qty * rate;
+    const discPercent = Number(item.discountPercentage || 0);
+    const discAmt = Math.max(0, grossAmt - Number(item.netAmount || 0));
+
                     return `
-                                    <div class="product-row">
-                                        <div class="col-sl" style="font-size: 10px;">${globalIndex + 1}</div>
-                                        <div class="col-product">
-                                            <div style="font-weight: 600;font-size: 10px;">${item.productName || ''}</div><br/>
-                                            ${item.productNameArb ? `<div style="font-size: 10px;">${item.productNameArb}</div>` : ''}<br/>
-                                            ${item.productDescription ? `<div style="font-size: 10px;">${item.productDescription}</div>` : ''}
-                                        </div>
-                                        <div class="col-qty" style="font-size: 10px;">${item?.qty || 0}</div>
-                                        <div class="col-qty" style="font-size: 10px;">${item?.unitName || 'PCS'}</div>
-                                        <div class="col-price" style="font-size: 10px;">${(Number(item?.rate).toFixed(state.generalSettings.decimalPart)) || 0}</div>
-                                        ${showTax ? `
-                                        <div class="col-vat-percent" style="font-size: 10px;">${item?.taxRate || 0}%</div>
-                                        <div class="col-vat-amt" style="font-size: 10px;">${Number(item?.taxAmount || 0).toFixed(state.generalSettings.decimalPart)}</div>
-                                        ` : ''}
-                                        <div class="col-total" style="text-align:right;font-size: 10px;">${Number(item?.amount || 0).toFixed(state.generalSettings.decimalPart)}</div>
-                                    </div>
+                                      <div class="product-row">
+            <div class="col-sl" style="font-size: 10px;">${globalIndex + 1}</div>
+            <div class="col-product">
+                <div style="font-weight: 600;font-size: 10px;">${item.productName || ''}</div><br/>
+                ${item.productNameArb ? `<div style="font-size: 10px;">${item.productNameArb}</div>` : ''}<br/>
+                ${item.productDescription ? `<div style="font-size: 10px;">${item.productDescription}</div>` : ''}
+            </div>
+            <div class="col-qty" style="font-size: 10px;">${item?.qty || 0}</div>
+            <div class="col-qty" style="font-size: 10px;">${item?.unitName || 'PCS'}</div>
+            <div class="col-price" style="font-size: 10px;">${rate.toFixed(state.generalSettings.decimalPart)}</div>
+            ${showLineDiscount ? `
+            <div class="col-disc-percent" style="font-size: 10px;">${discPercent.toFixed(2)}%</div>
+            <div class="col-disc-amt" style="font-size: 10px;">${discAmt.toFixed(state.generalSettings.decimalPart)}</div>
+            ` : ''}
+            ${showTax ? `
+            <div class="col-vat-percent" style="font-size: 10px;">${item?.taxRate || 0}%</div>
+            <div class="col-vat-amt" style="font-size: 10px;">${Number(item?.taxAmount || 0).toFixed(state.generalSettings.decimalPart)}</div>
+            ` : ''}
+            <div class="col-total" style="text-align:right;font-size: 10px;">${Number(item?.amount || 0).toFixed(state.generalSettings.decimalPart)}</div>
+        </div>
                                 `;
                 }).join('')}
                             
                             ${emptyRows.map(() => {
-                                const taxCols = showTax ? '<div class="col-vat-percent"></div><div class="col-vat-amt"></div>' : '';
-                                return `
+                                 const discCols = showLineDiscount ? '<div class="col-disc-percent"></div><div class="col-disc-amt"></div>' : '';
+                    const taxCols = showTax ? '<div class="col-vat-percent"></div><div class="col-vat-amt"></div>' : '';
+                    return `
                                     <div class="product-row empty-row">
                                         <div class="col-sl"></div>
                                         <div class="col-product"></div>
                                         <div class="col-qty"></div>
                                         <div class="col-qty"></div>
                                         <div class="col-price"></div>
+                                        ${discCols}
                                         ${taxCols}
                                         <div class="col-total"></div>
                                     </div>
                                 `;
-                            }).join('')}
+                }).join('')}
 
                             ${!isLastPage ? `
                                 <div class="continuation-note">Continued on next page... (Page ${pageIndex + 1} of ${totalPages})</div>
@@ -526,11 +582,15 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                             <div class="col-qty">${totalQty.toFixed(0)}</div>
                             <div class="col-qty"></div>
                             <div class="col-price"></div>
+                              ${showLineDiscount ? `
+                                <div class="col-disc-percent"></div>
+                                <div class="col-disc-amt">${totalLineDiscount.toFixed(state.generalSettings.decimalPart)}</div>
+                            ` : ''}
                             ${showTax ? `
                             <div class="col-vat-percent"></div>
                             <div class="col-vat-amt">${Number(totalVAT).toFixed(state.generalSettings.decimalPart)}</div>
                             ` : ''}
-                            <div class="col-total">${Number(totalAmount).toFixed(state.generalSettings.decimalPart)}</div>
+                          <div class="col-total">${effectiveGrandTotal.toFixed(state.generalSettings.decimalPart)}</div>
                         </div>
                         ` : ''}
                     </div>
@@ -547,8 +607,36 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                                 <tr>
                                     <td style="text-align: left;">Sub Total</td>
                                     <td style="text-align: right;padding-right:15px;"><span>المجموع الفرعي</span> <span>:</span></td>
-                                    <td style="text-align: right;">${fmt(subTotal)}</td>
+                                  <td style="text-align: right;">${fmt(effectiveSubTotal)}</td>
                                 </tr>
+                                 ${Number(othercharge) !== 0 ? `<tr>
+                                    <td style="text-align: left;">Other Charge</td>
+                                    <td style="text-align: right;padding-right:15px;"><span>رسوم اخرى</span> <span>:</span></td>
+                                    <td style="text-align: right;">${fmt(othercharge)}</td>
+                                </tr>` : ""}
+                                 
+
+                                ${((salesSettings?.showBillDiscountAmount || salesSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0)?`
+                                 <tr>
+                                    <td style="text-align: left;">Discount Amt</td>
+                                    <td style="text-align: right;padding-right:15px;"><span>مقدار الخصم</span> <span>:</span></td>
+                                    <td style="text-align: right;">${fmt(billDiscount)}</td>
+                                </tr>` : ""}
+                                 
+
+                                 <tr>
+                                    <td style="text-align: left;">Taxable Amount</td>
+                                      <td  style="text-align: right;padding-right:15px;">المبلغ الخاضع للضريبة <span>:</span></td>
+                                    <td style="text-align: right;">
+                                            ${fmt(
+                    Number(subTotal || 0) -
+                    Number(invoiceData?.billDiscount || 0) +
+                    Number(othercharge || 0)
+                )}
+                                    </td>
+          
+                                 </tr>
+
                                 ${showTax ? `
                                 <tr>
                                     <td style="text-align: left;">Vat @ 15%</td>
@@ -556,27 +644,20 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                                     <td style="text-align: right;">${fmt(totalTax)}</td>
                                 </tr>
                                 ` : ''}
-                                <tr>
-                                    <td style="text-align: left;">Additional Cost</td>
-                                    <td style="text-align: right;padding-right:15px;"><span>تكلفة اضافية</span> <span>:</span></td>
-                                    <td style="text-align: right;">${fmt(0)}</td>
-                                </tr>
-                                <tr>
-                                    <td style="text-align: left;">Discount Amt</td>
-                                    <td style="text-align: right;padding-right:15px;"><span>مقدار الخصم</span> <span>:</span></td>
-                                    <td style="text-align: right;">${fmt(billDiscount)}</td>
-                                </tr>
-                                <tr>
-                                    <td style="text-align: left;">Other Charge</td>
-                                    <td style="text-align: right;padding-right:15px;"><span>رسوم اخرى</span> <span>:</span></td>
-                                    <td style="text-align: right;">${fmt(0)}</td>
-                                </tr>
+                                ${(activateRoundoff && Number(roundOff) !== 0) ? `
+                                    <tr>
+                                    <td style="text-align: left;">Round Off</td>
+                                    <td style="text-align: right; padding-right:15px;""><span>مبلغ الضريبة</span>  <span>:</span></td>
+                                    <td style="text-align: right;"">${fmt(roundOff)}</td>
+                                </tr>` : ""}
+                              
+                               
                                 <tr class="grand-total-row">
                                     <th style="text-align: left; font-size: 16px;">Grand Total</th>
                                     <th style="text-align: right;padding-right:15px;"><span>المجموع الإجمالي</span> <span>:</span></th>
-                                    <th style="text-align: right; font-size: 16px;">${fmt(totalAmount)}</th>
+                                  <th style="text-align: right; font-size: 16px;">${fmt(effectiveGrandTotal)}</th>
                                 </tr>
-                             ${(!isCashCustomer&&salesSettings.showCustomerBalanceBill) ? `
+                             ${(!isCashCustomer && salesSettings.showCustomerBalanceBill) ? `
         <tr class="customer-balance-row">
             <td style="text-align: left;">Customer Balance</td>
             <td style="text-align: right;padding-right:15px;"><span>رصيد العميل</span> <span>:</span></td>
@@ -590,8 +671,8 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                     <div class="bottom-section">
                         <div class="amount-words-section">
                             <div style="font-weight: 900; margin-bottom: 5px;">Amount In Words <span>المبلغ بالكلمات</span> :-</div>
-                            <div style="margin-top: 5px;">${amountToWords(totalAmount || 0).english}</div>
-                            <div style="margin-top: 5px; text-align:right;">${amountToWords(totalAmount || 0).arabic}</div>
+                        <div style="margin-top: 5px;">${amountToWords(effectiveGrandTotal).english}</div>
+<div style="margin-top: 5px; text-align:right;">${amountToWords(effectiveGrandTotal).arabic}</div>
                         </div>
                         <!-- ✅ QR Code - Hidden for Estimate, SVG primary, PNG fallback -->
                         ${!isEstimate ? `
@@ -655,11 +736,52 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                     margin-bottom: 10px;
                     page-break-after: always;
                 }
+                    /* ✅ Vertical Print Timestamp in Right Corner */
+.print-timestamp {
+    position: absolute;
+    bottom: 15mm;
+    right: 8mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
+
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
                 .page:last-child { margin-bottom: 0; }
-                .header-image { width: 100%; height: 130px; position: absolute; top: 0; left: 0; z-index: 1; }
-                .header-image img { width: 100%; display: block; height: 100%; }
-                .footer-image { width: 100%; position: absolute; bottom: 10px; left: 0; z-index: 1; }
-                .footer-image img { width: 100%; display: block; }
+                .header-image { width: 100%; height: 110px; position: absolute; top: 0; left: 0; z-index: 1; }
+                .header-image img { width: 100%; display: block; height: 100%;object-fit: fill; }
+                .footer-image { width: 100%; position: absolute; bottom: 10px; left: 0; z-index: 1;height: 70px; }
+                .footer-image img { width: 100%; display: block; height: 70px; object-fit: fill; }
                 .content-wrapper {
                     flex: 1;
                     position: relative;
@@ -669,23 +791,29 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                 }
                 .total-section-fixed {
                     position: absolute;
-                    bottom: ${footerImage ? '90px' : '90px'};
+                    bottom: ${footerImage ? '120px' : '90px'};
                     left: 15px;
                     right: 15px;
                     z-index: 2;
+                    padding-left:20px;
+                    padding-right:20px;
                 }
                 .heading {
+                
                     display: flex;
+                    flex-direction:column;
                     justify-content: center;
-                    gap: 1rem;
-                    font-size: 22px;
-                    margin: 0 0 10px 0;
+                    font-size: 19px;
+                    margin: 0 0 5px 0;
+                    text-align:center;
                     font-weight: bold;
-                    border-top: 1px solid rgb(216, 216, 216);
                     border-bottom: 1px solid rgb(216, 216, 216);
                     padding-top: 5px;
                     padding-bottom: 5px;
                 }
+                       .heading-ar{
+                         font-size: 16px;
+                        }
                 .header-text {
                     width: 100%;
                     padding: 20px 15px;
@@ -736,9 +864,9 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                     flex-direction: column;
                     justify-content: center;
                 }
-                .product-row { height: 19px; }
+                .product-row { height: auto;  }
                 .product-row > div {
-                    padding: 2px 10px;
+                    padding: 0 2px !important;
                     border-right: 1px solid rgb(216, 216, 216);
                     display: flex;
                     align-items: center;
@@ -752,22 +880,42 @@ const generateInvoiceHTMLTwo = async (invoiceData, branchData, time, currentCurr
                     align-items: center;
                 }
                 
-                /* ✅ Dynamic column widths based on tax visibility */
-                ${showTax ? `
-                    .col-sl { width: 5%; text-align: center; justify-content: center; }
-                    .col-product { width: 45%; font-size: 10px; }
-                    .col-qty { width: 5%; text-align: center; justify-content: center; }
-                    .col-price { width: 14%; text-align: right; justify-content: flex-end; }
-                    .col-vat-percent { width: 7%; text-align: center; justify-content: center; }
-                    .col-vat-amt { width: 9%; text-align: right; justify-content: flex-end; }
-                    .col-total { width: 15%; text-align: right; justify-content: flex-end; }
-                ` : `
-                    .col-sl { width: 6%; text-align: center; justify-content: center; }
-                    .col-product { width: 54%; font-size: 10px; }
-                    .col-qty { width: 6%; text-align: center; justify-content: center; }
-                    .col-price { width: 16%; text-align: right; justify-content: flex-end; }
-                    .col-total { width: 18%; text-align: right; justify-content: flex-end; }
-                `}
+            
+
+                /* ✅ Dynamic column widths based on tax + discount visibility */
+${showTax && showLineDiscount ? `
+    .col-sl { width: 4%; text-align: center; justify-content: center; }
+    .col-product { width: 35%; font-size: 10px; }
+    .col-qty { width: 5%; text-align: center; justify-content: center; }
+    .col-price { width: 11%; text-align: right; justify-content: flex-end; }
+    .col-disc-percent { width: 6%; text-align: center; justify-content: center; }
+    .col-disc-amt { width: 8%; text-align: right; justify-content: flex-end; }
+    .col-vat-percent { width: 6%; text-align: center; justify-content: center; }
+    .col-vat-amt { width: 9%; text-align: right; justify-content: flex-end; }
+    .col-total { width: 16%; text-align: right; justify-content: flex-end; }
+` : showTax ? `
+    .col-sl { width: 5%; text-align: center; justify-content: center; }
+    .col-product { width: 45%; font-size: 10px; }
+    .col-qty { width: 5%; text-align: center; justify-content: center; }
+    .col-price { width: 14%; text-align: right; justify-content: flex-end; }
+    .col-vat-percent { width: 7%; text-align: center; justify-content: center; }
+    .col-vat-amt { width: 9%; text-align: right; justify-content: flex-end; }
+    .col-total { width: 15%; text-align: right; justify-content: flex-end; }
+` : showLineDiscount ? `
+    .col-sl { width: 5%; text-align: center; justify-content: center; }
+    .col-product { width: 44%; font-size: 10px; }
+    .col-qty { width: 6%; text-align: center; justify-content: center; }
+    .col-price { width: 15%; text-align: right; justify-content: flex-end; }
+    .col-disc-percent { width: 7%; text-align: center; justify-content: center; }
+    .col-disc-amt { width: 9%; text-align: right; justify-content: flex-end; }
+    .col-total { width: 14%; text-align: right; justify-content: flex-end; }
+` : `
+    .col-sl { width: 6%; text-align: center; justify-content: center; }
+    .col-product { width: 54%; font-size: 10px; }
+    .col-qty { width: 6%; text-align: center; justify-content: center; }
+    .col-price { width: 16%; text-align: right; justify-content: flex-end; }
+    .col-total { width: 18%; text-align: right; justify-content: flex-end; }
+`}
                 
                 .product-header > div:last-child,
                 .product-row > div:last-child,

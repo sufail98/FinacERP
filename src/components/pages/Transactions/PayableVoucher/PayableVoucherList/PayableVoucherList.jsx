@@ -36,12 +36,12 @@ const PayableVoucherList = () => {
     const [toDate, setToDate] = useState(getTodayDate());
 
     // Server-side pagination states
-    const [limit, setLimit] = useState(10);
+    const [limit, setLimit] = useState(80);
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState({
         total: 0,
         page: 1,
-        limit: 10,
+        limit: 80,
         total_pages: 1
     });
 
@@ -71,7 +71,17 @@ const PayableVoucherList = () => {
             SNo: index + 1
         }));
     }, [filteredData]);
-
+const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
     const fetchAllPayableVouchers = async () => {
         setFetchLoading(true);
         try {
@@ -87,7 +97,11 @@ const PayableVoucherList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((page - 1) * limit) + index + 1,
-                date: formatDate(item.date),
+                date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setPayableVoucherData(formattedData);
@@ -255,7 +269,7 @@ const PayableVoucherList = () => {
     const columns = [
         { key: "SNo", label: t("payableVoucher.list.columns.sno"), sortable: true, align: "right" },
         { key: "PayableNo", label: t("payableVoucher.list.columns.voucherNo"), sortable: true, align: "left" },
-        { key: "date", label: t("payableVoucher.list.columns.date"), sortable: true, align: "center" },
+        { key: "date", label: t("payableVoucher.list.columns.date"), sortable: true, align: "left" },
         { key: "partyName", label: t("payableVoucher.list.columns.supplier"), sortable: true, align: "left" },
         { key: "totalAmount", label: t("payableVoucher.list.columns.totalAmt"), sortable: true, align: "right" },
     ];
@@ -294,7 +308,7 @@ const PayableVoucherList = () => {
 
     if (privilegeLoading) {
         return (
-            <div className="bg-primary dark:bg-primary min-h-screen">
+            <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
                     routes={[
                         { title: t("payableVoucher.breadcrumb.master"), url: "#" },
@@ -308,7 +322,7 @@ const PayableVoucherList = () => {
     }
 
     return (
-        <div className="bg-primary dark:bg-primary min-h-screen">
+        <div className="bg-primary dark:bg-primary">
             {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
             <BreadCrumb
                 routes={[

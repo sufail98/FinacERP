@@ -6,6 +6,7 @@ import Preloader from "@/components/common/Preloader";
 import useFormValidation from "@/lib/hooks/useFormValidation";
 import { MdGTranslate } from "react-icons/md";
 import { useSelector } from "react-redux";
+import { sanitize } from "@/lib/inputSanitizer";
 // AllCountries
 import {
   ChevronDown,
@@ -639,24 +640,67 @@ const CustomerAndSupplierForm = ({
 
   const handleChange = (e) => {
     const { name, value, type: inputType, checked } = e.target;
-    setFormData((prev) => {
-      if (name in prev.ShippingAddress) {
-        return {
-          ...prev,
-          ShippingAddress: {
-            ...prev.ShippingAddress,
-            [name]: inputType === "checkbox" ? checked : value,
-          },
-        };
-      }
-      if (name === "customerName" && value.length > 0) {
-        return {
-          ...prev,
-          [name]: value.charAt(0).toUpperCase() + value.slice(1),
-        };
-      }
-      return { ...prev, [name]: value };
-    });
+
+    let updatedValue = value;
+    if (name === "customerName") {
+      updatedValue = sanitize.alphaNumericSpace(value)
+    } else if (
+      [
+        "vatNumber",
+        "crNumber",
+        "BuildingNo",
+        "additionalNo",
+        "postboxNo",
+        "postboxNoArb",
+        "additionalNoArb",
+        "buildingNoArb"
+      ].includes(name)
+    ) {
+      updatedValue = sanitize.numbers(value).slice(0, 20)
+    } else if (
+      [
+        "StreetName",
+        "cityName",
+        "streetNameArb",
+        "cityNameArb",
+      ].includes(name)
+    ) {
+      updatedValue = sanitize.alphaNumericSpace(value)
+    } else if (["districtArb", "District"].includes(name)) {
+      updatedValue = sanitize.lettersSpace(value)
+    } else if (["faxNo", "phoneNo"].includes(name)) {
+      updatedValue = sanitize.numbers(value).slice(0, 15)
+    }
+    // setFormData((prev) => {
+    //   if (name in prev.ShippingAddress) {
+    //     return {
+    //       ...prev,
+    //       ShippingAddress: {
+    //         ...prev.ShippingAddress,
+    //         [name]: inputType === "checkbox" ? checked : value,
+    //       },
+    //     };
+    //   }
+    //   if (name === "customerName" && value.length > 0) {
+    //     return {
+    //       ...prev,
+    //       [name]: value.charAt(0).toUpperCase() + value.slice(1),
+    //     };
+    //   }
+    //   return { ...prev, [name]: value };
+    // });
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: updatedValue,
+    }));
+
+    if (errors[name]) {
+      setErrors((prev) => ({
+        ...prev,
+        [name]: "",
+      }));
+    }
   };
 
   const handleSelectChange = (name, value) =>
@@ -998,7 +1042,22 @@ const CustomerAndSupplierForm = ({
 
   const isZatcaPhase2Customer =
     generalSettings?.zatcaType === "Phase 2" && type === "customer" && formData.vatNumber !== "";
+  // Add this helper (near isZatcaPhase2Customer / validationRules)
+  const zatcaRequiredFields = [
+    "vatNumber",
+    "crNumber",
+    "BuildingNo",
+    "additionalNo",
+    "StreetName",
+    "cityName",
+    "District",
+    "postboxNo",
+    "country",
+  ];
 
+  const isZatcaAddressIncomplete =
+    isZatcaPhase2Customer &&
+    zatcaRequiredFields.some((field) => !formData[field]?.toString().trim());
   const vatValidationRule = (value) => {
     if (!value) return t("requiredFieldsError");
     if (!/^3\d{13}3$/.test(value)) return "VAT number must be 15 digits, starting and ending with 3";
@@ -1162,6 +1221,12 @@ const CustomerAndSupplierForm = ({
           value: "Customer&Supplier",
           label:
             t("customer.form.customerandsupplieroption") ||
+            "Customer & Supplier",
+        },
+        {
+          value: "Other",
+          label:
+            t("customer.form.other") ||
             "Customer & Supplier",
         },
       ];
@@ -1627,7 +1692,7 @@ const CustomerAndSupplierForm = ({
                 {/* ADDRESS TAB */}
                 {activeTab === "address" && (
                   <div className="space-y-4">
-                    {isZatcaPhase2Customer && (
+                    {isZatcaAddressIncomplete && (
                       <div className="text-xs text-amber-700 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded px-3 py-2">
                         ⚠️ ZATCA Phase 2 requires all address fields to be filled.
                       </div>

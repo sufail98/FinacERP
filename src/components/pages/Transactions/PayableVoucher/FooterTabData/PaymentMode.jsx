@@ -370,7 +370,7 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, banks, ca
                 <div className="flex items-center justify-center gap-2">
                   <span className="text-xs font-medium text-secondary dark:text-secondary">Balance</span>
                   <div
-                    className={`border-2 rounded px-2 py-1 w-24 text-right font-bold text-sm ${balance === 0
+                    className={`border-2 rounded px-2 py-1 w-auto text-right font-bold text-sm ${balance === 0
                       ? 'border-green-500 dark:border-green-400 text-green-600 dark:text-green-400'
                       : isCreditBalanceInvalid
                         ? 'border-red-500 dark:border-red-400 text-red-600 dark:text-red-400'

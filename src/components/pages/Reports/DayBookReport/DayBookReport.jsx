@@ -19,8 +19,8 @@ const DayBookReport = () => {
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState(null);
     const [ledgerData, setLedgerData] = useState([]);
-    const { selectedBranchId, currentCurrency } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Day Book");
+    const { selectedBranchId, currentCurrency,selectedBranchDetails } = useAuth();
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Daybook");
     const { generalSettings } = useSelector((state) => state.settings);
     const navigate = useNavigate();
 
@@ -38,8 +38,8 @@ const DayBookReport = () => {
             'Contra Voucher': `/transaction/contra-voucher/edit-contra-voucher/${row.masterId}`,
             'Material Receipt': `/transaction/material-receipt/edit/${row.masterId}`,
             'Delivery Note': `/transaction/delivery-note/edit-delivery-note/${row.masterId}`,
-            'Payable': `/transaction/payable-voucher/edit/${row.masterId}`,
-            'Receivable': `/transaction/receivable-voucher/edit/${row.masterId}`,
+            'Payable Voucher': `/transaction/payable-voucher/edit/${row.masterId}`,
+            'Receivable Voucher': `/transaction/receivable-voucher/edit/${row.masterId}`,
             'Physical Stock': `/transaction/physical-stock/edit/${row.masterId}`,
             'Damage Stock': `/transaction/damage-stock/edit/${row.masterId}`,
         };
@@ -102,7 +102,7 @@ const DayBookReport = () => {
         const requestBody = {
             fromDate: filters.fromDate,
             toDate: filters.toDate,
-            branchId: parseInt(selectedBranchId) || 1,
+            branchId: selectedBranchDetails?.mainBranch ? null : parseInt(selectedBranchId) || 1,
             currencyId: parseInt(currentCurrency?.currencyId) || 1,
             isCondensed: filters.isCondensed,
             ledgerName: filters.ledgerName || ''

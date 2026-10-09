@@ -27,7 +27,7 @@ const ContraReport = () => {
     const [userData, setUserData] = useState([]);
 
     const { selectedBranchId, currentCurrency } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Contra");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Contra Report");
     const { generalSettings } = useSelector((state) => state.settings);
 
     const { exportGenericToExcel, exportGenericToPdf, exportGenericToCsv } = useReportExport();
@@ -35,9 +35,9 @@ const ContraReport = () => {
     /* ------------------------------ Default dates ------------------------------ */
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -64,8 +64,8 @@ const ContraReport = () => {
         try {
             const [costCentreRes, ledgerRes, usersRes] = await Promise.all([
                 axiosInstance.get("cost-centres").catch(() => ({ data: { data: [] } })),
-                axiosInstance.post("account-ledgers", {
-                    group_ids: [5, 6, 28, 29],
+                axiosInstance.post("bank-account-ledgers", {
+                    group_ids: [5, ],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("users").catch(() => ({ data: { data: [] } }))
@@ -91,13 +91,13 @@ const ContraReport = () => {
             const payload = {
                 fromDate: filters.fromDate,
                 toDate: filters.toDate,
-                postedStatus: 'Yes',
-                ledgerId: filters.ledgerId ? Number(filters.ledgerId) : 0,
+                postedStatus: null,
+                ledgerId: filters.ledgerId ? Number(filters.ledgerId) : null,
                 branchId: Number(selectedBranchId),
                 currencyId: currentCurrency?.currencyId || 30,
                 detailed: isDetailed,   // true → Detailed, false → Summary
-                userId: filters.userId ? Number(filters.userId) : 0,
-                costCentreId: filters.costCentreId ? Number(filters.costCentreId) : 0,
+                userId: filters.userId ? Number(filters.userId) : null,
+                costCentreId: filters.costCentreId ? Number(filters.costCentreId) : null,
                 condition: filters.condition || 'All',
             };
 
@@ -358,7 +358,9 @@ const ContraReport = () => {
                     onExportExcel: handleExportExcel,
                     onExportPdf: handleExportPdf,
                     onExportCsv: handleExportCsv,
-                    label: t('contraReport.export.label') || 'Export Report'
+                   label: t('contraReport.export.label', {
+  defaultValue: 'Export Report',
+})
                 } : null}
             />
 

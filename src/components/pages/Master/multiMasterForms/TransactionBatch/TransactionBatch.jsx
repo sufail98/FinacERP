@@ -13,7 +13,7 @@ import Swal from "sweetalert2";
 import { useTranslation } from "react-i18next";
 
 const TransactionBatch = () => {
-  const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("TransactionBatch");
+  const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Transaction Batch");
   const { t } = useTranslation();
   const { selectedBranchId } = useAuth();
 

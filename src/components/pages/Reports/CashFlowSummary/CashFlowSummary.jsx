@@ -23,8 +23,8 @@ const CashFlowSummary = () => {
     const [groupData, setGroupData] = useState([]);
     const [ledgerData, setLedgerData] = useState([]);
 
-    const { selectedBranchId, currentCurrency } = useAuth(); // Get currentCurrency from useAuth
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Cash Flow Summary");
+    const { selectedBranchId, currentCurrency, selectedBranchDetails } = useAuth();
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Cash Flow");
     const { generalSettings } = useSelector((state) => state.settings);
     const decimalPart = generalSettings?.decimalPart || 2;
 
@@ -59,7 +59,7 @@ const CashFlowSummary = () => {
         try {
             const [groupRes, ledgerRes] = await Promise.all([
                 axiosInstance.get("accountgroups").catch(() => ({ data: { data: [] } })),
-                axiosInstance.get("account-ledgers").catch(() => ({ data: { data: [] } }))
+                axiosInstance.get(`all-account-ledgers/${selectedBranchId}`).catch(() => ({ data: { data: [] } }))
             ]);
 
             setGroupData(groupRes.data.data || groupRes.data || []);
@@ -74,8 +74,8 @@ const CashFlowSummary = () => {
         setAlert(null);
 
         const requestBody = {
-            branch_id: parseInt(selectedBranchId) || 1,
-            currency_id: currentCurrency?.currencyId || 30, // Use currency from settings
+            branch_id: selectedBranchDetails?.mainBranch ? null : parseInt(selectedBranchId) || 1,
+            currency_id: currentCurrency?.currencyId || 30,
             from_date: filters.fromDate,
             to_date: filters.toDate,
             filter_by: filters.filterBy,
@@ -122,29 +122,40 @@ const CashFlowSummary = () => {
             return { summaryData: [], inflowData: [], outflowData: [], totals: null };
         }
 
-        const inflow = reportData.filter(item => item.flow_type === 'Inflow');
-        const outflow = reportData.filter(item => item.flow_type === 'Outflow');
-
-        const totalInflow = inflow.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
-        const totalOutflow = outflow.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
-        const netFlow = totalInflow - totalOutflow;
+        // Helper: derive an inflow/outflow pair from any row, regardless of
+        // whether the API sends explicit Inflow/Outflow rows or a single
+        // pre-netted "Net Flow" row.
+        const splitAmount = (item) => {
+            const amt = parseFloat(item.amount) || 0;
+            if (item.flow_type === 'Inflow') {
+                return { inflowAmt: amt, outflowAmt: 0 };
+            }
+            if (item.flow_type === 'Outflow') {
+                return { inflowAmt: 0, outflowAmt: amt };
+            }
+            if (item.flow_type === 'Net Flow') {
+                // API already netted the value; bucket by sign.
+                return amt >= 0
+                    ? { inflowAmt: amt, outflowAmt: 0 }
+                    : { inflowAmt: 0, outflowAmt: Math.abs(amt) };
+            }
+            return { inflowAmt: 0, outflowAmt: 0 };
+        };
 
         // SUMMARY VIEW - Group by month
         if (filters.filterBy === 'Summary') {
             const monthlyData = {};
 
             reportData.forEach(item => {
-                const month = item.month || 'Current Period';
+                const month = item.month || item.voucher_no || 'Current Period';
 
                 if (!monthlyData[month]) {
                     monthlyData[month] = { month, inflow: 0, outflow: 0 };
                 }
 
-                if (item.flow_type === 'Inflow') {
-                    monthlyData[month].inflow += parseFloat(item.amount) || 0;
-                } else {
-                    monthlyData[month].outflow += parseFloat(item.amount) || 0;
-                }
+                const { inflowAmt, outflowAmt } = splitAmount(item);
+                monthlyData[month].inflow += inflowAmt;
+                monthlyData[month].outflow += outflowAmt;
             });
 
             const summaryData = Object.values(monthlyData).map((item, index) => ({
@@ -155,6 +166,10 @@ const CashFlowSummary = () => {
                 netFlow: item.inflow - item.outflow
             }));
 
+            const totalInflow = summaryData.reduce((sum, row) => sum + row.inflow, 0);
+            const totalOutflow = summaryData.reduce((sum, row) => sum + row.outflow, 0);
+            const netFlow = totalInflow - totalOutflow;
+
             return {
                 summaryData,
                 inflowData: [],
@@ -162,6 +177,17 @@ const CashFlowSummary = () => {
                 totals: { totalInflow, totalOutflow, netFlow }
             };
         }
+
+        // For the split views below, only rows that are explicitly
+        // Inflow/Outflow make sense to bucket by group/ledger. A "Net Flow"
+        // row has no group/ledger meaning in a split view, so it's ignored
+        // there (it only applies to Summary).
+        const inflow = reportData.filter(item => item.flow_type === 'Inflow');
+        const outflow = reportData.filter(item => item.flow_type === 'Outflow');
+
+        const totalInflow = inflow.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        const totalOutflow = outflow.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        const netFlow = totalInflow - totalOutflow;
 
         // CONDENSED VIEW - Group by group_name
         if (filters.filterBy === 'Condensed') {
@@ -222,7 +248,7 @@ const CashFlowSummary = () => {
         }
 
         // VERY DETAILED VIEW - Show all transactions
-        if (filters.filterBy === 'VeryDetailed') {
+        if (filters.filterBy === 'Very Detailed') {
             return {
                 summaryData: [],
                 inflowData: inflow.map((item, i) => ({
@@ -303,7 +329,7 @@ const CashFlowSummary = () => {
         switch (filters.filterBy) {
             case 'Condensed': return condensedInflowColumns;
             case 'Detailed': return detailedInflowColumns;
-            case 'VeryDetailed': return veryDetailedInflowColumns;
+            case 'Very Detailed': return veryDetailedInflowColumns;
             default: return [];
         }
     };
@@ -312,7 +338,7 @@ const CashFlowSummary = () => {
         switch (filters.filterBy) {
             case 'Condensed': return condensedOutflowColumns;
             case 'Detailed': return detailedOutflowColumns;
-            case 'VeryDetailed': return veryDetailedOutflowColumns;
+            case 'Very Detailed': return veryDetailedOutflowColumns;
             default: return [];
         }
     };
@@ -400,7 +426,7 @@ const CashFlowSummary = () => {
         { label: t('Summary'), value: 'Summary' },
         { label: t('Condensed'), value: 'Condensed' },
         { label: t('Detailed'), value: 'Detailed' },
-        { label: t('Very Detailed'), value: 'VeryDetailed' }
+        { label: t('Very Detailed'), value: 'Very Detailed' }
     ];
 
     const monthOptions = [
@@ -428,7 +454,7 @@ const CashFlowSummary = () => {
         { label: t('All'), value: '' },
         ...groupData.map(group => ({
             label: group.accountGroupName || group.AccountGroupName || group.groupName,
-            value: String(group.accountGroupId || group.AccountGroupId || group.id)
+            value: group.groupId
         }))
     ];
 
@@ -500,7 +526,7 @@ const CashFlowSummary = () => {
                     ledgerOptions={ledgerOptions}
                     loading={loading}
                     resetFilters={resetFilters}
-                    currentCurrency={currentCurrency} // Pass currency for display if needed
+                    currentCurrency={currentCurrency}
                 />
 
                 {/* Totals Bar */}
@@ -565,6 +591,7 @@ const CashFlowSummary = () => {
                                 footerData={inflowFooterData}
                                 staticSearchable={false}
                                 tableId="cash-flow-inflow"
+                                maxHeight="calc(100vh - 360px)"
                             />
                         </div>
 
@@ -583,6 +610,7 @@ const CashFlowSummary = () => {
                                 footerData={outflowFooterData}
                                 staticSearchable={false}
                                 tableId="cash-flow-outflow"
+                                maxHeight="calc(100vh - 360px)"
                             />
                         </div>
                     </div>

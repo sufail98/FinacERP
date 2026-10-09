@@ -15,8 +15,31 @@ import { formatDateWithTime, parseDateFromAPI, parseLocalDate } from '@/lib/date
 import PrintDropdown from '@/components/common/PrintDropdown';
 import { Checkbox } from '@/components/ui/checkbox';
 import materialRecieptPrintOne from '@/utils/prints/materialRecieptPrints/materialRecieptPrintOne';
+import materialRecieptPrintTwo from '@/utils/prints/materialRecieptPrints/materialRecieptPrintTwo';
+import materialRecieptPrintThree from '@/utils/prints/materialRecieptPrints/materialRecieptPrintThree';
+
+const RECEIPT_PRINT_HANDLERS = {
+    'Type 1': {
+        print: (d, branch, time, cur) => materialRecieptPrintOne(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => materialRecieptPrintOne(d, branch, time, null, cur),
+    },
+    'Type 2': {
+        print: (d, branch, time, cur) => materialRecieptPrintTwo(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => materialRecieptPrintTwo(d, branch, time, null, cur),
+    },
+     'Type 3': {
+        print: (d, branch, time, cur) => materialRecieptPrintThree(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => materialRecieptPrintThree(d, branch, time, null, cur),
+    },
+};
+const DEFAULT_RECEIPT_PRINT_TYPE = 'Type 1';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import { showToast } from '@/utils/toast';
 
 const MaterialReceiptSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Material Receipt");
+
     const { materialReceiptId } = useParams();
     const editMode = Boolean(materialReceiptId);
     const [fetchLoading, setFetchLoading] = useState(false);
@@ -31,18 +54,27 @@ const MaterialReceiptSkin = () => {
     const [godowns, setGodowns] = useState([]);
     const [purchaseOrders, setPurchaseOrders] = useState([]);
     const [receiptId, setReceiptId] = useState('');
-    const [alert, setAlert] = useState(null);
+
     // ✅ ADD selectedBranchDetails
     const { userId, selectedBranchId, currentFinancialYear, currentCurrencyConversion, currentCurrency, selectedBranchDetails } = useAuth();
     const [time, setTime] = useState("");
     // ✅ ADD purchaseSettings to destructure (already present, kept)
-    const { generalSettings, purchaseSettings, financeSettings } = useSelector((state) => state.settings);
+    const { generalSettings, purchaseSettings, financeSettings, printSettings } = useSelector((state) => state.settings);
+    
+    const receiptPrintSettings = printSettings?.["Material Receipt"];
+    const receiptPrintTypes = Object.keys(receiptPrintSettings?.types || {});
+    const receiptPrintConfig = receiptPrintSettings?.default || Object.values(receiptPrintSettings?.types || {})[0];
     const [currency, setCurrencies] = useState([]);
     const [resetTableKey, setResetTableKey] = useState(0);
     const [batches, setBatches] = useState([]);
     const [billingAddress, setBlillingAddress] = useState(null);
     const [currentledgerBalance, setCurrentLedgerBalance] = useState('');
     const [otherChargeLedgers, setOtherChargLedgers] = useState([]);
+    const [isPrinting, setIsPrinting] = useState(false);
+    const [loadingSupplier, setLoadingSupplier] = useState(false);
+
+    const [updateSupplierId, setUpdateSupplierId] = useState(null);
+
 
     useEffect(() => {
         const updateTime = () => {
@@ -66,10 +98,10 @@ const MaterialReceiptSkin = () => {
         date: new Date(),
         ledgerId: '',
         currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-        taxType: 'Applicable to product',
+        taxType: generalSettings?.taxType,
         GodownId: '',
-        costCentreId: '',
-        BatchId: '',
+        costCentreId: 1,
+        BatchId: null,
         partyName: '',
         partyAddress: '',
         partyMobile: '',
@@ -79,7 +111,7 @@ const MaterialReceiptSkin = () => {
         exchangeRate: currentCurrencyConversion?.rate,
         exchangeDate: currentCurrencyConversion?.date,
         orderMasterId: "",
-        AgainstNo: "",
+        AgainstNo: "NA",
         transportCompany: "",
         narration: "",
         taxableAmt: "",
@@ -90,14 +122,16 @@ const MaterialReceiptSkin = () => {
         billDiscount: "",
         roundoff: "",
         totalAmount: "",
+         supplierData: {},  
         postedStatus: generalSettings?.AccountPosting ? "No" : "Yes",
         postedBy: generalSettings?.AccountPosting ? null : userId,
         postedDate: generalSettings?.AccountPosting ? null : new Date(),
         branchId: selectedBranchId,
         CreatedUser: userId,
+        ModifiedUser: editMode ? userId : null,
         // ✅ ADD PRINT FIELDS
         printAfterSave: purchaseSettings?.printAfterSave !== undefined ? purchaseSettings.printAfterSave : true,
-        printType: 'a4',
+        printType: receiptPrintSettings?.default || (receiptPrintTypes.length > 0 ? receiptPrintTypes[0] : 'Type 1'),
         materialDetails: [
             {
                 orderDetails1Id: "",
@@ -121,7 +155,9 @@ const MaterialReceiptSkin = () => {
                 otherchargeOnProduct: null,
                 GodownId: null,
                 RackId: null,
-                branchId: selectedBranchId
+                branchId: selectedBranchId,
+                CreatedUser: userId,
+                ModifiedUser: editMode ? userId : null,
             }
         ]
     });
@@ -151,6 +187,39 @@ const MaterialReceiptSkin = () => {
         }));
     }, [financeSettings, godowns]);
 
+    const fetchSupplierData = async (ledgerId) => {
+        setLoadingSupplier(true);
+        try {
+            const response = await axiosInstance.get(`get-account-ledger-byId/${ledgerId || formData.ledgerId || financeSettings?.defaultPurchaseAccount}`);
+            if (response.data) {
+                const data = response.data.data;
+
+                setUpdateSupplierId(data?.ledgerId);
+
+                setBlillingAddress({
+                    name: data?.ledgerName || '',
+                    email: data?.email || '',
+                    phoneNo: data?.phoneNo || '',
+                    vatNo: data?.tinNumber || '',
+                    address: data?.address || ''
+                });
+
+                setFormData((prev) => ({
+                    ...prev,
+                     supplierData: data,  
+                    partyName: data?.ledgerName || '',
+                    partyAddress: data?.address || '',
+                    partyMobile: data?.phoneNo || '',
+                    partyVatNo: data?.tinNumber || '',
+                }));
+            }
+        } catch (error) {
+            console.error("Error fetching supplier data:", error);
+        } finally {
+            setLoadingSupplier(false);
+        }
+    };
+
     const [baseDataloading, setBaseDataloading] = useState(false);
 
     useEffect(() => {
@@ -159,7 +228,7 @@ const MaterialReceiptSkin = () => {
             try {
                 const res = await axiosInstance.post('all-purchase-data', {
                     voucherType: "Material Receipt", branchId: selectedBranchId,
-                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Supplier"],
+                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Supplier", "Customer&Supplier"],
                     ledgerId: formData.ledgerId, currencyId: currentCurrency.currencyId
                 });
                 const data = res?.data?.data;
@@ -168,6 +237,7 @@ const MaterialReceiptSkin = () => {
                     c => c.branchid_conversion == selectedBranchId
                 ) || [];
                 setCurrencies(filteredCurrencies);
+                fetchSupplierData(formData.ledgerId);
 
                 setReceiptId(data?.voucherdata?.voucherCode);
                 setEmployees(data?.employees);
@@ -187,8 +257,11 @@ const MaterialReceiptSkin = () => {
                 }
                 setFormData(prev => ({
                     ...prev,
+                    ...(!editMode && { supplierData: data?.customeraddress }),
                     customerData: data?.customeraddress,
-                    BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : ''
+                    BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : null,
+                    GodownId: data?.godowns?.length > 0 ? data.godowns[0].godownid : 1,
+                    costCentreId: data?.costcentre?.length > 0 ? data.costcentre[0].costCentreId : 1,
                 }));
                 if (!editMode) {
                     setBlillingAddress({
@@ -245,10 +318,10 @@ const MaterialReceiptSkin = () => {
             date: new Date(),
             ledgerId: '',
             currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-            taxType: 'Applicable to product',
+            taxType: generalSettings?.taxType,
             GodownId: '',
-            costCentreId: '',
-            BatchId: '',
+            costCentreId: 1,
+            BatchId: null,
             partyName: '',
             partyAddress: '',
             partyMobile: '',
@@ -262,6 +335,7 @@ const MaterialReceiptSkin = () => {
             transportCompany: "",
             narration: "",
             taxableAmt: "",
+               supplierData: {},  
             subTotal: "",
             totalTax: "",
             additionalCost: "",
@@ -297,7 +371,7 @@ const MaterialReceiptSkin = () => {
                     productDescription: "",
                     billDiscOnProduct: null,
                     AddCostonProduct: null,
-                    otherchargeonproduct: null,
+                    otherchargeOnProduct: null,
                     GodownId: null,
                     RackId: null,
                     branchId: selectedBranchId
@@ -313,197 +387,215 @@ const MaterialReceiptSkin = () => {
         }
     }, [editMode]);
 
-  const fetchAgainstModeDetailes = async (mode, masterId) => {
-    setFetchLoading(true);
-    try {
-        let data;
-        let againstNoValue = 'NA';
+    const fetchAgainstModeDetailes = async (mode, masterId) => {
+        setFetchLoading(true);
+        try {
+            let data;
+            let againstNoValue = 'NA';
 
-        if (mode === 'Order') {
-            const response = await axiosInstance.post(`material-receipt-purchase-order-details`, {
-                receiptmasterId: null,
-                ordermasterId: masterId
-            });
-            data = response.data.data;
-            againstNoValue = 'Order';
-        }
+            if (mode === 'Order') {
+                const response = await axiosInstance.post(`material-receipt-purchase-order-details`, {
+                    receiptmasterId: null,
+                    ordermasterId: masterId
+                });
+                data = response.data.data;
+                againstNoValue = data?.voucherNo || 'NA';
+            }
 
-        setExistingReceiptNo(data.receieptNo || data.orderNo || data.voucherNo);
+            let supplierData = {};
+try {
+    const supplierRes = await axiosInstance.get(`get-account-ledger-byId/${data.ledgerId}`);
+    supplierData = supplierRes.data?.data || {};
+} catch (err) {
+    console.error("Error fetching supplier data:", err);
+}
 
-        const taxResponse = await axiosInstance.get("tax-masters");
-        const taxMasterData = taxResponse.data.data || [];
+            setExistingReceiptNo(data.receieptNo || data.orderNo || data.voucherNo);
 
-        // ✅ response uses materialDetails with proper camelCase
-        const detailsArray = data.materialDetails || [];
+            const taxResponse = await axiosInstance.get("tax-masters");
+            const taxMasterData = taxResponse.data.data || [];
 
-        const materialReceiptDetailsWithProducts = await Promise.all(
-            detailsArray.map(async (item) => {
-                const productCode = item.productCode || item.productcode || '';
-                const unitId = item.unitId ?? item.unitid ?? null;
-                const orderDetails1Id = item.orderDetails1Id ?? item.orderdetails1id ?? '';
-                const barcode = item.barcode || '';
-                const qty = item.qty;
-                const rate = item.rate;
-                const freeQty = item.freeQty ?? item.freeqty ?? null;
-                const discountPercentage = item.discountPercentage ?? item.discountpercentage ?? 0;
-                const taxAmountRaw = parseFloat(item.taxAmount ?? item.taxamount ?? 0);
-                const grossAmount = parseFloat(item.grossAmount ?? item.grossamount ?? 0);
-                const netAmount = parseFloat(item.netAmount ?? item.netamount ?? 0);
-                const amount = item.amount;
-                const conversionFactor = item.ConversionFactor ?? item.conversionfactor ?? null;
-                const billDiscOnProduct = item.billDiscOnProduct ?? item.billdisconproduct ?? null;
-                const addCostonProduct = item.AddCostonProduct ?? item.addcostonproduct ?? null;
-                const otherchargeonproduct = item.OtherChargeOnProduct ?? item.otherchargeonproduct ?? null;
-                const productDescription = item.productDescription ?? item.productdescription ?? '';
+            // ✅ response uses materialDetails with proper camelCase
+            const detailsArray = data.materialDetails || [];
 
-                // ✅ taxId is present in this response, but also infer as fallback
-                const rawTaxId = item.taxId ?? item.taxid ?? null;
-                let taxInfo = taxMasterData.find(t => t.taxId === rawTaxId);
-                if (!taxInfo && taxAmountRaw > 0 && netAmount > 0) {
-                    const impliedRate = (taxAmountRaw / netAmount) * 100;
-                    taxInfo = taxMasterData.find(t =>
-                        Math.abs(parseFloat(t.rate) - impliedRate) < 0.01
-                    );
-                }
-                const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
-                const resolvedTaxId = taxInfo ? taxInfo.taxId : rawTaxId;
+            const materialReceiptDetailsWithProducts = await Promise.all(
+                detailsArray.map(async (item) => {
+                    const productCode = item.productCode || item.productcode || '';
+                    const unitId = item.unitId ?? item.unitid ?? null;
+                    const orderDetails1Id = item.orderDetails1Id ?? item.orderdetails1id ?? '';
+                    const barcode = item.barcode || '';
+                    const qty = item.qty;
+                    const rate = item.rate;
+                    const freeQty = item.freeQty ?? item.freeqty ?? null;
+                    const discountPercentage = item.discountPercentage ?? item.discountpercentage ?? 0;
+                    const taxAmountRaw = parseFloat(item.taxAmount ?? item.taxamount ?? 0);
+                    const grossAmount = parseFloat(item.grossAmount ?? item.grossamount ?? 0);
+                    const netAmount = parseFloat(item.netAmount ?? item.netamount ?? 0);
+                    const amount = item.amount;
+                    const conversionFactor = item.ConversionFactor ?? item.conversionfactor ?? null;
+                    const billDiscOnProduct = item.billDiscOnProduct ?? item.billdisconproduct ?? null;
+                    const addCostonProduct = item.AddCostonProduct ?? item.addcostonproduct ?? null;
+                    const otherchargeOnProduct = item.OtherChargeOnProduct || item.otherchargeOnProduct || null;
+                    const productDescription = item.productDescription ?? item.productdescription ?? '';
 
-                let productName = '';
-                let availableUnits = [];
-                let productDetails = {
-                    productCode,
-                    barcode,
-                    partNo: item.PartNo || item.partNo || item.partno || '',
-                    brand: '',
-                    mrp: '',
-                    purchase: rate || '',
-                    productDescription,
-                    UnitName: ''
-                };
-
-                if (productCode) {
-                    try {
-                        const productResponse = await axiosInstance.get(
-                            `get-product-unit-sales-details-byId/${productCode}`
+                    // ✅ taxId is present in this response, but also infer as fallback
+                    const rawTaxId = item.taxId ?? item.taxid ?? null;
+                    let taxInfo = taxMasterData.find(t => t.taxId === rawTaxId);
+                    if (!taxInfo && taxAmountRaw > 0 && netAmount > 0) {
+                        const impliedRate = (taxAmountRaw / netAmount) * 100;
+                        taxInfo = taxMasterData.find(t =>
+                            Math.abs(parseFloat(t.rate) - impliedRate) < 0.01
                         );
-                        const productData = productResponse.data.data;
-                        productName = productData.productname || '';
-                        availableUnits = productData.units || [];
-                        const selectedUnit = availableUnits.find(u => u.unitid === unitId);
-                        productDetails = {
-                            productCode,
-                            barcode: selectedUnit?.barcode || barcode || '',
-                            partNo: productData.partNo || item.PartNo || '',
-                            brand: productData.brand || '',
-                            mrp: productData.mrp || '',
-                            purchase: rate || '',
-                            productDescription,
-                            UnitName: selectedUnit?.unitname || ''
-                        };
-                    } catch (err) {
-                        console.error(`Error fetching product ${productCode}:`, err);
                     }
-                }
+                    const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
+                    const resolvedTaxId = taxInfo ? taxInfo.taxId : rawTaxId;
 
-                return {
-                    orderDetails1Id,                        // ✅ correct field
-                    materialReceiptDetails1Id: '',          // new record, no ID yet
-                    materialReceiptMasterId: '',
-                    productCode,
-                    productName,
-                    qty: parseFloat(qty) || 0,
-                    freeQty: freeQty ? parseFloat(freeQty) : null,
-                    rate: parseFloat(rate) || 0,
-                    unitId,
-                    discountPercentage: parseFloat(discountPercentage) || 0,
-                    taxId: resolvedTaxId,                   // ✅ resolved
-                    taxRate,
-                    tax: taxRate,                           // ✅ needed by table calculateRow
-                    taxType: item.taxType || item.taxtype || 'Excluded',
-                    ConversionFactor: conversionFactor,
-                    barcode,
-                    taxAmount: taxAmountRaw,
-                    taxAmt: taxAmountRaw,                   // ✅ pre-set for table display
-                    grossAmount,
-                    netAmount,
-                    amount: parseFloat(amount) || 0,
-                    productDescription,
-                    billDiscOnProduct: parseFloat(billDiscOnProduct) || 0,
-                    AddCostonProduct: addCostonProduct,
-                    otherchargeonproduct,
-                    GodownId: item.GodownId ?? item.godownid ?? null,
-                    RackId: item.RackId ?? item.rackid ?? null,
-                    branchId: item.branchId ?? item.branchid ?? selectedBranchId,
-                    availableUnits,
-                    productDetails
-                };
-            })
-        );
+                    let productName = '';
+                    let availableUnits = [];
+                    let productDetails = {
+                        productCode,
+                        barcode,
+                        partNo: item.PartNo || item.partNo || item.partno || '',
+                        brand: '',
+                        mrp: '',
+                        purchase: rate || '',
+                        productDescription,
+                        UnitName: ''
+                    };
 
-        setBlillingAddress({
-            name: data.partyName || '',
-            email: data.partyEmail || '',
-            phoneNo: data.partyMobile || '',
-            vatNo: data.partyVatNo || '',
-            address: data.partyAddress || ''
-        });
+                    if (productCode) {
+                        try {
+                            const productResponse = await axiosInstance.get(
+                                `get-product-unit-sales-details-byId/${productCode}`
+                            );
+                            const productData = productResponse.data.data;
+                            productName = productData.productname || '';
+                            availableUnits = productData.units || [];
+                            const selectedUnit = availableUnits.find(u => u.unitid === unitId);
+                            productDetails = {
+                                productCode,
+                                barcode: selectedUnit?.barcode || barcode || '',
+                                partNo: productData.partNo || item.PartNo || '',
+                                brand: productData.brand || '',
+                                mrp: productData.mrp || '',
+                                purchase: rate || '',
+                                productDescription,
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
+                            };
+                        } catch (err) {
+                            console.error(`Error fetching product ${productCode}:`, err);
+                        }
+                    }
 
-        setFormData((prev) => ({
-            ...prev,
-            voucherType: "Material Receipt",
-            yearId: currentFinancialYear?.yearId,
-            date: parseDateFromAPI(data.date),
-            ledgerId: data.ledgerId,
-            currencyConversionId: data.currencyConversionId,
-            taxType: data.taxType,
-            // ✅ GodownId from header or first row
-            GodownId: data.GodownId ?? data.godownid ??
-                detailsArray[0]?.GodownId ?? detailsArray[0]?.godownid ?? prev.GodownId,
-            costCentreId: data.costCentreId ?? data.costcentreid ?? '',
-            BatchId: data.BatchId ?? data.batchid ?? '',
-            partyName: data.partyName || '',
-            partyAddress: data.partyAddress || '',
-            partyMobile: data.partyMobile || '',
-            partyVatNo: data.partyVatNo || '',
-            partyRefNo: data.partyRefNo || '',
-            partyRefDate: data.partyRefDate ? parseDateFromAPI(data.partyRefDate) : '',
-            exchangeRate: data.exchangeRate,
-            exchangeDate: data.exchangeDate ? new Date(data.exchangeDate) : '',
-            // ✅ set orderMasterId so the link is preserved on save
-            orderMasterId: masterId,
-            AgainstNo: againstNoValue,
-            transportCompany: data.transportCompany || '',
-            narration: data.narration || '',
-            taxableAmt: data.taxableAmt,
-            subTotal: data.subTotal,
-            totalTax: data.totalTax,
-            additionalCost: data.additionalCost,
-            // ✅ order response uses OtherCharge (capital O)
-            othercharge: data.othercharge ?? data.OtherCharge ?? '',
-            billDiscount: data.billDiscount,
-            roundoff: data.roundoff,
-            totalAmount: data.totalAmount,
-            postedStatus: data.postedStatus || prev.postedStatus,
-            postedBy: data.postedBy || prev.postedBy,
-            postedDate: data.postedDate ? new Date(data.postedDate) : '',
-            branchId: data.branchId || prev.branchId,
-            CreatedUser: data.CreatedUser || prev.CreatedUser,
-            materialDetails: materialReceiptDetailsWithProducts,
-        }));
+                    return {
+                        orderDetails1Id,                        // ✅ correct field
+                        materialReceiptDetails1Id: '',          // new record, no ID yet
+                        materialReceiptMasterId: '',
+                        productCode,
+                        productName,
+                        qty: parseFloat(qty) || 0,
+                        freeQty: freeQty ? parseFloat(freeQty) : null,
+                        rate: parseFloat(rate) || 0,
+                        unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
+                        discountPercentage: parseFloat(discountPercentage) || 0,
+                        taxId: resolvedTaxId,                   // ✅ resolved
+                        taxRate,
+                        tax: taxRate,                           // ✅ needed by table calculateRow
+                        taxType: item.taxType || item.taxtype || generalSettings?.taxType,
+                        ConversionFactor: conversionFactor,
+                        barcode,
+                        taxAmount: taxAmountRaw,
+                        taxAmt: taxAmountRaw,                   // ✅ pre-set for table display
+                        grossAmount,
+                        netAmount,
+                        amount: parseFloat(amount) || 0,
+                        productDescription,
+                        billDiscOnProduct: parseFloat(billDiscOnProduct) || 0,
+                        AddCostonProduct: addCostonProduct,
+                        otherchargeOnProduct,
+                        GodownId: item.GodownId ?? item.godownid ?? null,
+                        RackId: item.RackId ?? item.rackid ?? null,
+                        branchId: item.branchId ?? item.branchid ?? selectedBranchId,
+                        availableUnits,
+                        productDetails
+                    };
+                })
+            );
 
-        setResetTableKey((prev) => prev + 1);
+            setBlillingAddress({
+                name: data.partyName || '',
+                email: data.partyEmail || '',
+                phoneNo: data.partyMobile || '',
+                vatNo: data.partyVatNo || '',
+                address: data.partyAddress || ''
+            });
 
-    } catch (error) {
-        console.error("Error fetching against order data", error);
-    } finally {
-        setFetchLoading(false);
-    }
-};
+            setFormData((prev) => ({
+                ...prev,
+                voucherType: "Material Receipt",
+                    supplierData,   
+                yearId: currentFinancialYear?.yearId,
+                date: parseDateFromAPI(data.date),
+                ledgerId: data.ledgerId,
+                currencyConversionId: data.currencyConversionId,
+                taxType: data.taxType,
+                // ✅ GodownId from header or first row
+                GodownId: data.GodownId ?? data.godownid ??
+                    detailsArray[0]?.GodownId ?? detailsArray[0]?.godownid ?? prev.GodownId,
+                costCentreId: data.costCentreId ?? data.costcentreid ?? 1,
+                BatchId: data.BatchId ?? data.batchid ?? null,
+                partyName: data.partyName || '',
+                partyAddress: data.partyAddress || '',
+                partyMobile: data.partyMobile || '',
+                partyVatNo: data.partyVatNo || '',
+                partyRefNo: data.partyRefNo || '',
+                partyRefDate: data.partyRefDate ? parseDateFromAPI(data.partyRefDate) : '',
+                exchangeRate: data.exchangeRate,
+                exchangeDate: data.exchangeDate ? new Date(data.exchangeDate) : '',
+                // ✅ set orderMasterId so the link is preserved on save
+                orderMasterId: masterId,
+                AgainstNo: againstNoValue,
+                transportCompany: data.transportCompany || '',
+                narration: data.narration || '',
+                taxableAmt: data.taxableAmt,
+                subTotal: data.subTotal,
+                totalTax: data.totalTax,
+                additionalCost: data.additionalCost,
+                // ✅ order response uses OtherCharge (capital O)
+                othercharge: data.othercharge ?? data.OtherCharge ?? '',
+                billDiscount: data.billDiscount,
+                roundoff: data.roundoff,
+                totalAmount: data.totalAmount,
+                postedStatus: data.postedStatus || prev.postedStatus,
+                postedBy: data.postedBy || prev.postedBy,
+                postedDate: data.postedDate ? new Date(data.postedDate) : '',
+                branchId: data.branchId || prev.branchId,
+                CreatedUser: data.CreatedUser || prev.CreatedUser,
+                materialDetails: materialReceiptDetailsWithProducts,
+            }));
+
+            setResetTableKey((prev) => prev + 1);
+
+        } catch (error) {
+            console.error("Error fetching against order data", error);
+        } finally {
+            setFetchLoading(false);
+        }
+    };
     const getMaterialReceiptById = async () => {
         setFetchLoading(true);
         try {
             const response = await axiosInstance.get(`get-material-receipt-byId/${materialReceiptId}`);
             const data = response.data.data;
+
+            let supplierData = {};
+try {
+    const supplierRes = await axiosInstance.get(`get-account-ledger-byId/${data.ledgerId}`);
+    supplierData = supplierRes.data?.data || {};
+} catch (err) {
+    console.error("Error fetching supplier data:", err);
+}
 
             setExistingReceiptNo(data.receieptNo);
 
@@ -545,7 +637,7 @@ const MaterialReceiptSkin = () => {
                                 mrp: productData.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
@@ -562,6 +654,7 @@ const MaterialReceiptSkin = () => {
                         freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
                         rate: parseFloat(item.rate) || 0,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -575,7 +668,7 @@ const MaterialReceiptSkin = () => {
                         productDescription: item.productDescription,
                         billDiscOnProduct: item.billDiscOnProduct,
                         AddCostonProduct: item.AddCostonProduct,
-                        otherchargeonproduct: item.otherchargeonproduct,
+                        otherchargeOnProduct: item.otherchargeOnProduct,
                         GodownId: item.GodownId,
                         RackId: item.RackId,
                         branchId: item.branchId,
@@ -600,6 +693,7 @@ const MaterialReceiptSkin = () => {
             setFormData((prev) => ({
                 ...prev,
                 voucherType: "Material Receipt",
+                 supplierData,  
                 yearId: currentFinancialYear?.yearId,
                 date: parseDateFromAPI(data.date),
                 ledgerId: data.ledgerId,
@@ -631,6 +725,7 @@ const MaterialReceiptSkin = () => {
                 postedStatus: data.postedStatus,
                 postedBy: data.postedBy,
                 postedDate: data.postedDate ? new Date(data.postedDate) : "",
+                OtherChargeLedgerId: data.OtherChargeLedgerId || null,
                 branchId: data.branchId,
                 CreatedUser: data.CreatedUser,
                 materialDetails: materialReceiptDetailsWithProducts,
@@ -645,32 +740,141 @@ const MaterialReceiptSkin = () => {
     };
 
     // ✅ ADD PRINT HELPER FUNCTIONS
-    const buildReceiptDataForPrint = useCallback((receiptNumber, qrLink) => {
-        return {
-            ...formData,
-            invoiceNo: receiptNumber,
-            date: formData.date,
-            // Material receipt uses materialDetails; map to purchaseDetails for the print template
-            purchaseDetails: formData.materialDetails,
-            qr_link: qrLink || formData.qr_link,
-        };
-    }, [formData]);
+    // const buildReceiptDataForPrint = useCallback((receiptNumber, qrLink, overrideData) => {
+    //     const base = overrideData || formData;
 
-    const printToPrinterFn = useCallback((receiptDataForPrint) => {
-        if (formData.printType === 'a4') {
-            materialRecieptPrintOne(receiptDataForPrint, selectedBranchDetails, time, null, currentCurrency);
-        }
+    //     return {
+    //         ...base,
+    //         invoiceNo: base?.receieptNo || base?.voucherNo || receiptNumber,
+    //         date: base.date,
+    //         // Material receipt uses materialDetails; map to purchaseDetails for the print template
+    //         purchaseDetails: base.materialDetails || base.purchaseDetails,
+    //         qr_link: qrLink || base.qr_link,
+    //         taxType: formData.taxType
+    //     };
+    // }, [formData]);
+        const { purchaseProducts: allProducts } = useSelector((state) => state.products);
+
+    const buildReceiptDataForPrint = useCallback((receiptNumber, qrLink, overrideData) => {
+    const base = overrideData || formData;
+
+    const mergedCustomerData = {
+        ...(formData.customerData || {}),
+        ...(base.customerData || {}),
+    };
+
+    const rawDetails = base.materialDetails || [];
+
+    // ✅ Enrich with productName / productNameArb from allProducts by matching productCode
+    const enrichedDetails = rawDetails.map((detail, idx) => {
+        const matchedProduct = allProducts?.find(
+            (p) => p.productCode === detail.productCode
+        );
+
+        return {
+            ...detail,
+            productName: detail.productName || matchedProduct?.productName || '',
+            productNameArb: detail.productNameArb || matchedProduct?.productNameArb || '',
+            unitName: detail.unitName || formData.materialDetails?.[idx]?.unitName || formData.purchaseDetails?.[idx]?.unitName || detail.UnitName || matchedProduct?.unitName || '',
+        };
+    });
+
+        return {
+            ...base,
+            invoiceNo: base?.receieptNo || base?.voucherNo || receiptNumber,
+              supplierData: base.supplierData || formData.supplierData, 
+            date: base.date,
+            // Material receipt uses materialDetails; map to purchaseDetails for the print template
+            purchaseDetails: enrichedDetails,
+            qr_link: qrLink || base.qr_link,
+            taxType: formData.taxType
+        };
+}, [formData, allProducts, generalSettings?.taxType]);
+    const fetchReceiptDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`get-material-receipt-byId/${materialReceiptId}`);
+        const data = response.data.data;
+
+        const taxResponse = await axiosInstance.get("tax-masters");
+        const taxData = taxResponse.data.data || [];
+
+        const materialDetailsWithProducts = (data.materialDetails || []).map((item) => {
+            const taxInfo = taxData.find(t => t.taxId === item?.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo?.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productname || item?.productName || '',
+                unitName: item?.unitName || item?.UnitName || '',
+                taxRate,
+                qty: parseFloat(item.qty) || 0,
+                freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                rate: parseFloat(item.rate) || 0,
+                discountPercentage: parseFloat(item.discountPercentage) || 0,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
+
+        return {
+            ...data,
+            date: data.date ? parseDateFromAPI(data.date) : formData.date,
+            materialDetails: materialDetailsWithProducts,
+        };
+    }, [materialReceiptId, formData.date]);
+
+    const runOrderOutput = useCallback((mode, receiptDataForPrint) => {
+        const mappedType = formData.printType === 'a4' ? 'Type 1' : (formData.printType === 'a4_2' ? 'Type 2' : formData.printType);
+        const handlers = RECEIPT_PRINT_HANDLERS[mappedType];
+        const fn = handlers?.[mode] ?? RECEIPT_PRINT_HANDLERS[DEFAULT_RECEIPT_PRINT_TYPE][mode];
+        fn(receiptDataForPrint, selectedBranchDetails, time, currentCurrency);
     }, [formData.printType, selectedBranchDetails, time, currentCurrency]);
 
-    const handleReprintToPrinter = useCallback(() => {
-        const receiptDataForPrint = buildReceiptDataForPrint(existingReceiptNo, formData.qr_link);
-        printToPrinterFn(receiptDataForPrint);
-    }, [buildReceiptDataForPrint, existingReceiptNo, formData.qr_link, printToPrinterFn]);
+    const printToPrinterFn = useCallback((data) => runOrderOutput('print', data), [runOrderOutput]);
+    const printToPdfFn = useCallback((data) => runOrderOutput('pdf', data), [runOrderOutput]);
 
-    const handleReprintToPdf = useCallback(() => {
-        const receiptDataForPrint = buildReceiptDataForPrint(existingReceiptNo, formData.qr_link);
-        printToPrinterFn(receiptDataForPrint);
-    }, [buildReceiptDataForPrint, existingReceiptNo, formData.qr_link, printToPrinterFn]);
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this receipt?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchReceiptDataForPrint();
+            const receiptDataForPrint = buildReceiptDataForPrint(existingReceiptNo, freshData.qr_link, freshData);
+            printToPrinterFn(receiptDataForPrint);
+        } catch (error) {
+            console.error('Error fetching receipt for reprint:', error);
+            Swal.fire({ icon: 'error', title: t('Error') || 'Error', text: 'Failed to fetch receipt data for printing' });
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, fetchReceiptDataForPrint, buildReceiptDataForPrint, existingReceiptNo, printToPrinterFn]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchReceiptDataForPrint();
+            const receiptDataForPrint = buildReceiptDataForPrint(existingReceiptNo, freshData.qr_link, freshData);
+            printToPrinterFn(receiptDataForPrint);
+        } catch (error) {
+            console.error('Error fetching receipt for PDF reprint:', error);
+            Swal.fire({ icon: 'error', title: t('Error') || 'Error', text: 'Failed to fetch receipt data for PDF' });
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [fetchReceiptDataForPrint, buildReceiptDataForPrint, existingReceiptNo, printToPrinterFn]);
 
     const [loading, setLoading] = useState({
         employees: false,
@@ -698,7 +902,7 @@ const MaterialReceiptSkin = () => {
         setLoading(prev => ({ ...prev, suppliers: true }));
         try {
             const { data } = await axiosInstance.post("customer-supplier-account-ledgers", {
-                ledgerTypes: ["Supplier"], branchId: selectedBranchId
+                ledgerTypes: ["Supplier", "Customer&Supplier"], branchId: selectedBranchId
             });
             setSuppliers(data.data);
         } catch (err) {
@@ -752,15 +956,18 @@ const MaterialReceiptSkin = () => {
 
     const handleSave = useCallback(async () => {
         if (formData.BillBalanceAmount < 0) {
-            setAlert({ id: Date.now(), type: "error", message: t("materialReceipt.alert.billBalanceAmtError") });
+            showToast.error(t("materialReceipt.alert.billBalanceAmtError"));
             return;
         }
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
-            setAlert({ id: Date.now(), type: "error", message: validationErrors.join('\n') });
+            showToast.error(validationErrors.join('\n'));
             return;
         }
-
+        if (formData.totalAmount <= 0) {
+            showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
+            return;
+        }
         if (editMode && generalSettings?.askConfirmationEdit) {
             const result = await Swal.fire({
                 title: t("ConfirmUpdateTitle"), text: t("ConfirmUpdateText"),
@@ -783,7 +990,15 @@ const MaterialReceiptSkin = () => {
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                ModifiedUser: editMode ? userId : null,
+                CreatedUser: userId,
+                CreatedDate: new Date(),
+                materialDetails: (formData.materialDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: editMode ? userId : null,
+                    CreatedUser: userId,
+                })),
             };
             const api = editMode
                 ? `update-material-receipt/${materialReceiptId}`
@@ -792,13 +1007,14 @@ const MaterialReceiptSkin = () => {
             const response = await axiosInstance.post(api, dataToSave);
 
             if (!response.data.error) {
-                setAlert({ id: Date.now(), type: "success", message: t("saveSuccess") });
+                showToast.success(t("saveSuccess"));
 
                 const receiptNumber = editMode ? existingReceiptNo : response.data.receieptNo || receiptId;
+                const freshReceiptData = response?.data?.data?.payload?.materialReceiptMaster; // ⚠️ confirm this key against your actual API response shape
 
                 // ✅ PRINT LOGIC
                 if (formData.printAfterSave) {
-                    const receiptDataForPrint = buildReceiptDataForPrint(receiptNumber, null);
+                    const receiptDataForPrint = buildReceiptDataForPrint(receiptNumber, null, freshReceiptData);
                     printToPrinterFn(receiptDataForPrint);
                 } else {
                     const pdfResult = await Swal.fire({
@@ -813,7 +1029,7 @@ const MaterialReceiptSkin = () => {
                     });
                     if (pdfResult.isConfirmed) {
                         setTimeout(() => {
-                            const receiptDataForPrint = buildReceiptDataForPrint(receiptNumber, null);
+                            const receiptDataForPrint = buildReceiptDataForPrint(receiptNumber, null, freshReceiptData);
                             printToPrinterFn(receiptDataForPrint);
                         }, 500);
                     }
@@ -850,7 +1066,7 @@ const MaterialReceiptSkin = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [handleSave]);
 
-    if (fetchLoading || baseDataloading) {
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
@@ -865,10 +1081,11 @@ const MaterialReceiptSkin = () => {
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary">
-            {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+
             <BreadCrumb
                 routes={[
                     { title: t("materialReceipt.breadcrumb.master"), url: "#" },
@@ -917,21 +1134,38 @@ const MaterialReceiptSkin = () => {
                                 </label>
                             </div>
                         )}
-                        <select
-                            name="printType"
-                            id="printType"
-                            className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
-                            value={formData.printType}
-                            onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
-                        >
-                            <option value="a4">A4</option>
-                        </select>
                         {editMode && !fetchLoading && (
                             <PrintDropdown
                                 onPrintToPrinter={handleReprintToPrinter}
                                 onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
                             />
                         )}
+                        {receiptPrintTypes.length > 0 ? (
+                            <select
+                                name="printType"
+                                id="printType"
+                                className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
+                                value={formData.printType}
+                                onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
+                            >
+                                {receiptPrintTypes.map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
+                            </select>
+                        ) : (
+                            <select
+                                name="printType"
+                                id="printType"
+                                className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
+                                value={formData.printType}
+                                onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
+                            >
+                                <option value="Type 1">A4</option>
+                                <option value="Type 2">A4 (Type 2)</option>
+                            </select>
+                        )}
+
                     </div>
                 }
             />
@@ -962,6 +1196,10 @@ const MaterialReceiptSkin = () => {
                 otherChargeLedgers={otherChargeLedgers}
                 currency={currency}
                 fetchAgainstModeDetailes={fetchAgainstModeDetailes}
+                updateSupplierId={updateSupplierId}
+                setUpdateSupplierId={setUpdateSupplierId}
+                fetchSupplierData={fetchSupplierData}
+                loadingSupplier={loadingSupplier}
             />
         </div>
     );

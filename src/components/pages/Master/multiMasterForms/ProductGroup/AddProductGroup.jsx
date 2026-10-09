@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import TextInput from "@/components/elements/theme/TextInput";
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
+import { sanitize } from "@/lib/inputSanitizer";
 
 const AddProductGroup = ({ open, handleClose, onSuccess, selectedGroupId, selectedCategory = null }) => {
   const { t } = useTranslation();
@@ -99,7 +100,11 @@ const AddProductGroup = ({ open, handleClose, onSuccess, selectedGroupId, select
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let updatedValue = value
+    if(["groupName"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+    }
+    setFormData((prev) => ({ ...prev, [name]: updatedValue }));
   };
 
   const handleSubmit = async (e) => {

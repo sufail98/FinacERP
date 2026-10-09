@@ -11,6 +11,8 @@ import Preloader from "@/components/common/Preloader"
 import useAuth from "@/redux/hook/auth/useAuth"
 import { X } from "lucide-react"
 import { showToast } from "@/utils/toast"
+import { getSystemId } from "@/utils/systemId"
+import PasswordModal from "./PasswordModal"
 
 // ========== FIXED IMAGE DIMENSIONS ==========
 const HEADER_WIDTH = 794;
@@ -80,13 +82,26 @@ const GeneralSettings = () => {
 
     const [loading, setLoading] = useState(false);
     const { generalSettings } = useSelector((state) => state.settings);
-
+    const orgData = useSelector((state) => state.organization.organizationData);
+   
+    
     const [settings, setSettings] = useState(generalSettings || {});
     const { selectedBranchId } = useAuth()
     const dispatch = useDispatch()
 
-    const handleBack = () => {
-    }
+    const [systemId, setSystemId] = useState("")
+
+    // Password Modal States
+    const [showPasswordModal, setShowPasswordModal] = useState(false)
+    const [pendingSave, setPendingSave] = useState(false)
+
+    useEffect(() => {
+        const fetchSystemId = async () => {
+            const id = await getSystemId()
+            setSystemId(id)
+        }
+        fetchSystemId()
+    }, [])
 
     /* ================================================================
        REFETCH GENERAL SETTINGS & UPDATE REDUX
@@ -95,7 +110,7 @@ const GeneralSettings = () => {
     const fetchAndUpdateSettings = useCallback(async () => {
         try {
             const response = await axiosInstance.get('general-settings');
-            
+
             if (!response.error && response?.data?.data?.length > 0) {
                 const branchSettings = response.data.data.find(
                     (item) => Number(item.branchId) === Number(selectedBranchId)
@@ -145,10 +160,10 @@ const GeneralSettings = () => {
             try {
                 const targetWidth = type === 'header' ? HEADER_WIDTH
                     : type === 'footer' ? FOOTER_WIDTH
-                    : LETTERPAD_WIDTH;
+                        : LETTERPAD_WIDTH;
                 const targetHeight = type === 'header' ? HEADER_HEIGHT
                     : type === 'footer' ? FOOTER_HEIGHT
-                    : LETTERPAD_HEIGHT;
+                        : LETTERPAD_HEIGHT;
 
                 const result = await resizeImageToFixedSize(file, targetWidth, targetHeight);
 
@@ -300,10 +315,59 @@ const GeneralSettings = () => {
         }));
     }
 
+    /**
+     * Check if password verification is still valid
+     */
+    const isPasswordVerified = () => {
+        const auth = localStorage.getItem('settings_auth');
+
+        if (!auth) return false
+
+        try {
+            const { verified, expiry } = JSON.parse(auth)
+            const now = new Date().getTime()
+
+            if (verified && expiry > now) {
+                return true
+            } else {
+                // Remove expired verification
+                localStorage.removeItem('settings_auth')
+                return false
+            }
+        } catch (error) {
+            localStorage.removeItem('settings_auth')
+            return false
+        }
+    }
+
+    /**
+     * Handle Save Button Click - Check password first
+     */
+    const handleSaveClick = () => {
+        if (isPasswordVerified()) {
+            // Password already verified and not expired
+            performSave()
+        } else {
+            // Show password modal
+            setShowPasswordModal(true)
+            setPendingSave(true)
+        }
+    }
+
+    /**
+     * Handle Password Modal Confirmation
+     */
+    const handlePasswordConfirm = (verified) => {
+        if (verified && pendingSave) {
+            performSave()
+            setPendingSave(false)
+        }
+    }
+
     /* ================================================================
        SAVE HANDLER — after success always refetch & update Redux
     ================================================================ */
-    const handleSave = async () => {
+    const performSave = async () => {
         try {
             setLoading(true);
 
@@ -329,6 +393,7 @@ const GeneralSettings = () => {
             });
 
             payload.branchId = selectedBranchId;
+            payload.systemId = systemId;
 
             let response;
 
@@ -351,7 +416,7 @@ const GeneralSettings = () => {
                 if (companyLetterPadFile) {
                     formData.append("CompanyLetterPad", companyLetterPadFile);
                 }
-                
+
                 response = await axiosInstance.post(
                     `update-general-setting/${settings.generalSettingsId}`,
                     formData,
@@ -396,6 +461,13 @@ const GeneralSettings = () => {
         <div className="p-2 space-y-4 bg-white dark:bg-[#121212] transition-colors">
             <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">General Settings</h3>
 
+            {/* Password Modal */}
+            <PasswordModal
+                open={showPasswordModal}
+                onOpenChange={setShowPasswordModal}
+                onConfirm={handlePasswordConfirm}
+            />
+
             {/* Settings Table */}
             <div className="overflow-x-auto pb-25">
                 <table className="w-[50%]">
@@ -413,7 +485,9 @@ const GeneralSettings = () => {
                                 />
                             </td>
                         </tr>
-                        <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
+                      {orgData?.subscriptionPlan!='Basic'&&(
+                         <>
+                          <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Cost Centre</td>
                             <td className="px-4 py-3">
                                 <Checkbox
@@ -425,7 +499,7 @@ const GeneralSettings = () => {
                                 />
                             </td>
                         </tr>
-                        <tr className="border-b border-gray-200 dark:border-gray-700">
+                         <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Accounts Posting</td>
                             <td className="px-4 py-3">
                                 <Checkbox
@@ -437,6 +511,9 @@ const GeneralSettings = () => {
                                 />
                             </td>
                         </tr>
+                         </>
+                      )}
+                       
                         <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Tax Included</td>
                             <td className="px-4 py-3">
@@ -580,6 +657,30 @@ const GeneralSettings = () => {
                         <tr className="bg-blue-50 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-bold text-gray-900 dark:text-gray-100" colSpan="2">
                                 Configuration Settings
+                            </td>
+                        </tr>
+                        <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
+                            <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Van Sale</td>
+                            <td className="px-4 py-3">
+                                <Checkbox
+                                    className='border-gray-500 dark:border-gray-600 
+                                             data-[state=checked]:main-bg dark:data-[state=checked]:main-bg'
+                                    id="activateVanSale"
+                                    checked={settings.activateVanSale || false}
+                                    onCheckedChange={(checked) => handleCheckboxChange('activateVanSale', checked)}
+                                />
+                            </td>
+                        </tr>
+                        <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
+                            <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Current Day Cash balance In Dashboard</td>
+                            <td className="px-4 py-3">
+                                <Checkbox
+                                    className='border-gray-500 dark:border-gray-600 
+                                             data-[state=checked]:main-bg dark:data-[state=checked]:main-bg'
+                                    id="showCurrentDayCashbalanceInDashboard"
+                                    checked={settings.showCurrentDayCashbalanceInDashboard || false}
+                                    onCheckedChange={(checked) => handleCheckboxChange('showCurrentDayCashbalanceInDashboard', checked)}
+                                />
                             </td>
                         </tr>
                         <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
@@ -737,8 +838,8 @@ const GeneralSettings = () => {
                                 </Select>
                             </td>
                         </tr>
-                    
-                          <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
+
+                        <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Round Off Digit</td>
                             <td className="px-4 py-3">
                                 <Input
@@ -911,15 +1012,9 @@ const GeneralSettings = () => {
 
             {/* Action Buttons */}
             <div className="fixed bottom-0 left-10 right-0 flex gap-3 p-4 justify-start bg-white dark:bg-[#121212] border-t border-gray-200 dark:border-gray-700">
-                <Button variant="outline" onClick={handleBack}
-                    className="border-gray-500 dark:border-gray-600 
-                                 text-gray-700 dark:text-gray-300 
-                                 hover:bg-gray-100 dark:hover:bg-[#242424]">
-                    Back
-                </Button>
                 <Button
                     className="main-bg text-white"
-                    onClick={handleSave}
+                    onClick={handleSaveClick}
                     disabled={loading}
                 >
                     {loading ? 'Saving...' : 'Save'}

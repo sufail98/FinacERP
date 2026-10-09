@@ -10,6 +10,7 @@ import TextInput from '@/components/elements/theme/TextInput';
 import DateInput from '@/components/elements/theme/DateInput';
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
+import { sanitize } from '@/lib/inputSanitizer';
 
 const AddEditBatchModal = ({
   open,
@@ -113,7 +114,13 @@ const AddEditBatchModal = ({
   // Handle text input change
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let updatedValue = value;
+
+    if(["batchName"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+    }
+    
+    setFormData((prev) => ({ ...prev, [name]: updatedValue }));
     
     // Clear error when user starts typing
     if (errors[name]) {
@@ -293,6 +300,7 @@ const AddEditBatchModal = ({
                 label={t("batch.fields.mfd")}
                 value={formData.mfd}
                 onChange={(e, apiValue) => handleDateChange('mfd', apiValue)}
+                max={new Date().toISOString().split(("T")[0])}
                 placeholder={t("batch.placeholders.mfd")}
                 required
                 error={errors.mfd}

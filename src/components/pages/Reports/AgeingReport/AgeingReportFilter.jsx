@@ -26,6 +26,7 @@ const AgeingReportFilter = ({
                     name="ageingDate"
                     value={filters.ageingDate}
                     onChange={(e, value) => onFilterChange('ageingDate', value)}
+                    max={new Date().toISOString().split(("T")[0])}
                     required
                     className='w-full'
                 />

@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import TextInput from "@/components/elements/theme/TextInput";
 import useAuth from "@/redux/hook/auth/useAuth";
 import { useSelector } from "react-redux";
+import { sanitize } from "@/lib/inputSanitizer";
 
 
 
@@ -63,6 +64,12 @@ const AddEmployeeModal = ({ open, handleClose, onSuccess }) => {
     const handleInputChange = (e) => {
         const { name, value, type, checked, files } = e.target;
         let fieldValue = value;
+        if(["phoneNo"].includes(name)){
+            fieldValue = sanitize.numbers(value)
+        }
+        if(["employeeName"].includes(name)){
+            fieldValue = sanitize.alphaNumericSpace(value)
+        }
 
         if (type === 'checkbox') {
             fieldValue = checked;
@@ -180,6 +187,8 @@ const AddEmployeeModal = ({ open, handleClose, onSuccess }) => {
                                 />
                                 <TextInput
                                     name="phoneNo"
+                                    type = "text"
+                                    maxLength = {10}
                                     label={t("employee.employeeForm.labels.phoneNo")}
                                     value={formData.phoneNo}
                                     onChange={handleInputChange}

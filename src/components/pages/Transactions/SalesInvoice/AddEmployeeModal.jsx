@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import TextInput from "@/components/elements/theme/TextInput";
 import useAuth from "@/redux/hook/auth/useAuth";
 import { useSelector } from "react-redux";
+import { sanitize } from "@/lib/inputSanitizer";
 
 
 
@@ -63,6 +64,14 @@ const AddEmployeeModal = ({ open, handleClose, onSuccess }) => {
     const handleInputChange = (e) => {
         const { name, value, type, checked, files } = e.target;
         let fieldValue = value;
+
+        if(["employeeName"].includes(name)){
+        fieldValue = sanitize.alphaNumericSpace(value)
+        }
+        if(["phoneNo"].includes(name)){
+        fieldValue = sanitize.numbers(value).slice(0,10)
+        }
+        
 
         if (type === 'checkbox') {
             fieldValue = checked;

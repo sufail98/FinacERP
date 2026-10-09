@@ -22,7 +22,7 @@ const ReceivableVoucherReport = () => {
     const [ledgerData, setLedgerData] = useState([]);
     const [userData, setUserData] = useState([]);
     const { selectedBranchId, currentCurrency } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Receipt Report");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Receivable Voucher Report");
     const { generalSettings } = useSelector((state) => state.settings);
 
     const {
@@ -59,8 +59,8 @@ const ReceivableVoucherReport = () => {
 
     const fetchLedgerData = async () => {
         try {
-            const response = await axiosInstance.post("account-ledgers", {
-                group_ids: [5, 6, 28, 29],
+            const response = await axiosInstance.post("customer-supplier-account-ledgers", {
+               ledgerTypes: ["Customer","Customer&Supplier"],
                 branchId: selectedBranchId
             });
             setLedgerData(response.data.data || []);
@@ -189,7 +189,6 @@ const ReceivableVoucherReport = () => {
             { key: 'ToLedger', label: 'To Ledger', align: 'left', width: 18 },
             { key: 'Amount', label: 'Amount', align: 'right', width: 14, type: 'currency' },
             { key: 'Narration', label: 'Narration', align: 'left', width: 20 },
-            { key: 'PaymentMode', label: 'Payment Mode', align: 'center', width: 12 },
             { key: 'CostCentre', label: 'Cost Centre', align: 'center', width: 12 },
             { key: 'DoneBy', label: 'Done By', align: 'center', width: 12 },
         ];
@@ -201,7 +200,6 @@ const ReceivableVoucherReport = () => {
             { key: 'Ledger', label: 'A/C Ledger', align: 'left', width: 20 },
             { key: 'Amount', label: 'Received Amount', align: 'right', width: 14, type: 'currency' },
             { key: 'Narration', label: 'Narration', align: 'left', width: 25 },
-            { key: 'PaymentMode', label: 'Payment Mode', align: 'center', width: 12 },
             { key: 'CostCentre', label: 'Cost Centre', align: 'left', width: 15 },
             { key: 'DoneBy', label: 'Done By', align: 'left', width: 15 }
         ];
@@ -289,12 +287,13 @@ const ReceivableVoucherReport = () => {
     }));
 
     const paymentModeOptions = [
-        { label: t('All'), value: 'All' },
-        { label: t('Cash'), value: 'Cash' },
-        { label: t('Bank'), value: 'Bank' },
-        { label: t('Card'), value: 'Card' },
-        { label: t('Cheque'), value: 'Cheque' },
-        { label: t('Online'), value: 'Online' }
+        { label: t('All'), value: null },
+        { label: t('Cash'), value: 'cash' },
+        { label: t('Bank'), value: 'bank' },        
+        { label: t('Credit'), value: 'credit' },             
+        // { label: t('Card'), value: 'Card' },
+        // { label: t('Cheque'), value: 'Cheque' },
+        // { label: t('Online'), value: 'Online' }
     ];
 
     const columns = useMemo(() => {
@@ -308,7 +307,6 @@ const ReceivableVoucherReport = () => {
                 { key: 'ToLedger', label: t('receivableReport.columns.ToLedger'), align: 'left', width: '160' },
                 { key: 'Amount', label: t('receivableReport.columns.Amount'), align: 'right', width: '110' },
                 { key: 'Narration', label: t('receivableReport.columns.Narration'), align: 'left', width: '140' },
-                { key: 'PaymentMode', label: t('receivableReport.columns.PaymentMode'), align: 'center', width: '110' },
                 { key: 'CostCentre', label: t('receivableReport.columns.CostCentre'), align: 'center', width: '110' },
                 { key: 'DoneBy', label: t('receivableReport.columns.DoneBy'), align: 'center', width: '110' },
             ];
@@ -321,7 +319,6 @@ const ReceivableVoucherReport = () => {
             { key: 'Ledger', label: t('receivableReport.columns.Ledger'), align: 'left', width: '180' },
             { key: 'Amount', label: t('receivableReport.columns.ReceivedAmount'), align: 'right', width: '130' },
             { key: 'Narration', label: t('receivableReport.columns.Narration'), align: 'left' },
-            { key: 'PaymentMode', label: t('receivableReport.columns.PaymentMode'), align: 'center', width: '120' },
             { key: 'CostCentre', label: t('receivableReport.columns.CostCentre'), align: 'center', width: '120' },
             { key: 'DoneBy', label: t('receivableReport.columns.DoneBy'), align: 'center', width: '110' },
         ];
@@ -343,7 +340,7 @@ const ReceivableVoucherReport = () => {
         return row[key] ?? "-";
     };
 
-    if (loading || privilegeLoading) {
+    if ( privilegeLoading  ) {
         return (
             <div>
                 <BreadCrumb

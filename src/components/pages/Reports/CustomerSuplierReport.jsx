@@ -49,7 +49,7 @@ const CustomerSuplierReport = ({ type }) => {
         setPartyLoading(true);
         try {
             const res = await axiosInstance.post("customer-supplier-account-ledgers", {
-                ledgerTypes: type === 'customer' ? ["Customer"] : ["Supplier"],
+                ledgerTypes: type === 'customer' ? ["Customer","Customer&Supplier"] : ["Supplier","Customer&Supplier"],
                 branchId: selectedBranchId
             });
             
@@ -327,7 +327,7 @@ const CustomerSuplierReport = ({ type }) => {
         return row[key] ?? "-";
     };
 
-    if (loading || privilegeLoading || partyLoading) {
+    if (privilegeLoading || partyLoading) {
         return (
             <div>
                 <BreadCrumb

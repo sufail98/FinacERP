@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eraser, SaveAll, Settings2, Trash2 } from 'lucide-react';
+import { Eraser, SaveAll, Settings2, Trash2, X } from 'lucide-react';
 import BreadCrumb from '@/components/common/BreadCrumb';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -17,11 +17,14 @@ import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
 import useCtrlSave from '@/lib/hooks/useCtrlSave';
 import { showToast } from '@/utils/toast';
+import { sanitize } from '@/lib/inputSanitizer';
+import { useNavigate } from 'react-router-dom';
 
 const SuffixPrefixSettings = () => {
     const { privileges, hasAccess, message, loading: privilageLoading } = usePrivileges("Suffix Prefix Settings");
     const { selectedBranchId, userId, currentFinancialYear } = useAuth();
     const { t } = useTranslation();
+    const navigate = useNavigate();
 
     const [formData, setFormData] = useState({
         suffixPrefixId: null,
@@ -73,9 +76,14 @@ const SuffixPrefixSettings = () => {
     }, [formData.voucherType, formData.yearId]);
 
     const handleInputChange = (name, value) => {
+        //  const { name, value } = e.target;
+         let updatedValue = value
+         if(["suffix","prefix"].includes(name)){
+            updatedValue = sanitize.lettersSpace(value)
+         }
         setFormData((prev) => ({
             ...prev,
-            [name]: value,
+            [name]: updatedValue,
         }));
     };
 
@@ -135,6 +143,10 @@ const SuffixPrefixSettings = () => {
             noOfZero: 0,
         });
     };
+
+    const handleCancel = () => {
+        navigate(-1)
+    }
 
     const handleDelete = async () => {
         if (!privileges?.can_delete) return;
@@ -220,6 +232,12 @@ const SuffixPrefixSettings = () => {
                         type: "secondary",
                         onClick: handleClear,
                     },
+                    {
+                        label: t("cancelBtn"),
+                        icon: X,
+                        type: "secondary",
+                        onClick: handleCancel,
+                    },
                     ...(formData.suffixPrefixId
                         ? [
                             {
@@ -290,7 +308,12 @@ const SuffixPrefixSettings = () => {
                                 label={t("suffixPrefix.form.startIndex")}
                                 value={formData.startIndex}
                                 onChange={(e) => handleInputChange("startIndex", e.target.value)}
-                                type="text"
+                                type="number"
+                                onKeyDown ={(e) => {
+                                    if(e.key === "-" || e.key === "+"){
+                                        e.preventDefault()
+                                    }
+                                }}
                             />
                             <TextInput
                                 name="prefix"
@@ -332,6 +355,11 @@ const SuffixPrefixSettings = () => {
                                         value={formData.noOfZero}
                                         onChange={(e) => handleInputChange("noOfZero", e.target.value)}
                                         type="number"
+                                        onKeyDown={(e) => {
+                                            if(e.key === "-" || e.key === "+"){
+                                            e.preventDefault()
+                                            }
+                                        }}
                                     />
                                 </div>
                             )}

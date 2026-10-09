@@ -10,7 +10,7 @@ import AlertBox from "@/components/common/AlertBox";
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
 
-const AddSupplierPage = () => {
+const AddSupplierPage = ({ isModal = false, onClose, onSuccess }) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [submitloading, seSubmittLoading] = useState(false);
@@ -95,7 +95,12 @@ const AddSupplierPage = () => {
                 config
             );
             setAlert({ key: new Date(), type: "success", message: "Updated" });
-            navigate("/master/supplier");
+            if (isModal) {
+                if(onSuccess) onSuccess();
+                if(onClose) onClose();
+            } else {
+                navigate("/master/supplier");
+            }
         } else {
             await axiosInstance.post(
                 "save-account-ledger",
@@ -103,7 +108,12 @@ const AddSupplierPage = () => {
                 config
             );
             setAlert({ key: new Date(), type: "success", message: "Saved" });
-            navigate("/master/supplier");
+            if (isModal) {
+                if(onSuccess) onSuccess();
+                if(onClose) onClose();
+            } else {
+                navigate("/master/supplier");
+            }
         }
     } catch (error) {
         console.error("Error saving supplier:", error);
@@ -185,51 +195,81 @@ const AddSupplierPage = () => {
         });
         if (!result.isConfirmed) return;
     }
-    navigate('/master/supplier');
+    if (isModal) {
+        if (onClose) onClose();
+    } else {
+        navigate('/master/supplier');
+    }
 };
 
   return (
-    <div className="bg-white dark:bg-[#121212] transition-colors min-h-screen">
+    <div className={`bg-white dark:bg-[#121212] transition-colors ${isModal ? '' : 'min-h-screen'}`}>
       {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
 
-      <BreadCrumb
-        routes={[
-          { title: t("supplier.form.breadcrumb.master"), url: "#" },
-          { title: t("supplier.form.breadcrumb.title"), url: "/master/supplier" },
-          { title: isEditMode ? t("supplier.form.breadcrumb.editSupplier") : t("supplier.form.breadcrumb.addSupplier"), url: "#" },
-        ]}
-        heading={{ icon: UsersRound, title: isEditMode ? t("supplier.form.breadcrumb.editSupplier") : t("supplier.form.breadcrumb.addSupplier") }}
-        actions={[
-          {
-            label: t("cancel") || "Cancel",
-            icon: X,
-            type: "primary",
-            onClick: handleCancel,
-            loading: false,
-          },
-          {
-            label: submitloading ? (t("saving") || "Saving...") : (isEditMode ? (t("update") || "Update") : (t("save") || "Save")),
-            icon: SaveAll,
-            type: "primary",
-            onClick: () => {
-              const form = document.querySelector('form');
-              if (form) {
-                form.requestSubmit();
-              }
-            },
-            loading: submitloading,
-            loadingText: t("saving") || "Saving...",
-          },
-        ]}
-      />
-      <CustomerAndSupplierForm
-        type="supplier"
-        customerId={customerId}
-        onSubmit={handleSave}
-        pricingLevel={pricingLevel}
-        currency={currency}
-        accountGroups={accountGroups}
-      />
+      {!isModal && (
+          <BreadCrumb
+            routes={[
+              { title: t("supplier.form.breadcrumb.master"), url: "#" },
+              { title: t("supplier.form.breadcrumb.title"), url: "/master/supplier" },
+              { title: isEditMode ? t("supplier.form.breadcrumb.editSupplier") : t("supplier.form.breadcrumb.addSupplier"), url: "#" },
+            ]}
+            heading={{ icon: UsersRound, title: isEditMode ? t("supplier.form.breadcrumb.editSupplier") : t("supplier.form.breadcrumb.addSupplier") }}
+            actions={[
+              {
+                label: t("cancel") || "Cancel",
+                icon: X,
+                type: "primary",
+                onClick: handleCancel,
+                loading: false,
+              },
+              {
+                label: submitloading ? (t("saving") || "Saving...") : (isEditMode ? (t("update") || "Update") : (t("save") || "Save")),
+                icon: SaveAll,
+                type: "primary",
+                onClick: () => {
+                  const form = document.querySelector('form');
+                  if (form) {
+                    form.requestSubmit();
+                  }
+                },
+                loading: submitloading,
+                loadingText: t("saving") || "Saving...",
+              },
+            ]}
+          />
+      )}
+      
+      <div className={isModal ? "p-4 h-[70vh] overflow-y-auto" : ""}>
+          <CustomerAndSupplierForm
+            type="supplier"
+            customerId={customerId}
+            onSubmit={handleSave}
+            pricingLevel={pricingLevel}
+            currency={currency}
+            accountGroups={accountGroups}
+          />
+      </div>
+
+      {isModal && (
+          <div className="flex justify-end gap-2 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded-b-lg">
+              <button type="button" onClick={handleCancel} className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 font-medium">
+                  Cancel
+              </button>
+              <button 
+                  type="button" 
+                  disabled={submitloading}
+                  onClick={() => {
+                      const form = document.querySelector('form');
+                      if (form) {
+                          form.requestSubmit();
+                      }
+                  }} 
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded font-medium disabled:opacity-50"
+              >
+                  {submitloading ? (t("saving") || "Saving...") : (t("save") || "Save")}
+              </button>
+          </div>
+      )}
     </div>
   );
 };

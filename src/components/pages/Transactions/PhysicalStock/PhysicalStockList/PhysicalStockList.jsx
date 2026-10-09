@@ -35,12 +35,12 @@ const PhysicalStockList = () => {
     const [toDate, setToDate] = useState(getTodayDate());
 
     // Server-side pagination states
-    const [limit, setLimit] = useState(10);
+    const [limit, setLimit] = useState(80);
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState({
         total: 0,
         page: 1,
-        limit: 10,
+        limit: 80,
         total_pages: 1
     });
 
@@ -62,12 +62,43 @@ const PhysicalStockList = () => {
             item.physicalStockNo?.toLowerCase().includes(lowerSearchTerm)
         );
     }, [physicalStockData, searchTerm]);
+const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+
+        const date = new Date(dateString);
+        const dd = String(date.getDate()).padStart(2, '0');
+        const MM = String(date.getMonth() + 1).padStart(2, '0');
+        const yyyy = date.getFullYear();
+
+        const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+        return format
+            .replace('dd', dd)
+            .replace('MM', MM)
+            .replace('yyyy', yyyy);
+    };
 
     // Update SNo for filtered data
     const displayData = useMemo(() => {
         return filteredData.map((item, index) => ({
             ...item,
-            SNo: index + 1
+            SNo: index + 1,
+            date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
         }));
     }, [filteredData]);
 
@@ -86,7 +117,7 @@ const PhysicalStockList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((page - 1) * limit) + index + 1,
-                date: formatDate(item.date),
+                // date: formatDate(item.date),
             }));
 
             setPhysicalStockData(formattedData);
@@ -146,7 +177,7 @@ const PhysicalStockList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: index + 1,
-                date: formatDate(item.date),
+                // date: formatDate(item.date),
             }));
 
             setPhysicalStockData(formattedData);
@@ -191,22 +222,7 @@ const PhysicalStockList = () => {
         setSearchTerm(''); // Clear search when changing items per page
     };
 
-    const formatDate = (dateString) => {
-        if (!dateString) return '';
-
-        const date = new Date(dateString);
-        const dd = String(date.getDate()).padStart(2, '0');
-        const MM = String(date.getMonth() + 1).padStart(2, '0');
-        const yyyy = date.getFullYear();
-
-        const format = generalSettings?.dateformat || 'dd-MM-yyyy';
-
-        return format
-            .replace('dd', dd)
-            .replace('MM', MM)
-            .replace('yyyy', yyyy);
-    };
-
+    
     const handleDelete = async (id) => {
         if (!privileges?.can_delete) return;
 
@@ -252,7 +268,7 @@ const PhysicalStockList = () => {
     const columns = [
         { key: "SNo", label: t("physicalStock.list.columns.sno"), sortable: true, align: "right" },
         { key: "physicalStockNo", label: t("physicalStock.list.columns.physicalStockNo"), sortable: true, align: "left" },
-        { key: "date", label: t("physicalStock.list.columns.date"), sortable: true, align: "center" },
+        { key: "date", label: t("physicalStock.list.columns.date"), sortable: true, align: "left" },
         { key: "totalAmount", label: t("physicalStock.list.columns.totalAmt"), sortable: true, align: "right" },
     ];
 

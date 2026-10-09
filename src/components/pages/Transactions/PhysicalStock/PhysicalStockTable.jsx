@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { EllipsisVertical, Plus, PlusIcon, RefreshCcw, Trash2 } from 'lucide-react';
+import { EllipsisVertical, Plus, PlusIcon, RefreshCcw, Search, Trash2 } from 'lucide-react';
 import axiosInstance from '@/lib/axiosConfig';
 import { useDispatch, useSelector } from 'react-redux';
 import EditProuctDetailsModal from './EditProuctDetailsModal';
@@ -24,14 +24,26 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
     const suggestionRef = useRef(null);
     const inputRefs = useRef({});
     const [isInitialized] = useState(false);
-    const { inventoryProducts:allProducts, loading: productsLoading } = useSelector((state) => state.products)
+    const { inventoryProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products)
+    const [scrollPosition, setScrollPosition] = useState(0);
 
     const dispatch = useDispatch()
 
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState({});
     const [selectingProduct, setSelectingProduct] = useState({});
     const [stockCounts, setStockCounts] = useState({});
+
+    // ✅ Search-in-grid: find a product row by name, scroll to it, and highlight it
+    const [gridSearchTerm, setGridSearchTerm] = useState('');
+    const [highlightedRowId, setHighlightedRowId] = useState(null);
+    const [gridSearchNotFound, setGridSearchNotFound] = useState(false);
+    // Refs to each <tr> so we can scrollIntoView on the actual DOM node
+    const rowElRefs = useRef({});
+
+    // ✅ Single scroll container ref (was duplicated across two tables before)
     const rowRef = useRef();
+    // ✅ Track row COUNT so auto-scroll only fires on add, not on every edit
+    const prevRowCountRef = useRef(1);
 
     const [rows, setRows] = useState(() => {
         if (propRows && propRows.length > 0) {
@@ -50,6 +62,7 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                 GodownId: item.GodownId || formData.GodownId || null,
                 RackId: item.RackId || null,
                 currentQty: item.currentQty || 0,
+                barcodeInput: item.barcode || '',
                 productDetails: item.productDetails || {
                     productCode: item.productCode || '',
                     barcode: item.barcode || '',
@@ -78,6 +91,7 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                 GodownId: formData.GodownId || null,
                 RackId: null,
                 currentQty: 0,
+                barcodeInput: '',
                 productDetails: {
                     productCode: '',
                     barcode: '',
@@ -91,33 +105,33 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
         }
     });
 
-    useEffect(() => {
-        fetchTaxData()
-      
-    }, []);
+    // useEffect(() => {
+    //     fetchTaxData()
 
-  useEffect(() => {
-    if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
-        const suggestionContainer = suggestionRef.current;
-        const activeItem = suggestionContainer?.querySelector(
-            `[data-suggestion-index="${selectedSuggestionIndex[activeSuggestionRow]}"]`
-        );
-        
-        if (activeItem && suggestionContainer) {
-            const containerRect = suggestionContainer.getBoundingClientRect();
-            const itemRect = activeItem.getBoundingClientRect();
-            const stickyButtonHeight = 42; // height of "Add New Product" button
-            
-            if (itemRect.bottom > containerRect.bottom - stickyButtonHeight) {
-                suggestionContainer.scrollTop += 
-                    itemRect.bottom - containerRect.bottom + stickyButtonHeight;
-            } else if (itemRect.top < containerRect.top) {
-                suggestionContainer.scrollTop -= 
-                    containerRect.top - itemRect.top;
+    // }, []);
+
+    useEffect(() => {
+        if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
+            const suggestionContainer = suggestionRef.current;
+            const activeItem = suggestionContainer?.querySelector(
+                `[data-suggestion-index="${selectedSuggestionIndex[activeSuggestionRow]}"]`
+            );
+
+            if (activeItem && suggestionContainer) {
+                const containerRect = suggestionContainer.getBoundingClientRect();
+                const itemRect = activeItem.getBoundingClientRect();
+                const stickyButtonHeight = 42; // height of "Add New Product" button
+
+                if (itemRect.bottom > containerRect.bottom - stickyButtonHeight) {
+                    suggestionContainer.scrollTop +=
+                        itemRect.bottom - containerRect.bottom + stickyButtonHeight;
+                } else if (itemRect.top < containerRect.top) {
+                    suggestionContainer.scrollTop -=
+                        containerRect.top - itemRect.top;
+                }
             }
         }
-    }
-}, [selectedSuggestionIndex, activeSuggestionRow]);
+    }, [selectedSuggestionIndex, activeSuggestionRow]);
 
     useEffect(() => {
         if (propRows && propRows.length > 0 && isInitialized) {
@@ -153,7 +167,14 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
     }, [propRows, editMode]);
 
     const getEditableColumns = () => {
-        const columns = ['productName', 'currentQty', 'qty', 'unit', 'purchaseRate'];
+        const columns = [
+            'barcode',
+            'productName',
+            'currentQty',
+            'qty',
+            'unit',
+            'purchaseRate'
+        ];
         return columns;
     };
 
@@ -164,7 +185,19 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
             focusInput(rowId, 'purchaseRate');
             return;
         }
+        if (currentField === "barcode" && e.key === "Enter") {
+            e.preventDefault();
 
+            const row = rows.find(r => r.id === rowId);
+
+            if (row?.barcodeInput?.trim()) {
+                selectProductByBarcode(rowId, row.barcodeInput);
+            } else {
+                focusInput(rowId, "productName");
+            }
+
+            return;
+        }
         // Handle purchaseRate field Enter key - move to productName in next row
         if (currentField === 'purchaseRate' && e.key === 'Enter') {
             e.preventDefault();
@@ -226,7 +259,13 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                     break;
             }
         }
-
+        if (currentField === 'productName' && e.key === 'Enter') {
+            const row = rows.find(r => r.id === rowId);
+            if (!row?.productCode || row.productCode.trim() === '') {
+                e.preventDefault();
+                return; // do nothing — don't create a new row, don't move focus
+            }
+        }
         const editableColumns = getEditableColumns();
         const currentRowIndex = rows.findIndex(row => row.id === rowId);
         const currentFieldIndex = editableColumns.indexOf(currentField);
@@ -302,7 +341,7 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
 
     // Auto-focus on productName after products load
     useEffect(() => {
-        if (!productsLoading && allProducts.length > 0) {
+        if (!editMode && !productsLoading && allProducts.length > 0) {
             const timer = setTimeout(() => {
                 focusInput(1, 'productName');
             }, 100);
@@ -362,15 +401,67 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
         }));
     }, [rows, selectedBranchId]);
 
-    // Auto-scroll to bottom when new rows are added
+    // ✅ Auto-scroll to bottom ONLY when a new row is added (row count increases),
+    // matching SalesInvoiceTable's behavior — prevents scroll jumping while editing.
     useEffect(() => {
-        if (rowRef.current) {
+        const currentCount = rows.length;
+        if (rowRef.current && currentCount > prevRowCountRef.current) {
             rowRef.current.scrollTo({
                 top: rowRef.current.scrollHeight,
                 behavior: 'smooth'
             });
         }
+        prevRowCountRef.current = currentCount;
     }, [rows]);
+
+    // ✅ Auto-clear the row highlight a few seconds after a search match is found
+    useEffect(() => {
+        if (highlightedRowId !== null) {
+            const timer = setTimeout(() => setHighlightedRowId(null), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [highlightedRowId]);
+
+    // ✅ Grid search: finds the first row whose productName matches the term,
+    // scrolls the grid so that row is visible, and highlights it briefly.
+    const handleGridSearch = (value) => {
+        setGridSearchTerm(value);
+
+        if (!value || value.trim() === '') {
+            setHighlightedRowId(null);
+            setGridSearchNotFound(false);
+            return;
+        }
+
+        const searchLower = value.toLowerCase().trim();
+        const matchedRow = rows.find(row =>
+            (row.productName || '').toLowerCase().includes(searchLower)
+        );
+
+        if (matchedRow) {
+            setGridSearchNotFound(false);
+            setHighlightedRowId(matchedRow.id);
+
+            // Wait a tick so the DOM/ref is guaranteed to reflect current rows
+            setTimeout(() => {
+                const rowEl = rowElRefs.current[matchedRow.id];
+                if (rowEl && typeof rowEl.scrollIntoView === 'function') {
+                    rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 0);
+        } else {
+            setHighlightedRowId(null);
+            setGridSearchNotFound(true);
+        }
+    };
+
+    const handleGridSearchKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            setGridSearchTerm('');
+            setHighlightedRowId(null);
+            setGridSearchNotFound(false);
+        }
+    };
 
     const addRowAfter = async (rowId) => {
         if (editMode) {
@@ -426,14 +517,14 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
         setRows(reordered);
     };
 
-    const fetchTaxData = async () => {
-        try {
-            const res = await axiosInstance.get("tax-masters");
-            setTaxData(res.data.data || []);
-        } catch (err) {
-            console.error("Error fetching tax:", err);
-        }
-    };
+    // const fetchTaxData = async () => {
+    //     try {
+    //         const res = await axiosInstance.get("tax-masters");
+    //         setTaxData(res.data.data || []);
+    //     } catch (err) {
+    //         console.error("Error fetching tax:", err);
+    //     }
+    // };
 
     const calculateRow = (row, updatedField = null) => {
         const qty = parseFloat(row.qty) || 0;
@@ -482,21 +573,16 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                 const barcode = (product.barcode || '').toLowerCase();
                 const partNo = (product.partNo || '').toLowerCase();
                 const unitName = (product.unitName || '').toLowerCase();
-                // const salesPrice = (product.salesPrice || '').toLowerCase();
 
-                // Simple includes match for basic fields
                 if (productCode.includes(searchLower) ||
                     barcode.includes(searchLower) ||
                     partNo.includes(searchLower) ||
-                    // salesPrice.includes(searchLower) ||
                     unitName.includes(searchLower)) {
                     return true;
                 }
 
-                // Advanced matching for product name
                 const nameWords = productName.split(/\s+/);
 
-                // Check if all search parts can be found in word beginnings or within words
                 const allPartsMatch = searchParts.every(searchPart => {
                     return nameWords.some(word => word.includes(searchPart));
                 });
@@ -515,20 +601,17 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
         }
     };
 
-    // Updated selectProduct - Same method as SalesInvoice (no extra API call)
     const selectProduct = async (rowId, product, selectedUnitId) => {
+
         try {
-            // Find the selected unit from the product data - handle both unitId and unitid
             const selectedUnit = product.units.find(u => u.unitId === selectedUnitId || u.unitid === selectedUnitId) || product.units[0];
 
-            // Get the purchase price for the selected unit by finding the matching product entry
             const productWithUnit = allProducts.find(p =>
                 p.productCode === product.productCode && (p.unitId === selectedUnitId || p.unitid === selectedUnitId)
             );
 
             const unitPurchasePrice = productWithUnit ? parseFloat(productWithUnit.purchasePrice || 0) : parseFloat(product.purchasePrice || 0);
 
-            // Get currentQty/stock from the product data
             const currentStock = productWithUnit?.currentQty ||
                 productWithUnit?.stock ||
                 product.currentQty ||
@@ -544,7 +627,7 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                         ConversionFactor: productWithUnit?.conversionRate || selectedUnit?.conversionrate || 0,
                         availableUnits: product.units || [],
                         unit: selectedUnitId || product.unitId || row.unit,
-                        purchaseRate: unitPurchasePrice,
+                        purchaseRate: product?.purchaseRate,
                         salesRate: unitPurchasePrice,
                         currentQty: parseFloat(currentStock) || 0,
                         GodownId: row.GodownId || formData.GodownId || null,
@@ -564,19 +647,62 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
             setSuggestions((prev) => ({ ...prev, [rowId]: [] }));
             setActiveSuggestionRow(null);
 
-            // Call API to get current stock from database
+            const currentRowIndex = updatedRows.findIndex(r => r.id === rowId);
+            const isLastRow = currentRowIndex === updatedRows.length - 1;
+
+            if (isLastRow) {
+                const newRowId = updatedRows.length + 1;
+                setRows(prev => [
+                    ...prev,
+                    {
+                        id: newRowId,
+                        sn: newRowId,
+                        productName: '',
+                        productCode: '',
+                        purchaseRate: 0,
+                        qty: 1,
+                        ConversionFactor: 0,
+                        unit: 2,
+                        salesRate: 0,
+                        amount: 0,
+                        currentQty: 0,
+                        GodownId: formData.GodownId || null,
+                        RackId: null,
+                        productDetails: {
+                            barcode: '',
+                            partNo: '',
+                            brand: '',
+                            mrp: '',
+                            purchase: '',
+                            description: '',
+                            productCode: '',
+                        }
+                    }
+                ]);
+            }
+            const formatDate = (date) => {
+                if (!date) return null;
+
+                if (date instanceof Date) {
+
+                    return date.toISOString().split("T")[0];
+                }
+
+                return String(date).split("T")[0];
+            };
+
             if (product?.productCode) {
                 axiosInstance.post('get-product-stock', {
                     productCode: product.productCode,
                     branchId: selectedBranchId,
                     godownId: formData.GodownId || 1,
+                    date: formatDate(formData.date),
                 })
                     .then(res => {
                         const stock = res.data?.data?.[0]?.currentStock;
                         if (stock !== undefined) {
-                            // Update the row with the actual stock from API
-                            setRows(prev => prev.map(row => 
-                                row.id === rowId 
+                            setRows(prev => prev.map(row =>
+                                row.id === rowId
                                     ? { ...row, currentQty: parseFloat(stock) }
                                     : row
                             ));
@@ -589,9 +715,41 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                 focusInput(rowId, 'qty');
             }, 100);
 
+            setTimeout(() => {
+                if (rowRef.current) {
+                    const rect = rowRef.current.getBoundingClientRect();
+                    const scrollOffset = window.scrollY + rect.bottom - window.innerHeight + 100;
+                    window.scrollTo({ top: scrollOffset, behavior: 'smooth' });
+                }
+            }, 150);
+
         } catch (err) {
             console.error("Error selecting product:", err);
         }
+    };
+    const selectProductByBarcode = (rowId, barcode) => {
+        if (!barcode?.trim()) return;
+
+        const product = allProducts.find(
+            p => (p.barcode || "").trim().toLowerCase() === barcode.trim().toLowerCase()
+        );
+
+
+        if (!product) {
+            Swal.fire({
+                icon: "error",
+                title: "Product not found",
+                text: `No product found for barcode "${barcode}"`,
+            });
+            return;
+        }
+
+        const unitId =
+            product.unitId ||
+            product.units?.[0]?.unitId ||
+            product.units?.[0]?.unitid;
+
+        selectProduct(rowId, product, unitId);
     };
 
 
@@ -627,12 +785,12 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
 
         setRows(updatedRows);
 
-        const isLastRow = id === rows[rows.length - 1].id;
-        const hasInput = value !== '' && value !== 0;
+        // const isLastRow = id === rows[rows.length - 1].id;
+        // const hasInput = value !== '' && value !== 0;
 
-        if (isLastRow && hasInput) {
-            addRow();
-        }
+        // if (isLastRow && hasInput) {
+        //     addRow();
+        // }
     };
 
     const addRow = () => {
@@ -662,6 +820,36 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
         setRows([...rows, newRow]);
     };
 
+    useEffect(() => {
+        if (activeSuggestionRow) {
+            setScrollPosition(window.scrollY);
+            setTimeout(() => {
+                const activeRow = document.querySelector(`[data-suggestion-row="${activeSuggestionRow}"]`);
+                if (activeRow) {
+                    const rect = activeRow.getBoundingClientRect();
+                    const scrollOffset = window.scrollY + rect.top - 100;
+                    window.scrollTo({ top: scrollOffset, behavior: 'smooth' });
+                }
+            }, 10);
+        } else if (scrollPosition > 0) {
+            window.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+            setScrollPosition(0);
+        }
+    }, [activeSuggestionRow]);
+
+    useEffect(() => {
+        if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
+            const suggestionContainer = suggestionRef.current;
+            const activeItem = suggestionContainer?.querySelector(`[data-suggestion-index="${selectedSuggestionIndex[activeSuggestionRow]}"]`);
+            if (activeItem && suggestionContainer) {
+                const containerRect = suggestionContainer.getBoundingClientRect();
+                const itemRect = activeItem.getBoundingClientRect();
+                const stickyButtonHeight = 42;
+                if (itemRect.bottom > containerRect.bottom - stickyButtonHeight) suggestionContainer.scrollTop += itemRect.bottom - containerRect.bottom + stickyButtonHeight;
+                else if (itemRect.top < containerRect.top) suggestionContainer.scrollTop -= containerRect.top - itemRect.top;
+            }
+        }
+    }, [selectedSuggestionIndex, activeSuggestionRow]);
     const deleteRow = async (id) => {
         if (generalSettings?.askConfirmationRowRemove) {
             const result = await Swal.fire({
@@ -712,21 +900,76 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
     };
 
     return (
-        <div className="w-full min-h-[600px] bg-primary dark:bg-primary">
-            {productsLoading && (
-                <div className='flex justify-end mt-[-4px] text-secondary dark:text-secondary'>
-                    {t("salesInvoice.form.gridSection.productLoadingMsg")}
+        <div className="w-full min-h-[400px] bg-primary dark:bg-primary">
+
+            {/* ✅ Search box shown only in edit mode: finds a row by product name,
+                scrolls it into view inside the grid, and highlights it briefly. */}
+            {editMode && (
+                <div className="w-full mb-2">
+                    <div className="relative w-full">
+                        <Search
+                            size={16}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 text-secondary dark:text-secondary pointer-events-none"
+                        />
+                        <input
+                            type="text"
+                            value={gridSearchTerm}
+                            onChange={(e) => handleGridSearch(e.target.value)}
+                            onKeyDown={handleGridSearchKeyDown}
+                            placeholder={t(
+                                "physicalStock.form.gridSection.searchPlaceholder",
+                                { defaultValue: "Search product in grid..." }
+                            )}
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-themed dark:border-themed rounded bg-primary dark:bg-primary text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                        />
+                    </div>
+                    {gridSearchNotFound && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                            {t(
+                                "physicalStock.form.gridSection.noMatchFound",
+                                { defaultValue: "No matching product found in the grid." }
+                            )}
+                        </p>
+                    )}
                 </div>
             )}
+
             <div>
                 <div className="w-full">
-                    {/* Fixed Header Table */}
-                    <div className="w-full overflow-hidden">
+                    {/* ✅ Single scroll container wrapping the WHOLE table (thead + tbody),
+                        with a sticky header row — same pattern as SalesInvoiceTable.
+                        This replaces the old two-table (separate header/body) layout that
+                        had mismatched max-heights and caused independent/misaligned scrolling. */}
+                    <div
+                        ref={rowRef}
+                        className={`w-full custom-scrollbar ${saleSettings?.gridFixedHeight === true
+                            ? activeSuggestionRow
+                                ? 'overflow-visible max-h-[5150px]'
+                                : 'max-h-[5150px] overflow-auto'
+                            : activeSuggestionRow
+                                ? 'overflow-visible max-h-[5150px]'
+                                : 'max-h-[5150px] overflow-auto'
+                            }`}
+                    >
                         <table className="w-full border-collapse table-fixed">
+                            <colgroup>
+                                <col className="w-[40px]" />
+                                <col className="w-[100px]" />
+                                <col className="w-[440px]" />
+                                <col className="w-[100px]" />
+                                <col className="w-[70px]" />
+                                <col className="w-[100px]" />
+                                <col className="w-[110px]" />
+                                <col className="w-[100px]" />
+                                <col className="w-[80px]" />
+                            </colgroup>
                             <thead>
-                                <tr className="bg-gray-400 dark:bg-black border-b-2 border-themed dark:border-themed">
+                                <tr className="bg-gray-400 dark:bg-black border-b-2 border-themed dark:border-themed sticky top-0 z-10">
                                     <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[40px]">
                                         {t("salesInvoice.form.gridSection.columns.SN")}
+                                    </th>
+                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[440px]">
+                                        {t("salesInvoice.form.gridSection.columns.barcode")}
                                     </th>
                                     <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[440px]">
                                         {t("salesInvoice.form.gridSection.columns.ProdName")}
@@ -751,29 +994,16 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                                     </th>
                                 </tr>
                             </thead>
-                        </table>
-                    </div>
-
-                    {/* Scrollable Body Table */}
-                    <div ref={rowRef} className={`w-full  ${activeSuggestionRow ? 'overflow-visible max-h-[1150px]' : 'max-h-[350px] overflow-auto'} custom-scrollbar`}>
-                        <table className="w-full border-collapse table-fixed">
-                            <colgroup>
-                                <col className="w-[40px]" />
-                                <col className="w-[440px]" />
-                                <col className="w-[100px]" />
-                                <col className="w-[70px]" />
-                                <col className="w-[100px]" />
-                                <col className="w-[110px]" />
-                                <col className="w-[100px]" />
-                                <col className="w-[80px]" />
-                            </colgroup>
                             <tbody>
                                 {rows.map((row) => (
                                     <tr
                                         key={row.id}
-                                        className={`border-b border-themed dark:border-themed hover:bg-hover dark:hover:bg-hover ${row.sn % 2 === 1
-                                            ? 'bg-gray-100 dark:bg-gray-800'
-                                            : 'bg-white dark:bg-gray-900'
+                                        ref={el => rowElRefs.current[row.id] = el}
+                                        className={`border-b border-themed dark:border-themed hover:bg-hover dark:hover:bg-hover transition-colors duration-500 ${highlightedRowId === row.id
+                                            ? 'bg-yellow-200 dark:bg-yellow-700/60 ring-2 ring-inset ring-yellow-400 dark:ring-yellow-300'
+                                            : row.sn % 2 === 1
+                                                ? 'bg-gray-100 dark:bg-gray-800'
+                                                : 'bg-white dark:bg-gray-900'
                                             }`}
                                     >
                                         {/* SN Column */}
@@ -782,6 +1012,30 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                                                 {row.sn}
                                             </span>
                                         </td>
+                                        {/* <td className="p-0.5 border border-themed dark:border-themed text-center">
+                                            <input
+                                                value={row.barcodeInput}
+                                                onChange={(e) =>
+                                                    handleInputChange(row.id, "barcodeInput", e.target.value)
+                                                }
+                                                onKeyDown={(e) => handleKeyDown(e, row.id, "barcode")}
+                                                ref={(el) => (inputRefs.current[`${row.id}-barcode`] = el)}
+                                            />
+                                        </td> */}
+                                        <td className="p-0.5 border border-themed dark:border-themed text-center">
+        <input
+        value={row.barcodeInput}
+        onChange={(e) =>
+            handleInputChange(row.id, "barcodeInput", e.target.value)
+        }
+        onKeyDown={(e) => handleKeyDown(e, row.id, "barcode")}
+        ref={(el) => (inputRefs.current[`${row.id}-barcode`] = el)}
+        type="text"
+        autoComplete="off"
+        className="w-full box-border px-2 py-0.5 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded placeholder:text-muted dark:placeholder:text-muted"
+        placeholder={t("salesInvoice.form.gridSection.prodDetailsLabels.enterBarcodePlaceHolder", { defaultValue: "Barcode" })}
+    />
+</td>
 
                                         {/* Product Name Column */}
                                         <td className="p-0.5 border border-themed dark:border-themed relative">
@@ -815,7 +1069,7 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                                                 <div
                                                     ref={suggestionRef}
                                                     data-suggestion-row={row.id}
-                                                    className="absolute z-90 w-full bg-primary dark:bg-secondary border border-themed dark:border-themed rounded-md shadow-lg max-h-60 overflow-y-auto mt-1 custom-scrollbar"
+                                                    className="absolute z-90 w-full mb-10 bg-primary dark:bg-secondary border border-themed dark:border-themed rounded-md shadow-lg max-h-60 overflow-y-auto mt-1 custom-scrollbar"
                                                 >
                                                     {loadingProducts[row.id] ? (
                                                         <div className="flex items-center justify-center py-8">
@@ -973,7 +1227,6 @@ const PhysicalStockTable = ({ formData, setFormData, editMode, rows: propRows, }
                                                 onChange={(e) => {
                                                     const selectedUnitId = parseInt(e.target.value);
 
-                                                    // Find the product entry that matches both productCode and selected unitId
                                                     const productWithUnit = allProducts.find(
                                                         (p) => p.productCode === row.productCode && (p.unitId === selectedUnitId || p.unitid === selectedUnitId)
                                                     );

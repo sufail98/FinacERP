@@ -19,6 +19,8 @@ import ProformaInvoiceTable from './ProformaInvoiceTable'
 import NormalSelectInput from '@/components/elements/theme/NormalSelectInput'
 import DateInput from '@/components/elements/theme/DateInput'
 import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal'
+import { sanitize } from '@/lib/inputSanitizer'
+import usePrivileges from '@/lib/hooks/usePrivileges'
 
 const FormSectionMain = ({
   fetchProformaDataUsingQuotationId,
@@ -49,12 +51,17 @@ const FormSectionMain = ({
   currency,
   currentledgerBalance,
   otherChargeLedgers,
-
-  setCurrentLedgerBalance
+  updateCustomerId,
+  setUpdateCustomerId,
+  setCurrentLedgerBalance,
+  taxData,
 }) => {
   const [loadingCustomer, setLoadingCustomer] = useState(false);
+  const { hasAccess: hasTransactionBatchAccess } = usePrivileges("Transaction Batch");
+  const { hasAccess: hasEmployeeAccess, } = usePrivileges("Employee");
+
   const { t } = useTranslation();
-  const { generalSettings, financeSettings } = useSelector((state) => state.settings);
+  const { generalSettings, financeSettings, saleSettings } = useSelector((state) => state.settings);
   const [salesAcModalOpen, setSalesAcModalOpen] = useState(false);
   const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
   const [salesModeModalOpen, setSalesModeModalOpen] = useState(false);
@@ -63,9 +70,9 @@ const FormSectionMain = ({
   const [billingAddressOpen, setBilligAddressOpen] = useState(false);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   // const [shippingAdderess, setShippingAddress] = useState(null);
-  const [salesAccounts, setSalesAccounts] = useState([]);
+  const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
+
   const [quotationData, setQuotationData] = useState()
-  const [updateCustomerId, setUpdateCustomerId] = useState(null);
   const [showTaxType, setShowTaxType] = useState(false);
 
   useEffect(() => {
@@ -87,6 +94,45 @@ const FormSectionMain = ({
   useEffect(() => {
     fetchQuotations()
   }, [])
+  useEffect(() => {
+    fetchCurrencyConvertion()
+  }, [selectedBranchId])
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+
+    const date = new Date(dateString);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const MM = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+
+    const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+    return format
+      .replace('dd', dd)
+      .replace('MM', MM)
+      .replace('yyyy', yyyy);
+  };
+  const formatDecimal = (value) =>
+    Number(value || 0).toFixed(generalSettings.decimalPart);
+  const fetchCurrencyConvertion = async () => {
+    try {
+      const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+
+      const formattedData = response.data.data.map((item, index) => ({
+        ...item,
+        SNo: index + 1,
+        date: formatDate(item.date),
+        rate: item.rate !== null && item.rate !== undefined
+          ? formatDecimal(item.rate)
+          : formatDecimal(0),
+      }));
+
+      setCurrencyConvertionData(formattedData);
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const fetchLedgerBalance = async (ledgerId) => {
     try {
@@ -161,6 +207,7 @@ const FormSectionMain = ({
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -266,30 +313,32 @@ const FormSectionMain = ({
               />
 
 
-                <DateInput
-                  label={t('salesInvoice.form.label.formHeaderSection.refDate')}
-                  value={formData.partyRefDate}
-                  name='partyRefDate'
-                  onChange={handleInputChange}
-                  className="w-full"
-                  format={generalSettings.dateformat}
-                />
-
-              <SearchableDropdown
-                name="BatchId"
-                label={t('salesInvoice.form.label.formHeaderSection.BatchId')}
-                options={batches.map(batch => ({
-                  value: batch.transactionbatchid,
-                  label: batch.batchname
-                }))}
-                value={formData.BatchId}
-                onChange={(value) => handleDropdownChange('BatchId', value)}
-                placeholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
-                searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
-                clearable={true}
+              <DateInput
+                label={t('salesInvoice.form.label.formHeaderSection.refDate')}
+                value={formData.partyRefDate}
+                name='partyRefDate'
+                onChange={handleInputChange}
                 className="w-full"
-                loading={loading.batch}
+                format={generalSettings.dateformat}
               />
+
+              {hasTransactionBatchAccess && (
+                <SearchableDropdown
+                  name="BatchId"
+                  label={t('salesInvoice.form.label.formHeaderSection.BatchId')}
+                  options={batches.map(batch => ({
+                    value: batch.transactionbatchid,
+                    label: batch.batchname
+                  }))}
+                  value={formData.BatchId}
+                  onChange={(value) => handleDropdownChange('BatchId', value)}
+                  placeholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
+                  searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
+                  clearable={true}
+                  className="w-full"
+                  loading={loading.batch}
+                />
+              )}
 
               <TextInput
                 name="LPONO"
@@ -332,32 +381,34 @@ const FormSectionMain = ({
                 className="w-full"
                 loading={loading.pricingLevel}
               />
-              <div className='flex gap-0.5 lg:gap-1 items-end flex-1'>
-                <div className='flex-1 min-w-0'>
-                  <SearchableDropdown
-                    name="employeeId"
-                    label={t('salesInvoice.form.label.formHeaderSection.salesMan')}
-                    options={employees?.map((data) => ({
-                      value: data.employeeId,
-                      label: data.employeeName,
-                    }))}
-                    value={formData.employeeId}
-                    onChange={(value) => handleDropdownChange('employeeId', value)}
-                    placeholder={t('salesInvoice.form.placeholders.formHeaderSection.salesMan')}
-                    searchPlaceholder="Sales man..."
-                    error={errors.employeeId}
-                    clearable={true}
-                    className='w-full mb-0.5'
-                    loading={loading.employees}
-                  />
+              {hasEmployeeAccess && (
+                <div className='flex gap-0.5 lg:gap-1 items-end flex-1'>
+                  <div className='flex-1 min-w-0'>
+                    <SearchableDropdown
+                      name="employeeId"
+                      label={t('salesInvoice.form.label.formHeaderSection.salesMan')}
+                      options={employees?.map((data) => ({
+                        value: data.employeeId,
+                        label: data.employeeName,
+                      }))}
+                      value={formData.employeeId}
+                      onChange={(value) => handleDropdownChange('employeeId', value)}
+                      placeholder={t('salesInvoice.form.placeholders.formHeaderSection.salesMan')}
+                      searchPlaceholder="Sales man..."
+                      error={errors.employeeId}
+                      clearable={true}
+                      className='w-full mb-0.5'
+                      loading={loading.employees}
+                    />
+                  </div>
+                  <div className='mb-0.5 flex-shrink-0'>
+                    <AddNewBtn
+                      icon={Plus}
+                      onClick={() => setEmployeeModalOpen(true)}
+                    />
+                  </div>
                 </div>
-                <div className='mb-0.5 flex-shrink-0'>
-                  <AddNewBtn
-                    icon={Plus}
-                    onClick={() => setEmployeeModalOpen(true)}
-                  />
-                </div>
-              </div>
+              )}
               <div className='grid grid-cols-2 gap-1 items-center'>
                 <NormalSelectInput
                   name='status'
@@ -415,14 +466,19 @@ const FormSectionMain = ({
                 }))}
                 value={formData.quotationMasterId}
                 onChange={(value) => {
-                  handleDropdownChange('quotationMasterId', value)
-                  fetchProformaDataUsingQuotationId(value);
+                  handleDropdownChange('quotationMasterId', value);
+                  // ❌ REMOVED: fetchProformaDataUsingQuotationId(value) — now triggered on Enter
+                }}
+                onEnter={(selectedValues) => {
+                  fetchProformaDataUsingQuotationId(selectedValues); // passes array of IDs
                 }}
                 placeholder={t('proformaInvoice.form.placeholders.quotationNo')}
                 searchPlaceholder={t('proformaInvoice.form.placeholders.quotationNo')}
                 error={errors.AgainstNo}
                 clearable={true}
                 className='w-full'
+                multiple
+                readOnly={editMode}
               />
             </div>
           </div>
@@ -557,12 +613,14 @@ const FormSectionMain = ({
         >
           {t('salesInvoice.form.label.formHeaderSection.salesAcLabel')}: <span className="font-medium">{formData.salesAccountName}</span>
         </p>
-        <p
-          className='text-blue-600 dark:text-blue-400 border-b border-blue-600 dark:border-blue-400 w-fit cursor-pointer hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
-          onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
-        >
-          {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: <span className="font-medium">{currentCurrencyFromStore?.currencyName || "Select Currency"}</span>
-        </p>
+        {financeSettings?.multiCurrency && (
+          <p
+            className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+            onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
+          >
+            {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {formData?.currencyName || currentCurrencyFromStore?.currencyName || "Select Currency"}
+          </p>
+        )}
       </div>
 
       {/* Sales Invoice Table */}
@@ -574,6 +632,7 @@ const FormSectionMain = ({
           rows={rows}
           setRows={setRows}
           otherChargeLedgers={otherChargeLedgers}
+          taxData={taxData}
 
         />
       </div>
@@ -592,6 +651,8 @@ const FormSectionMain = ({
         handleClose={() => setCurrencyModalOpen(false)}
         formData={formData}
         currency={currency}
+        currencyConvertionData={currencyConvertionData}
+
         handleChange={(field, value) => {
           handleDropdownChange(field, value);
         }}

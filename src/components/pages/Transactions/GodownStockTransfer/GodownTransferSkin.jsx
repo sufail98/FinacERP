@@ -1,5 +1,5 @@
 import BreadCrumb from '@/components/common/BreadCrumb';
-import { Archive, ArchiveRestore, Eraser, Printer, PrinterIcon, ReceiptText, SquarePen, Table } from 'lucide-react';
+import { Archive, ArchiveRestore, Eraser, Printer, PrinterIcon, ReceiptText, SaveAll, SquarePen, Table } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import FormSectionMain from './FormSectionMain';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,8 +16,15 @@ import printThermalInvoice from '@/utils/prints/salesInvoicePrints/thermal/print
 import { formatDateWithTime } from '@/lib/dateFormat';
 import { showToast } from '@/utils/toast';
 import PopupPreloader from '@/components/common/PopupPreloader';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import PrintDropdown from '@/components/common/PrintDropdown';
+import printStockTransfer, { saveStockTransferAsPDF } from '../../../../utils/prints/godownTransferPrints/godownTransferPrintOne';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const GodownTransferSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Stock Transfer");
+
     const location = useLocation();
     const { approveMode } = location.state || {};
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
@@ -40,13 +47,14 @@ const GodownTransferSkin = () => {
     const [showHeldInvoices, setShowHeldInvoices] = useState(false);
     const [restoredHeldInvoiceId, setRestoredHeldInvoiceId] = useState(null);
     const printType = localStorage.getItem('printType');
+    const [isPrinting, setIsPrinting] = useState(false);
     // Hold setup
     const [formData, setFormData] = useState({
         voucherType: "Stock Transfer",
         yearId: currentFinancialYear?.yearId,
         date: new Date(),
         currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-        printAfterSave: true,
+        printAfterSave: false,
         status: true,
         printType: printType || 'thermal',
         BatchId: 1,
@@ -85,7 +93,30 @@ const GodownTransferSkin = () => {
     const [baseDataloading, setBaseDataloading] = useState(false)
     const [branches, setBranches] = useState([])
     const [currencies, setCurrency] = useState([])
+    const buildTransferDataForPrint = useCallback((voucherNumber, overrideData) => {
+        const base = overrideData || formData;
+        const fromBranch = branches?.find(b => String(b.branchId ?? b.id) === String(base.branchIdFrom));
+        const toBranch = branches?.find(b => String(b.branchId ?? b.id) === String(base.branchIdTo));
+        const fromGodown = Fromgodowns?.find(g => String(g.GodownId) === String(base.godownIdFrom));
+        const toGodown = Togodowns?.find(g => String(g.GodownId) === String(base.godownIdTo));
 
+        return {
+            voucherNo: editMode ? existingInvoiceNo : voucherNumber,
+            date: base.date,
+            narration: base.narration,
+            branchFromName: fromBranch?.branchName || fromBranch?.name || (String(base.branchIdFrom) === String(selectedBranchId) ? selectedBranchDetails?.branchName : '') || '',
+            godownFromName: fromGodown?.GodownName || '',
+            branchToName: toBranch?.branchName || toBranch?.name || '',
+            godownToName: toGodown?.GodownName || '',
+            transferDetails: (base.transferDetails || []).map(item => ({
+                barcode: item.barcode || item.productDetails?.barcode || '',
+                productName: item.productName || '',
+                quantity: item.quantity ?? 0,
+                rate: item.rate ?? 0,
+                amount: item.amount ?? ((item.quantity || 0) * (item.rate || 0)),
+            })),
+        };
+    }, [formData, editMode, existingInvoiceNo, branches, Fromgodowns, Togodowns, selectedBranchId, selectedBranchDetails]);
 
 
     useEffect(() => {
@@ -96,7 +127,7 @@ const GodownTransferSkin = () => {
                     voucherType: "Stock Transfer",
                     branchId: selectedBranchId,
                     yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Supplier"],
+                    ledgerTypes: ["Supplier", "Customer&Supplier"],
                     ledgerId: formData.ledgerId,
                     currencyId: currentCurrency?.currencyId
                 })
@@ -132,7 +163,7 @@ const GodownTransferSkin = () => {
         navigate("/transaction/godown-transfer/list");
     };
 
-    
+
     const holdCurrentInvoice = useCallback(() => {
         const hasData = formData.transferDetails.some(
             detail => detail.productCode && detail.quantity > 0
@@ -212,7 +243,11 @@ const GodownTransferSkin = () => {
         } else {
             setHeldInvoices(prev => prev.filter(inv => inv.id !== heldInvoice.id));
         }
-        setFormData(heldInvoice.formData);
+        setFormData({
+            ...heldInvoice.formData,
+            date: new Date(),
+            billTime: time,
+        });
         setInvoiceId(heldInvoice.invoiceId);
         setResetTableKey(prev => prev + 1);
         setShowHeldInvoices(false);
@@ -288,7 +323,7 @@ const GodownTransferSkin = () => {
             yearId: currentFinancialYear?.yearId,
             date: new Date(),
             currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-            printAfterSave: true,
+            printAfterSave: false,
             status: true,
             printType: printType || 'thermal',
             BatchId: 1,
@@ -557,7 +592,8 @@ const GodownTransferSkin = () => {
     };
 
     const handleApprove = async () => {
-
+        setIsSaving(true);
+        
         try {
             const payload = {
                 approvedstatus: "Accepted",
@@ -578,15 +614,16 @@ const GodownTransferSkin = () => {
             }
 
             const res = await axiosInstance.post(`accept-stock-transfer/${transferMasterId}`, payload);
-            setAlert({
-                id: Date.now(),
-                type: "success",
-                message: t("saveSuccess"),
-            });
+           
+            showToast.success("Stock transfer approved successfully");
             navigate('/transaction/godown-transfer/list');
 
         } catch (error) {
             console.error("Error approving stock transfer", error);
+            showToast.error("Failed to approve stock transfer. Please try again.");
+        }finally {
+        setIsSaving(false);
+
         }
     }
 
@@ -647,8 +684,8 @@ const GodownTransferSkin = () => {
             if (!result.isConfirmed) return;
         }
 
-
         setIsSaving(true);
+
         try {
             // Generate QR code data and add to formData before saving
             const qrCodeBase64 = generateQRCodeData(
@@ -662,8 +699,13 @@ const GodownTransferSkin = () => {
             const dataToSave = {
                 ...formData,
                 date: formatDateWithTime(formData.date),
+                ModifiedUser: editMode ? userId : null,
                 billTime: time,
-                qr_link: qrCodeBase64  // Store the base64 QR code string
+                qr_link: qrCodeBase64,
+                transferDetails: (formData.transferDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: editMode ? userId : detail?.ModifiedUser ?? null,
+                })),
             };
 
             const api = editMode ? `update-stock-transfer/${transferMasterId}` : 'save-stock-transfer';
@@ -676,53 +718,145 @@ const GodownTransferSkin = () => {
                     message: t("saveSuccess"),
                 });
 
-                // Get the saved invoice data
+                // Handle held invoices cleanup
+                if (restoredHeldInvoiceId) {
+                    setHeldInvoices(prev => prev.filter(inv => inv.id !== restoredHeldInvoiceId));
+                    setRestoredHeldInvoiceId(null);
+                }
+
                 const savedInvoiceData = dataToSave;
                 const invoiceNumber = invoiceId;
 
-                // Print invoice if enabled
+                // Print transfer voucher if enabled
+                const transferDataForPrint = buildTransferDataForPrint(invoiceNumber, response?.data?.data || formData);
+
                 if (formData.printAfterSave) {
-                    // Prepare invoice data for printing
-                    const invoiceDataForPrint = {
-                        ...savedInvoiceData,
-                        invoiceNo: invoiceNumber,
-                        date: savedInvoiceData.date || formData.date,
-                        salesDetails: savedInvoiceData.salesDetails || formData.salesDetails
-                    };
-
-                    // Call print function
-                    // setTimeout(() => {
-                    //     if (formData.printType === 'a4') {
-                    //         printInvoiceOne(invoiceDataForPrint, selectedBranchDetails, time);
-                    //     } else if (formData.printType === 'thermal') {
-                    //         printThermalInvoice(invoiceDataForPrint, selectedBranchDetails, time);
-                    //     }
-                    // }, 500);
+                    printStockTransfer(transferDataForPrint, selectedBranchDetails, time, currentCurrency);
+                } else {
+                    const pdfResult = await Swal.fire({
+                        title: t('Print as PDF?') || 'Print as PDF?',
+                        text: t('Do you want to download this as a PDF?') || 'Do you want to download this as a PDF?',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
+                        cancelButtonText: t('No, Just Save') || 'No, Just Save',
+                    });
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            saveStockTransferAsPDF(transferDataForPrint, selectedBranchDetails, time, currentCurrency);
+                        }, 500);
+                    }
                 }
-
                 if (saleSettings.CloseAfterSave) {
                     setTimeout(() => {
                         navigate('/transaction/godown-transfer/list');
                     }, formData.printAfterSave ? 1500 : 500);
                 }
 
-
-
-                // Update invoice ID for next entry (but don't clear yet)
-                await clearForm(true);                // ✅ clear first, both modes
+                await clearForm(true);
                 await genarateSalesInvoiceId();
             }
         } catch (error) {
-            console.error('Error saving sales:', error);
+            console.error('Error saving stock transfer:', error);
+
+            // ✅ AUTO-HOLD TRANSFER ON ERROR
+            const hasValidData = formData.transferDetails.some(
+                detail => detail.productCode && detail.quantity > 0
+            );
+
+            if (hasValidData) {
+                const heldInvoice = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    invoiceId: invoiceId,
+                    branchIdFrom: formData.branchIdFrom,
+                    branchIdTo: formData.branchIdTo,
+                    itemCount: formData.transferDetails.filter(d => d.productCode).length,
+                    grandTotal: formData.grandTotal || 0,
+                    branchId: selectedBranchId,
+                    formData: { ...formData },
+                    errorHeld: true // Mark as error-held
+                };
+
+                setHeldInvoices(prev => [...prev, heldInvoice]);
+
+                showToast.warning(
+                    `Save failed. Transfer has been automatically held. Total held transfers: ${heldInvoices.length + 1}`
+                );
+            }
+
             Swal.fire({
                 icon: 'error',
                 title: t('Error') || 'Error',
-                text: error.response?.data?.message || t('SaveFailed') || 'Failed to save sales invoice',
+                html: `
+                    <div class="text-left">
+                        <p class="mb-2">${error.response?.data?.message || t('SaveFailed') || 'Failed to save stock transfer'}</p>
+                        ${hasValidData ? '<p class="text-sm text-blue-600">Your transfer data has been automatically held and can be restored later.</p>' : ''}
+                    </div>
+                `,
+                confirmButtonColor: '#3085d6',
+                confirmButtonText: 'OK'
             });
         } finally {
             setIsSaving(false);
         }
-    }, [formData, time, saleSettings, generalSettings, editMode, selectedBranchDetails,]);
+    }, [
+        formData,
+        time,
+        saleSettings,
+        generalSettings,
+        editMode,
+        selectedBranchDetails,
+        invoiceId,
+        restoredHeldInvoiceId,
+        heldInvoices.length,
+        selectedBranchId,
+        transferMasterId,
+        t,
+        navigate
+    ]);
+
+
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+        setIsPrinting(true);
+        try {
+            const transferDataForPrint = buildTransferDataForPrint(existingInvoiceNo, formData);
+            await printStockTransfer(transferDataForPrint, selectedBranchDetails, time, currentCurrency);
+        } catch (error) {
+            console.error('Error reprinting stock transfer:', error);
+            showToast.error('Failed to print');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, buildTransferDataForPrint, existingInvoiceNo, formData, selectedBranchDetails, time, currentCurrency]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const transferDataForPrint = buildTransferDataForPrint(existingInvoiceNo, formData);
+            await saveStockTransferAsPDF(transferDataForPrint, selectedBranchDetails, time, currentCurrency);
+        } catch (error) {
+            console.error('Error saving PDF for stock transfer:', error);
+            showToast.error('Failed to save PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [buildTransferDataForPrint, existingInvoiceNo, formData, selectedBranchDetails, time, currentCurrency]);
 
     const breadcrumbActions = [
         {
@@ -765,31 +899,47 @@ const GodownTransferSkin = () => {
                     ? t("updateBtn")
                     : t("submitBtn"),
 
-            icon: approveMode ? ArchiveRestore : SquarePen,
+            icon: approveMode ? ArchiveRestore : SaveAll,
             type: "primary",
             onClick: approveMode ? handleApprove : handleSave,
             loading: isSaving,
             loadingText: t("loadingText"),
         },
     ].filter(Boolean);
+
+    const ctrlSPressed = useRef(false);
+
     useEffect(() => {
-        if (!editMode) {
-            const handleKeyDown = (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-                    e.preventDefault();
-                    handleSave();
-                }
-            };
+        if (editMode) return;
 
-            window.addEventListener('keydown', handleKeyDown);
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+                e.preventDefault();
 
-            return () => {
-                window.removeEventListener('keydown', handleKeyDown);
-            };
-        }
-    }, [handleSave]);
+                if (ctrlSPressed.current) return;
 
-    if (fetchLoading || baseDataloading) {
+                ctrlSPressed.current = true;
+                handleSave();
+            }
+        };
+
+        const handleKeyUp = (e) => {
+            if (e.key.toLowerCase() === "s") {
+                ctrlSPressed.current = false;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+        };
+    }, [handleSave, editMode]);
+
+
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary ">
                 <BreadCrumb
@@ -798,13 +948,13 @@ const GodownTransferSkin = () => {
                         { title: t("stockTransfer.breadCrumb.title"), url: "#" },
                     ]}
                     heading={{ icon: ReceiptText, title: t("stockTransfer.breadCrumb.title") }}
-                    actions={breadcrumbActions}
                 />
 
                 <Preloader />
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className='bg-primary dark:bg-primary '>
@@ -824,8 +974,33 @@ const GodownTransferSkin = () => {
                 ]}
                 heading={{ icon: ReceiptText, title: t("stockTransfer.breadCrumb.title") }}
                 actions={breadcrumbActions}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="printAfterSaveStockTransfer"
+                                checked={formData.printAfterSave || false}
+                                onCheckedChange={(value) =>
+                                    setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                }
+                            />
+                            <label
+                                htmlFor="printAfterSaveStockTransfer"
+                                className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                            >
+                                {t("Direct Print") || "Print After Save"}
+                            </label>
+                        </div>
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
             />
-
             <FormSectionMain
                 validationRules={validationRules}
                 handleBlur={handleBlur}

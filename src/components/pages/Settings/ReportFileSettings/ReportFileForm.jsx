@@ -7,6 +7,7 @@ import axiosInstance from '@/lib/axiosConfig';
 import AlertBox from '@/components/common/AlertBox';
 import useAuth from '@/redux/hook/auth/useAuth';
 import { ChevronDown } from 'lucide-react';
+import { showToast } from '@/utils/toast';
 
 // Custom Combobox Component
 const ComboboxInput = ({
@@ -114,7 +115,7 @@ const ReportFileForm = ({ open, handleClose, onSuccess, editData = null, disting
   const { t } = useTranslation();
   const { selectedBranchId, userId } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [alert, setAlert] = useState(null);
+ 
   const [formData, setFormData] = useState({
     formName: '',
     formType: '',
@@ -159,7 +160,7 @@ const ReportFileForm = ({ open, handleClose, onSuccess, editData = null, disting
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setAlert(null);
+    
     setFormData({
       ...formData,
       [name]: type === 'checkbox' ? checked : value,
@@ -171,11 +172,11 @@ const ReportFileForm = ({ open, handleClose, onSuccess, editData = null, disting
 
     // Validation
     if (!formData.formName.trim()) {
-      setAlert({ type: 'error', message: 'Form Name is required' });
+     showToast.error(t('reportFileSettings.alerts.formNameRequired') || 'Form Name is required');
       return;
     }
     if (!formData.reportName.trim()) {
-      setAlert({ type: 'error', message: 'Report Name is required' });
+      showToast.error(t('reportFileSettings.alerts.reportNameRequired') || 'Report Name is required');
       return;
     }
 
@@ -187,12 +188,10 @@ const ReportFileForm = ({ open, handleClose, onSuccess, editData = null, disting
 
       const response = await axiosInstance[method](endpoint, formData);
 
-      setAlert({
-        type: 'success',
-        message: editData
+   
+      showToast.success( editData
           ? t('reportFileSettings.alerts.updateSuccess') || 'Report file setting updated successfully'
-          : t('reportFileSettings.alerts.saveSuccess') || 'Report file setting saved successfully',
-      });
+          : t('reportFileSettings.alerts.saveSuccess') || 'Report file setting saved successfully',)
 
       // Reset form
       setFormData({
@@ -217,10 +216,7 @@ const ReportFileForm = ({ open, handleClose, onSuccess, editData = null, disting
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Error saving report file setting';
       setErrorMsg(errorMessage);
-      // setAlert({
-      //   type: 'error',
-      //   message: errorMessage,
-      // });
+    
     } finally {
       setLoading(false);
     }
@@ -228,7 +224,7 @@ const ReportFileForm = ({ open, handleClose, onSuccess, editData = null, disting
 
   return (
     <>
-      {alert && <AlertBox key={alert.id || Date.now()} message={alert.message} type={alert.type} />}
+     
 
       <MultiMasterFormModal
         open={open}

@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { MdGTranslate } from "react-icons/md";
 import useCtrlSave from "@/lib/hooks/useCtrlSave";
 import { showToast } from "@/utils/toast";
+import SearchableDropdown from "@/components/elements/theme/SearchableDropdown";
 
 const AddBranch = () => {
   const { branchId } = useParams();
@@ -273,7 +274,7 @@ const AddBranch = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+ if (e?.preventDefault) e.preventDefault();
 
     if (!validateForm()) {
       showToast.error(t("pleaseFillRequiredFieldMsg"));
@@ -996,19 +997,23 @@ const AddBranch = () => {
                           className="text-sm w-full"
                         />
                       </div>
-                      <div>
-                        <Label htmlFor="currencyId" className="text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">{t('addBranch.fields.currency')}</Label>
-                        <Select value={formData.currencyId} onValueChange={(value) => handleSelectChange("currencyId", value)}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder={t('addBranch.fields.currency')} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {currency.map((data, index) =>
-                              <SelectItem value={data.currencyId} key={index}>{data.label}</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                     <div>
+  <Label htmlFor="currencyId" className="text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+    {t('addBranch.fields.currency')}
+  </Label>
+  <SearchableDropdown
+    id="currencyId"
+    placeholder={t('addBranch.fields.currency')}
+    searchPlaceholder="Search currency..."
+    options={currency.map((data) => ({
+      value: data.currencyId,
+      label: data.label,
+    }))}
+    value={formData.currencyId}
+    onChange={(value) => handleSelectChange("currencyId", value)}
+    clearable
+  />
+</div>
                     </div>
 
                     {/* Active Status Row (only in edit mode) */}

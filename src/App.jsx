@@ -6,6 +6,7 @@ import Swal from 'sweetalert2'
 import { useDispatch, useSelector } from 'react-redux'
 import { initializeTheme } from './lib/themeHelper'
 import { useLocation } from 'react-router-dom';
+import PlanExpiryMarquee from './components/common/PlanExpiryMarquee';
 
 //Pages Import
 import BranchSwitchOverlay from './components/common/BranchSwitchOverlay';
@@ -30,6 +31,7 @@ import RouteMaster from './components/pages/Master/singleMaster/Route/Route'
 import Area from './components/pages/Master/singleMaster/Area'
 import Market from './components/pages/Master/singleMaster/Market/Market'
 import Settings from './components/pages/Settings/Settings'
+import ChangeUserPassword from './components/pages/Settings/ChangeUserPassword'
 import PrivateRoute from './components/common/PrivateRoute'
 import AccountGroups from './components/pages/Master/multiMasterForms/AccountGroups/AccountGroups'
 import NotFound from './components/common/404'
@@ -46,6 +48,7 @@ import AddCustomerPage from './components/pages/Master/Customer&Supplier/AddCust
 import SupplierList from './components/pages/Master/Customer&Supplier/SupplierList'
 import AddSupplierPage from './components/pages/Master/Customer&Supplier/AddSupplierForm'
 import MenuPrivilegeManager from './components/pages/Previlage/SetPrivilage'
+import SetPlanVisibleAdmin from './components/pages/AdminPrevilage/SetPlanVisibleAdmin'
 import AddBankPage from './components/pages/Master/Bank/AddBank'
 import useAuth from './redux/hook/auth/useAuth'
 import ProductList from './components/pages/Master/multiMasterForms/Product/ProductList'
@@ -56,6 +59,7 @@ import DesignationList from './components/pages/Master/multiMasterForms/Designat
 import DepartmentList from './components/pages/Master/multiMasterForms/Department/DepartmentList'
 import WorkLocationList from './components/pages/Master/singleMaster/WorkLocation/WorkLocation'
 import SuffixPrefixSettings from './components/pages/Settings/SuffixPrefixSettings'
+import BulkUpload from './components/pages/Settings/BulkUpload'
 import EmployeeList from './components/pages/Payroll/Employee/EmployeeList'
 import EmployeeForm from './components/pages/Payroll/Employee/EmployeeForm'
 import SalesInvoiceSkin from './components/pages/Transactions/SalesInvoice/SalesInvoiceSkin'
@@ -77,8 +81,6 @@ import useKeyboardShortcuts from './lib/hooks/useKeyboardShortcuts'
 import PurchaseCartSkin from './components/pages/Transactions/PurchaseCart/PurchaseCartSkin'
 import PurchaseCartList from './components/pages/Transactions/PurchaseCart/PurchaseCartList/PurchaseCartList'
 import PurchaseQuotationReport from './components/pages/Reports/PurchaseQuotationReport/PurchaseQuotationReport'
-
-
 import PurchaseOrderSkin from './components/pages/Transactions/PurchaseOrder/PurchaseOrderSkin'
 import PurchaseOrderList from './components/pages/Transactions/PurchaseOrder/PurchaseOrderList/PurchaseOrderList'
 import PurchaseInvoiceSkin from './components/pages/Transactions/PurchaseInvoice/PurchaseInvoiceSkin'
@@ -110,8 +112,15 @@ import GenaralReminderForm from './components/pages/GeneralReminders/GenaralRemi
 import PrintInvoicePage from './components/pages/Transactions/SalesInvoice/PrintInvoicePage';
 import AccountGroupReport from './components/pages/Reports/AccountGroupReport';
 import CustomerSuplierReport from './components/pages/Reports/CustomerSuplierReport';
+import BarcodeGenerator from './components/pages/BarcodeGenerator/BarcodeGenerator';
 import CustomerSupplierStatementReport from './components/pages/Reports/CustomerSupplierStatementReport';
 import CashAndBankBook from './components/pages/Reports/CashAndBankBook';
+import UnusedStock from './components/pages/Reports/InventoryReports/UnusedStock';
+import ReorderLevelStock from './components/pages/Reports/InventoryReports/ReorderLevelStock';
+import MaximumLevelStock from './components/pages/Reports/InventoryReports/MaximumLevelStock';
+import MinimumLevelStock from './components/pages/Reports/InventoryReports/MinimumLevelStock';
+import SlowMovingStock from './components/pages/Reports/InventoryReports/SlowMovingStock';
+import FastMovingStock from './components/pages/Reports/InventoryReports/FastMovingStock';
 import AccountLedgerReport from './components/pages/Reports/AccountLedgerReport';
 import PaymentReport from './components/pages/Reports/PaymentReport/PaymentReport';
 import ReceiptReport from './components/pages/Reports/RecieptReport/ReceiptReport';
@@ -129,6 +138,8 @@ import GodownTransferList from './components/pages/Transactions/GodownStockTrans
 import StockValueReport from './components/pages/Reports/StockValueReport/StockValueReport';
 import StockReport from './components/pages/Reports/StockReport/StockReport';
 import ProfitAndLossAnalysis from './components/pages/Reports/ProfitAndLossAnalysis/ProfitAndLossAnalysis';
+import IncomAndExpenceReport from './components/pages/Reports/IncomAndExpenceReport/IncomAndExpenceReport';
+import IncomAndExpendeetureReport from './components/pages/Reports/IncomAndExpendeetureReport/IncomAndExpendeetureReport';
 import CashFlowSummary from './components/pages/Reports/CashFlowSummary/CashFlowSummary';
 import FundFlow from './components/pages/Reports/FundFlow/FundFlow';
 import AccountGroupChart from './components/pages/Reports/AccountGroupChart/AccountGroupChart';
@@ -150,6 +161,7 @@ import PhysicalStockReport from './components/pages/Reports/PhysicalStockReport/
 import ProductForm from './components/pages/Master/multiMasterForms/Product/ProductForm';
 import PurchaseDayReport from './components/pages/Reports/PurchaseDayReport/PurchaseDayReport';
 import SalesReport from './components/pages/Reports/SalesReport/SalesReport';
+import SalesProfitReport from './components/pages/Reports/SalesProfitReport/SalesProfitReport';
 import PurchaseReturnReport from './components/pages/Reports/PurchaseReturnReport/PurchaseReturnReport';
 import SalesDayReport from './components/pages/Reports/SalesDayReport/SalesDayReport';
 import SalesmanWiseSalesReport from './components/pages/Reports/SalesmanWiseSalesReport/SalesmanWiseSalesReport';
@@ -181,7 +193,7 @@ import { setTheme } from './redux/slice/theme/themeSlice'
 import TrialBalance from './components/pages/Reports/TrialBalance/TrialBalance';
 import ViewProduct from './components/pages/Master/multiMasterForms/Product/ViewProduct';
 import TransactionBatch from './components/pages/Master/multiMasterForms/TransactionBatch/TransactionBatch';
-import { fetchAllProducts } from './redux/slice/productSlice';
+import { fetchAllProducts, fetchAllProductsNoType } from './redux/slice/productSlice';
 import ReportFileSettingsList from './components/pages/Settings/ReportFileSettings/ReportFileSettingsList';
 import UsedStockSkin from './components/pages/Transactions/UsedStock/UsedStockSkin';
 import UsedStockList from './components/pages/Transactions/UsedStock/UsedStockList/UsedStockList';
@@ -191,6 +203,7 @@ import ACGroupReport from './components/pages/Reports/ACgroupReport/ACGroupRepor
 import SalesQuotationReport from './components/pages/Reports/SalesQuotationReport/SalesQuotationReport';
 import DocumentPDF from './components/pages/DocumentPDF';
 import AppVersionManagement from './components/pages/AppVersionManagement';
+import DeleteSalesEntry from './components/pages/DeleteSalesEntry';
 import QRUpdatePage from './components/pages/QRUpdatePage';
 import SalesOrderPaymentReport from './components/pages/Reports/SalesOrderPaymentReport/SalesOrderPaymentReport';
 import ManufacturingJounralSkin from './components/pages/Transactions/ManufacturingJournal/ManufacturingJounralSkin';
@@ -200,7 +213,6 @@ import ViewOrderSummery from './components/pages/Reports/OrderSummeryReport/View
 import { ProductMovementReport } from './components/pages/Reports/ProductMovementReport/ProductMovementReport';
 import PurchaseCartReport from './components/pages/Reports/PurchaseCartReport/PurchaseCartReport';
 import StaffHolidayRegister from './components/pages/Payroll/StaffHolidayRegister/StaffHolidayRegister';
-import StaffHolidayRegisterForm from './components/pages/Payroll/StaffHolidayRegister/StaffHolidayRegisterForm';
 import SalaryMasterList from './components/pages/Payroll/SalaryMaster/SalaryMasterList';
 import SalaryMasterForm from './components/pages/Payroll/SalaryMaster/SalaryMasterForm';
 import PayheadList from './components/pages/Payroll/Payhead/PayheadList';
@@ -216,6 +228,8 @@ import DamageStockReport from './components/pages/Reports/DamageStockReport/Dama
 import UsedStockReport from './components/pages/Reports/UsedStockReport/UsedStockReport';
 import GodownTransferReport from './components/pages/Reports/GodownTransferReport/GodownTransferReport';
 import BillBalanceReport from './components/pages/Reports/BillBalanceReport/BillBalanceReport';
+import QuickAccessMenu from './components/common/QuickAccessMenu';
+import SalesSummaryReport from './components/pages/Reports/SalesSummaryReport/SalesSummaryReport';
 
 
 // Custom hook to detect network status
@@ -437,7 +451,8 @@ const NetworkStatusBanner = ({ isOnline }) => {
 function App() {
   const isOnline = useNetworkStatus();
   const dispatch = useDispatch();
-  const { loaded, loading } = useSelector((state) => state.settings);
+  const { organizationData } = useSelector((state) => state.organization);
+  const expDate = organizationData?.ExpiryDate
   const { selectedBranchId } = useAuth();
   //  useAutoLogoutOnClose();
   const PurchaseCartWrapper = () => {
@@ -460,11 +475,13 @@ function App() {
   };
 
   // Add a new function specifically for zatca settings
-  const getZatcaSettings = (response) => {
+  const getZatcaBarcodeSettings = (response) => {
     // Zatca returns data as an array with a single object or directly
     if (response?.data?.data && Array.isArray(response.data.data)) {
+
       return response.data.data[0] || {};
     }
+
     return response?.data?.data || {};
   };
   const getPrintSettings = (response) => {
@@ -493,13 +510,14 @@ function App() {
     dispatch(setLoading(true));
 
     try {
-      const [general, finance, inventory, purchase, sales, zatca, reportFile] = await Promise.all([
+      const [general, finance, inventory, purchase, sales, zatca, barcodeSettings, reportFile] = await Promise.all([
         axiosInstance.get("general-settings"),
         axiosInstance.get("finance-settings"),
         axiosInstance.get("inventory-settings"),
         axiosInstance.get("purchase-settings"),
         axiosInstance.get("sales-settings"),
         axiosInstance.get(`zatca/${selectedBranchId}`),
+        axiosInstance.get(`get-all-barcodesettings/${selectedBranchId}`),
         axiosInstance.get(`report-file-dev/${selectedBranchId}`), // 👈 added
       ]);
 
@@ -511,7 +529,8 @@ function App() {
           inventorySettings: getBranchSettings(inventory, selectedBranchId),
           purchaseSettings: getBranchSettings(purchase, selectedBranchId),
           saleSettings: getBranchSettings(sales, selectedBranchId),
-          zatcaSettings: getZatcaSettings(zatca),
+          zatcaSettings: getZatcaBarcodeSettings(zatca),
+          barcodeAlignmentSettings: getZatcaBarcodeSettings(barcodeSettings), // 👈 added
           printSettings: getPrintSettings(reportFile), // 👈 added
         })
       );
@@ -548,6 +567,7 @@ function App() {
   // ----------------------------------Load Products for Invoice Start----------------------------------
   useEffect(() => {
     dispatch(fetchAllProducts());
+    dispatch(fetchAllProductsNoType());
   }, [selectedBranchId]);
 
   // ----------------------------------Load Products for Invoice End----------------------------------
@@ -561,11 +581,13 @@ function App() {
       <BranchSwitchOverlay />
       <HashRouter>
         <NetworkStatusBanner isOnline={isOnline} />
+        <PlanExpiryMarquee expDate={expDate} />
         <KeyboardShortcutsWrapper />
 
 
         <div style={{ paddingTop: !isOnline ? '48px' : '0px', transition: 'padding-top 0.3s ease' }}>
           {!hideNavbar && <Navbar />}
+          <QuickAccessMenu />
           <RouteScrollToTop />
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -588,6 +610,7 @@ function App() {
               <Route path="/edit-user/:userId" element={<PrivateRoute><AddUser /></PrivateRoute>} />
               <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
               <Route path="/settings/report-file-settings" element={<PrivateRoute><ReportFileSettingsList /></PrivateRoute>} />
+              <Route path="/settings/bulk-upload" element={<PrivateRoute><BulkUpload /></PrivateRoute>} />
               <Route path="/settings/printers" element={<PrivateRoute><PrinterSettings /></PrivateRoute>} />
               {/* Master Pages */}
               <Route path="/master/offer-creation" element={<PrivateRoute><OfferCreation /></PrivateRoute>} />
@@ -595,6 +618,7 @@ function App() {
               <Route path="/master/offer-creation/edit/:id" element={<PrivateRoute><OfferForm /></PrivateRoute>} />
               <Route path="/master/user-groups" element={<PrivateRoute><UserGroups /></PrivateRoute>} />
               <Route path="/master/user-group/set-privilege/:userGroupId" element={<PrivateRoute><MenuPrivilegeManager /></PrivateRoute>} />
+              <Route path="/admin/planvisible/:userGroupId" element={<PrivateRoute><SetPlanVisibleAdmin /></PrivateRoute>} />
               <Route path="/master/account-groups" element={<PrivateRoute><AccountGroups /></PrivateRoute>} />
               <Route path="/master/currency" element={<PrivateRoute><CurrencyList /></PrivateRoute>} />
               <Route path="/master/product-main-group" element={<PrivateRoute><ProductMainGroup /></PrivateRoute>} />
@@ -623,6 +647,7 @@ function App() {
               <Route path="/master/supplier/add-supplier" element={<PrivateRoute><AddSupplierPage /></PrivateRoute>} />
               <Route path="/master/supplier/edit-supplier/:customerId" element={<PrivateRoute><AddSupplierPage /></PrivateRoute>} />
               <Route path="/master/product-creation" element={<PrivateRoute><ProductForm /></PrivateRoute>} />
+              <Route path="/master/barcode-generator" element={<PrivateRoute><BarcodeGenerator /></PrivateRoute>} />
               <Route path="/master/product-list/edit-product/:productCode" element={<PrivateRoute><ProductForm /></PrivateRoute>} />
               <Route path="/master/product-list" element={<PrivateRoute><ProductList /></PrivateRoute>} />
               <Route path="/master/product-list/product-details/:productCode" element={<PrivateRoute><ViewProduct /></PrivateRoute>} />
@@ -632,6 +657,7 @@ function App() {
               <Route path="/master/department" element={<PrivateRoute><DepartmentList /></PrivateRoute>} />
               <Route path="/master/work-location" element={<PrivateRoute><WorkLocationList /></PrivateRoute>} />
               <Route path="/settings/suffix-prefix-settings" element={<PrivateRoute><SuffixPrefixSettings /></PrivateRoute>} />
+              <Route path="/settings/change-password" element={<PrivateRoute><ChangeUserPassword /></PrivateRoute>} />
               <Route path="/payroll/employee" element={<PrivateRoute><EmployeeList /></PrivateRoute>} />
               <Route path="/payroll/employee/add-new" element={<PrivateRoute><EmployeeForm /></PrivateRoute>} />
               <Route path="/payroll/employee/edit-employee/:employeeId" element={<PrivateRoute><EmployeeForm /></PrivateRoute>} />
@@ -793,6 +819,8 @@ function App() {
               <Route path="/reports/stock-report" element={<PrivateRoute><StockReport /></PrivateRoute>} />
               {/* Profit And Loss Analysis */}
               <Route path="/reports/profit-loss-analysis" element={<PrivateRoute><ProfitAndLossAnalysis /></PrivateRoute>} />
+              <Route path="/reports/income-expense-report" element={<PrivateRoute><IncomAndExpenceReport /></PrivateRoute>} />
+              <Route path="/reports/income-expentiture-report" element={<PrivateRoute><IncomAndExpendeetureReport /></PrivateRoute>} />
               {/* Product Movement Report */}
               <Route path="/reports/product-movement-report" element={<PrivateRoute><ProductMovementReport /></PrivateRoute>} />
               {/* Cost Centre Report */}
@@ -832,6 +860,7 @@ function App() {
               <Route path="/reports/proforma-invoice-detailed-report" element={<PrivateRoute><ProformaInvoiceDetailedReport /></PrivateRoute>} />
               <Route path="/reports/purchase-day-report" element={<PrivateRoute><PurchaseDayReport /></PrivateRoute>} />
               <Route path="/reports/sales-report" element={<PrivateRoute><SalesReport /></PrivateRoute>} />
+              <Route path="/reports/sales-profit-report" element={<PrivateRoute><SalesProfitReport /></PrivateRoute>} />
               <Route path="/reports/purchase-return-report" element={<PrivateRoute><PurchaseReturnReport /></PrivateRoute>} />
               <Route path="/reports/sales-day-report" element={<PrivateRoute><SalesDayReport /></PrivateRoute>} />
               <Route path="/reports/sales-quotation-report" element={<PrivateRoute><SalesQuotationReport /></PrivateRoute>} />
@@ -846,6 +875,14 @@ function App() {
               <Route path="/reports/trial-balance" element={<PrivateRoute><TrialBalance /></PrivateRoute>} />
               <Route path="/reports/account-group-report" element={<PrivateRoute><ACGroupReport /></PrivateRoute>} />
               <Route path="/reports/sales-order-payment-report" element={<PrivateRoute><SalesOrderPaymentReport /></PrivateRoute>} />
+              <Route path="/reports/fast-moving-stock" element={<FastMovingStock />} />
+              <Route path="/reports/slow-moving-stock" element={<SlowMovingStock />} />
+              <Route path="/reports/unused-stock" element={<UnusedStock />} />
+              <Route path="/reports/reorder-level" element={<ReorderLevelStock />} />
+              <Route path="/reports/maximum-level" element={<MaximumLevelStock />} />
+              <Route path="/reports/minimum-level" element={<MinimumLevelStock />} />
+              <Route path="/admin/delete-sales-entry" element={<PrivateRoute><DeleteSalesEntry /></PrivateRoute>} />
+              <Route path="/reports/sales-summary-report" element={<PrivateRoute><SalesSummaryReport/></PrivateRoute>} />
 
               {/* Van Sales - Van Executive */}
               <Route path="/master/van-sales/van-executive" element={<PrivateRoute><VanExecutive /></PrivateRoute>} />

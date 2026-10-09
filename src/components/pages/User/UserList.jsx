@@ -20,6 +20,7 @@ import NoAcessComponent from "@/components/common/NoAcessComponent";
 import usePrivileges from "@/lib/hooks/usePrivileges";
 import Swal from "sweetalert2";
 import { useTranslation } from "react-i18next";
+import { useSelector } from "react-redux";
 
 const UserList = () => {
   const { t } = useTranslation()
@@ -30,6 +31,12 @@ const UserList = () => {
   const [alert, setAlert] = useState(null);
   const [users, setUsers] = useState([]);
   const [open, setOpen] = useState(false);
+  const orgData = useSelector((state) => state.organization.organizationData);
+
+  // Determine if user limit has been reached
+  const userLimit = orgData?.userCount;
+  const limitReached = userLimit != null && users.length >= userLimit;
+
 
   const navigate = useNavigate();
 
@@ -51,7 +58,7 @@ const UserList = () => {
     setFetchLoading(true);
     try {
       const response = await axiosInstance.get("users");
-      
+
       setUsers(response.data.data);
     } catch (error) {
       setErrorMessage(
@@ -212,7 +219,7 @@ const UserList = () => {
         ]}
         heading={{ icon: User, title: t("userList.heading") }}
         actions={
-          privileges?.can_add
+          privileges?.can_add && !limitReached
             ? [
               {
                 label: t("userList.actions.addNew"),

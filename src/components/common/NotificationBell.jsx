@@ -23,6 +23,13 @@ const SNOOZE_OPTIONS = [
   { value: 10080, label: 'Next week', description: '7 days later' },
 ];
 
+// How often we check for reminders that just became "due" (ms)
+const DUE_CHECK_INTERVAL = 30 * 1000;
+// Ignore reminders whose trigger time is older than this (avoid alert-spam on first load / after long idle)
+const MAX_ALERT_STALENESS = 24 * 60 * 60 * 1000;
+// LocalStorage key for persisting which reminders we've already alerted for
+const NOTIFIED_STORAGE_KEY = 'notifiedReminderIds';
+
 /* ──────────────────────────────────────────────
    Single Notification Item (Memoized to prevent flicker)
    ────────────────────────────────────────────── */
@@ -150,6 +157,70 @@ const NotificationItem = memo(({
 NotificationItem.displayName = 'NotificationItem';
 
 /* ──────────────────────────────────────────────
+   Due-Reminder Toast (in-app alert popup)
+   ────────────────────────────────────────────── */
+const DueToast = ({ toast, onDismiss, onSnooze, onMarkAsRead }) => {
+  if (!toast) return null;
+
+  return (
+    <div
+      style={{ zIndex: 100002 }}
+      className="fixed top-4 right-4 w-[340px] max-w-[calc(100vw-2rem)]
+        bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700
+        rounded-xl shadow-2xl overflow-hidden
+        animate-in slide-in-from-top-4 fade-in duration-300"
+    >
+      <div className="h-1 main-bg" />
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+            <Bell size={16} className="text-blue-600 dark:text-blue-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+              Reminder due now
+            </p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate mt-0.5">
+              {toast.title}
+            </p>
+            {toast.message && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
+                {toast.message}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => onDismiss(toast.id)}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md flex-shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 mt-3">
+          <button
+            onClick={() => onMarkAsRead(toast.id)}
+            className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium
+              text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20
+              hover:bg-green-100 dark:hover:bg-green-900/30 rounded-md py-1.5 transition-colors"
+          >
+            <Check size={12} /> Mark as read
+          </button>
+          <button
+            onClick={() => onSnooze(toast.id)}
+            className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium
+              text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20
+              hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-md py-1.5 transition-colors"
+          >
+            <AlarmClock size={12} /> Snooze 10m
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ──────────────────────────────────────────────
    Main NotificationBell Component
    ────────────────────────────────────────────── */
 const NotificationBell = () => {
@@ -164,8 +235,12 @@ const NotificationBell = () => {
   const [snoozePosition, setSnoozePosition] = useState({ top: 0, left: 0 });
   const [snoozingIds, setSnoozingIds] = useState([]);
   const [snoozedItems, setSnoozedItems] = useState([]);
+  const [toast, setToast] = useState(null); // { id, title, message } — currently shown due-alert
   const snoozeDropdownRef = useRef(null);
   const snoozeTimersRef = useRef({});
+  const notifiedIdsRef = useRef(new Set()); // reminder ids we've already fired an alert for
+  const dueCheckIntervalRef = useRef(null);
+  const toastDismissTimerRef = useRef(null);
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { selectedBranchId, userId } = useAuth();
@@ -208,9 +283,31 @@ const NotificationBell = () => {
       }
     }
 
+    // ── Load previously-notified reminder ids (so we don't re-alert after a page reload) ──
+    const storedNotified = localStorage.getItem(NOTIFIED_STORAGE_KEY);
+    if (storedNotified) {
+      try {
+        const parsedNotified = JSON.parse(storedNotified);
+        if (Array.isArray(parsedNotified)) {
+          notifiedIdsRef.current = new Set(parsedNotified);
+        }
+      } catch (e) {
+        localStorage.removeItem(NOTIFIED_STORAGE_KEY);
+      }
+    }
+
     return () => {
       Object.values(snoozeTimersRef.current).forEach(clearTimeout);
+      if (dueCheckIntervalRef.current) clearInterval(dueCheckIntervalRef.current);
+      if (toastDismissTimerRef.current) clearTimeout(toastDismissTimerRef.current);
     };
+  }, []);
+
+  // ── Ask for native Notification permission once, on mount ──
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
   }, []);
 
   // ── Close snooze on outside click ──
@@ -236,6 +333,7 @@ const NotificationBell = () => {
     try {
       setLoading(true);
       const response = await axiosInstance.get(`general-reminder/${selectedBranchId}`);
+
       setAllReminders(response.data.data || []);
     } catch (error) {
       console.error('Error fetching reminders:', error);
@@ -275,10 +373,10 @@ const NotificationBell = () => {
   };
 
   useEffect(() => {
-    if (isOpen) {
-      fetchReminders();
-      fetchReorderCount();
-    }
+    // if (isOpen) {
+    fetchReminders();
+    fetchReorderCount();
+    // }
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         if (snoozeOpenId) setSnoozeOpenId(null);
@@ -293,7 +391,133 @@ const NotificationBell = () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
     };
-  }, [isOpen, selectedBranchId, snoozeOpenId]);
+  }, [isOpen, selectedBranchId, snoozeOpenId,window.location.pathname]);
+
+  /* ──────────────────────────────────────────────
+     DUE-REMINDER ALERTING
+     Computes each reminder's "trigger time" as:
+       (start_date + start_time) - reminder_before minutes
+     and fires a toast + native notification the moment
+     that time is reached (checked every 30s).
+     ────────────────────────────────────────────── */
+
+  // Persist the notified-id set to localStorage
+  const persistNotifiedIds = () => {
+    try {
+      localStorage.setItem(
+        NOTIFIED_STORAGE_KEY,
+        JSON.stringify(Array.from(notifiedIdsRef.current))
+      );
+    } catch (e) {
+      // ignore storage errors (e.g. quota, private mode)
+    }
+  };
+
+  // Combine start_date + start_time into a real Date, then subtract reminder_before minutes
+  const getTriggerTime = (reminder) => {
+    if (!reminder.start_date) return null;
+
+    // start_date may come as "YYYY-MM-DD" or "YYYY-MM-DD HH:mm:ss"
+    const datePart = reminder.start_date.split(' ')[0];
+    const timePart =
+      reminder.start_time || reminder.start_date.split(' ')[1] || '00:00:00';
+
+    const triggerDate = new Date(`${datePart}T${timePart}`);
+    if (isNaN(triggerDate.getTime())) return null;
+
+    const beforeMinutes = Number(reminder.reminder_before) || 0;
+    return new Date(triggerDate.getTime() - beforeMinutes * 60 * 1000);
+  };
+
+  // Fire an in-app toast + native browser notification (+ optional sound) for one reminder
+  const fireAlert = (reminder) => {
+    if (toastDismissTimerRef.current) clearTimeout(toastDismissTimerRef.current);
+
+    setToast({
+      id: reminder.id,
+      title: reminder.title,
+      message: reminder.description || 'This reminder is due now.',
+    });
+
+    toastDismissTimerRef.current = setTimeout(() => {
+      setToast((current) => (current?.id === reminder.id ? null : current));
+    }, 30000);
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(reminder.title, {
+          body: reminder.description || 'This reminder is due now.',
+          tag: `reminder-${reminder.id}`,
+        });
+      } catch (e) {
+        console.error('Error showing native notification:', e);
+      }
+    }
+
+    // Optional sound cue — remove this block if you don't have an audio file to serve
+    try {
+      const audio = new Audio('/sounds/notification.mp3');
+      audio.play().catch(() => {});
+    } catch (e) {
+      // ignore — audio is optional
+    }
+  };
+
+  // Walk all currently-visible reminders and fire alerts for any whose trigger time has arrived
+  const checkDueReminders = () => {
+    const now = Date.now();
+    let firedAny = false;
+
+    visibleReminders.forEach((reminder) => {
+      if (notifiedIdsRef.current.has(reminder.id)) return;
+
+      const triggerTime = getTriggerTime(reminder);
+      if (!triggerTime) return;
+
+      const msSinceTrigger = now - triggerTime.getTime();
+
+      // Fire once the trigger time has passed, but ignore very old/stale triggers
+      // (e.g. first load of the day) so we don't spam alerts for old reminders.
+      if (msSinceTrigger >= 0 && msSinceTrigger < MAX_ALERT_STALENESS) {
+        notifiedIdsRef.current.add(reminder.id);
+        fireAlert(reminder);
+        firedAny = true;
+      }
+    });
+
+    if (firedAny) persistNotifiedIds();
+  };
+
+  // Re-arm the interval whenever the reminder list or snooze state changes,
+  // so the closure always sees the latest `visibleReminders`.
+  useEffect(() => {
+    checkDueReminders();
+
+    if (dueCheckIntervalRef.current) clearInterval(dueCheckIntervalRef.current);
+    dueCheckIntervalRef.current = setInterval(checkDueReminders, DUE_CHECK_INTERVAL);
+
+    return () => {
+      if (dueCheckIntervalRef.current) clearInterval(dueCheckIntervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allReminders, snoozedItems]);
+
+  // ── Toast action handlers ──
+  const handleToastDismiss = (id) => {
+    setToast((current) => (current?.id === id ? null : current));
+    if (toastDismissTimerRef.current) clearTimeout(toastDismissTimerRef.current);
+  };
+
+  const handleToastMarkAsRead = (id) => {
+    const reminder = allReminders.find((r) => r.id === id);
+    if (reminder) markAsRead(reminder);
+    handleToastDismiss(id);
+  };
+
+  const handleToastSnooze = (id) => {
+    snoozeReminder(id, 10); // quick 10-minute snooze from the toast
+    handleToastDismiss(id);
+  };
 
   // ── Snooze click — capture position instantly ──
   const handleSnoozeClick = (e, reminderId) => {
@@ -438,6 +662,10 @@ const NotificationBell = () => {
         unsnoozeReminder(reminderId);
       }, minutes * 60 * 1000);
     }, 300);
+
+    // Allow this reminder to alert again once it wakes back up
+    notifiedIdsRef.current.delete(reminderId);
+    persistNotifiedIds();
   };
 
   const unsnoozeReminder = (reminderId) => {
@@ -529,6 +757,14 @@ const NotificationBell = () => {
           </span>
         )}
       </button>
+
+      {/* ── Due-Reminder Toast (appears regardless of panel open/closed) ── */}
+      <DueToast
+        toast={toast}
+        onDismiss={handleToastDismiss}
+        onSnooze={handleToastSnooze}
+        onMarkAsRead={handleToastMarkAsRead}
+      />
 
       {/* ── Backdrop ── */}
       {isMounted && (

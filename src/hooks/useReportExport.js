@@ -49,13 +49,13 @@ const useReportExport = () => {
 
     // ==================== PDF EXPORTS ====================
 
-    const exportAccountLedgerToPdf = useCallback((options) => {
-        const config = createPdfReportConfig.accountLedger({
-            ...options,
-            companyInfo: options.companyInfo || getCompanyInfo()
-        });
-        return exportReportToPdf(config);
-    }, [getCompanyInfo]);
+   const exportAccountLedgerToPdf = useCallback(async (options) => {
+    const config = createPdfReportConfig.accountLedger({
+        ...options,
+        companyInfo: options.companyInfo || getCompanyInfo()
+    });
+    return await exportReportToPdf(config);
+}, [getCompanyInfo]);
 
     const exportAccountGroupToPdf = useCallback((options) => {
         const config = createPdfReportConfig.accountGroup({

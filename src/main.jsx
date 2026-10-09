@@ -7,6 +7,7 @@ import { store } from './redux/store.js'
 import "./i18n";
 import { SidebarProvider } from './contexts/SidebarContext.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
+import PlanExpired from './components/common/PlanExpired'
 import { Toaster } from 'react-hot-toast'
 
 
@@ -43,6 +44,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         />
         <App />
       </ErrorBoundary>
+      {/* <PlanExpired/> */}
     </SidebarProvider>
   </Provider>
 )

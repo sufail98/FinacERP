@@ -102,9 +102,10 @@ const NutritionDetails = ({ formData, handleInputChange, onNutritionDataChange, 
                                             <input
                                                 type="text"
                                                 value={row.name}
-                                                onChange={(e) =>
-                                                    handleNutritionChange(row.id, "name", e.target.value)
-                                                }
+                                                onChange={(e) =>{
+                                                     const sanitized = e.target.value.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "");
+                                                     handleNutritionChange(row.id, "name", sanitized);
+                                                } }
                                                 placeholder={t("product.tables.NutritionName")}
                                                 className="w-full border-0 p-1 text-xs focus:outline-none bg-transparent
                                                     text-gray-900 dark:text-gray-100
@@ -119,6 +120,9 @@ const NutritionDetails = ({ formData, handleInputChange, onNutritionDataChange, 
                                                 onChange={(e) =>
                                                     handleNutritionChange(row.id, "value", e.target.value)
                                                 }
+                                                onKeyDown={(e) => {
+                                                    if(e.key === "-" || e.key === "+") e.preventDefault()
+                                                }}
                                                 placeholder={t("product.tables.NutritionValue")}
                                                 className="w-full border-0 p-1 text-xs focus:outline-none bg-transparent
                                                     text-gray-900 dark:text-gray-100
@@ -131,7 +135,8 @@ const NutritionDetails = ({ formData, handleInputChange, onNutritionDataChange, 
                                                 type="button"
                                                 onClick={() => removeRow(row.id)}
                                                 className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                disabled={nutritionRows.length === 1 || viewMode}
+                                                // disabled={nutritionRows.length === 1 || viewMode}
+                                                disabled={ viewMode}
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>

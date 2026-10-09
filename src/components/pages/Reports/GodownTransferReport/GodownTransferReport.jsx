@@ -20,7 +20,7 @@ const GodownTransferReport = () => {
     const [userData, setUserData] = useState([]);
     const [unitData, setUnitData] = useState([]);
     const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Stock Transfer Report");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Godown Transfer Report");
     const { generalSettings } = useSelector((state) => state.settings);
 
     const {

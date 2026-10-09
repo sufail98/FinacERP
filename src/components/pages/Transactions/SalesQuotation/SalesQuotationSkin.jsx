@@ -2,27 +2,39 @@ import BreadCrumb from '@/components/common/BreadCrumb';
 import { Archive, ArchiveRestore, CheckCircle, Eraser, Loader2, MessageCircle, Pencil, ReceiptText, SaveAll, SquarePen, Table } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import FormSectionMain from './FormSectionMain';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
 import { useSelector } from 'react-redux';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
+import ConvertMenu from '@/components/common/ConvertMenu';
 import useFormValidation from '@/lib/hooks/useFormValidation';
 import { salesQuotationPrintOne, salesQuotationPrintOneAsPDF, saveQuotationAsPDF } from '@/utils/prints/salesQuotationPtints/salesQuotationPrintOne';
+import { salesQuotationPrintOneArabDesign, salesQuotationPrintOneArabDesignAsPDF, } from '@/utils/prints/salesQuotationPtints/salesQuotationPrintOneAabDesign';
+import { salesQuotationPrintSix, salesQuotationPrintSixAsPDF, } from '@/utils/prints/salesQuotationPtints/salesQuotationPrintSix';
 import { salesQuotationPrintTwo, salesQuotationPrintTwoAsPDF } from '@/utils/prints/salesQuotationPtints/salesQuotationPrintTwo';
 import { parseDateFromAPI, parseLocalDate } from './salesQuotationDateFormat';
 import { formatDateWithTime } from '@/lib/dateFormat';
 import PrintDropdown from '@/components/common/PrintDropdown';
 import { Checkbox } from '@/components/ui/checkbox';
 import PopupPreloader from '@/components/common/PopupPreloader';
+import HelpShortcuts from '@/components/common/HelpShortcuts';
 import { showToast } from '@/utils/toast';
 import salesQuotationPrintThree, { salesQuotationPrintThreeAsPDF } from '@/utils/prints/salesQuotationPtints/salesQuotationPrintThree';
 import WhatsAppModal from '@/components/common/WhatsAppModal';
 import salesQuotationPrintFour, { salesQuotationPrintFourAsPDF } from '@/utils/prints/salesQuotationPtints/salesQuotationPrintFour';
+import { isElectron } from '@/utils/electronPrint';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+
+
 
 const SalesQuotationSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Sales Quotation");
+
+    const [isPrinting, setIsPrinting] = useState(false);
     const [voucherNoGenarating, setVoucherNumberGenarating] = useState(false)
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
     const { saleQuotationId } = useParams();
@@ -64,10 +76,11 @@ const SalesQuotationSkin = () => {
     const [showHeldInvoices, setShowHeldInvoices] = useState(false);
     const [restoredHeldInvoiceId, setRestoredHeldInvoiceId] = useState(null);
     const decimalPart = generalSettings?.decimalPart ?? 2;
-
+    // add near other useState hooks
+    const [helpOpen, setHelpOpen] = useState(false);
     const invoiceTypes = Object.keys(printSettings?.["Sales Quotation"]?.types || {});
     const invoicePrintConfig = printSettings?.["Sales Quotation"]?.default || Object.values(printSettings?.["Sales Quotation"]?.types || {})[0];
-      const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState({
         voucherType: "Sales Quotation",
         yearId: currentFinancialYear?.yearId,
         date: new Date(),
@@ -168,6 +181,25 @@ const SalesQuotationSkin = () => {
         ]
     });
 
+    const handleConvert = useCallback((type) => {
+        switch (type) {
+            case 'proforma':
+                navigate(`/transaction/proforma-invoice?fromQuotation=${saleQuotationId}`, { state: { againstQuotation: true, masterId: saleQuotationId } });
+                break;
+            case 'order':
+                navigate(`/transaction/sales-order?fromQuotation=${saleQuotationId}`, { state: { againstQuotation: true, masterId: saleQuotationId } });
+                break;
+            case 'deliveryNote':
+                navigate(`/transaction/delivery-note?fromQuotation=${saleQuotationId}`, { state: { againstQuotation: true, masterId: saleQuotationId } });
+                break;
+            case 'sale':
+                navigate(`/transaction/sales-invoice?fromQuotation=${saleQuotationId}`, { state: { againstQuotation: true, masterId: saleQuotationId } });
+                break;
+            default:
+                break;
+        }
+    }, [navigate, saleQuotationId]);
+
     // ===== GET RETURN FILTERS FROM URL =====
     const getReturnFilters = useCallback(() => {
         const returnFilters = searchParams.get('returnFilters');
@@ -182,21 +214,30 @@ const SalesQuotationSkin = () => {
     }, [searchParams]);
 
     // Load held quotations from localStorage on mount
+    // ===== HOLD QUOTATION: Load from localStorage per branch =====
     useEffect(() => {
         const savedHeldInvoices = localStorage.getItem('heldSalesQuotations');
         if (savedHeldInvoices) {
             const allHeldInvoices = JSON.parse(savedHeldInvoices);
             const branchHeldInvoices = allHeldInvoices.filter(inv => inv.branchId === selectedBranchId);
-            setHeldInvoices(branchHeldInvoices);
+            const deduped = Array.from(
+                new Map(branchHeldInvoices.map(inv => [inv.id, inv])).values()
+            );
+            setHeldInvoices(deduped);
         }
     }, [selectedBranchId]);
 
-    // Persist held quotations to localStorage whenever they change
+    // ===== HOLD QUOTATION: Sync to localStorage whenever heldInvoices changes =====
     useEffect(() => {
         const savedHeldInvoices = localStorage.getItem('heldSalesQuotations');
         const allHeldInvoices = savedHeldInvoices ? JSON.parse(savedHeldInvoices) : [];
         const otherBranchInvoices = allHeldInvoices.filter(inv => inv.branchId !== selectedBranchId);
-        const updatedAllInvoices = [...otherBranchInvoices, ...heldInvoices];
+
+        const dedupedHeldInvoices = Array.from(
+            new Map(heldInvoices.map(inv => [inv.id, inv])).values()
+        );
+
+        const updatedAllInvoices = [...otherBranchInvoices, ...dedupedHeldInvoices];
         if (updatedAllInvoices.length > 0) {
             localStorage.setItem('heldSalesQuotations', JSON.stringify(updatedAllInvoices));
         } else {
@@ -204,6 +245,7 @@ const SalesQuotationSkin = () => {
         }
     }, [heldInvoices, selectedBranchId]);
 
+    // ===== HOLD QUOTATION: Hold current quotation =====
     const holdCurrentInvoice = useCallback(() => {
         const hasData = formData.quotationDetails.some(detail => detail.productCode && detail.qty > 0);
         if (!hasData) {
@@ -221,7 +263,10 @@ const SalesQuotationSkin = () => {
             branchId: selectedBranchId,
             formData: { ...formData }
         };
-        setHeldInvoices(prev => [...prev, heldInvoice]);
+        setHeldInvoices(prev => {
+            if (prev.some(inv => inv.id === heldInvoice.id)) return prev;
+            return [...prev, heldInvoice];
+        });
         showToast.success(`Quotation held successfully. Total held: ${heldInvoices.length + 1}`);
         clearForm(true);
     }, [formData, invoiceId, heldInvoices.length, selectedBranchId]);
@@ -246,7 +291,11 @@ const SalesQuotationSkin = () => {
         } else {
             setHeldInvoices(prev => prev.filter(inv => inv.id !== heldInvoice.id));
         }
-        setFormData(heldInvoice.formData);
+        setFormData({
+            ...heldInvoice.formData,
+            date: new Date(),
+            billTime: time,
+        });
         setInvoiceId(heldInvoice.invoiceId);
         setResetTableKey(prev => prev + 1);
         setShowHeldInvoices(false);
@@ -336,7 +385,7 @@ const SalesQuotationSkin = () => {
         return () => clearInterval(interval);
     }, []);
 
-  
+
 
     useEffect(() => {
         setFormData(prev => ({
@@ -587,7 +636,7 @@ const SalesQuotationSkin = () => {
                     voucherType: "Sales Quotation",
                     branchId: selectedBranchId,
                     yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Customer"],
+                    ledgerTypes: ["Customer", "Customer&Supplier"],
                     ledgerId: editLedgerId || formData.ledgerId || '',
                     currencyId: currentCurrency.currencyId
                 })
@@ -692,8 +741,8 @@ const SalesQuotationSkin = () => {
 
                     if (item.productCode) {
                         try {
-                            productName = item?.productname || '';
-                            productNameArb = item?.productNameArb || '';
+                            productName = item?.productName || item?.productname || '';
+                            productNameArb = item?.productNameArb || item?.productnamearb || '';
                             availableUnits = item?.units || [];
                             const selectedUnit = availableUnits.find(u => u.unitid === item.unitId);
                             productDetails = {
@@ -704,13 +753,18 @@ const SalesQuotationSkin = () => {
                                 mrp: item.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
                         }
                     }
-
+                    const descAmt = (() => {
+                        const lineDiscountWithTax = parseFloat(item.lineDiscountWithTax) || 0;
+                        return parseFloat(
+                            (lineDiscountWithTax - (lineDiscountWithTax * 15) / 100).toFixed(generalSettings?.decimalPart || 2)
+                        ) || 0;
+                    })();
                     return {
                         quotationMasterId: item.quotationMasterId,
                         deliveryNoteDetails1Id: item.deliveryNoteDetails1Id,
@@ -723,6 +777,7 @@ const SalesQuotationSkin = () => {
                         freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
                         rate: parseFloat(item.rate) || 0,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         discountAmount: parseFloat(item.discountAmount) || 0,
                         grossAmount: parseFloat(item.grossAmount) || 0,
@@ -749,7 +804,8 @@ const SalesQuotationSkin = () => {
                         ModifiedDate: item.ModifiedDate,
                         ModifiedUser: item.ModifiedUser,
                         availableUnits,
-                        productDetails
+                        productDetails,
+                        descAmt,
                     };
                 })
             );
@@ -860,7 +916,7 @@ const SalesQuotationSkin = () => {
         setLoading(prev => ({ ...prev, customers: true }));
         try {
             const { data } = await axiosInstance.post("customer-supplier-account-ledgers", {
-                ledgerTypes: ["Customer"],
+                ledgerTypes: ["Customer", "Customer&Supplier"],
                 branchId: selectedBranchId
             });
             setCustomers(data.data);
@@ -905,13 +961,23 @@ const SalesQuotationSkin = () => {
         date: { required: true, label: t("requiredFieldsError") },
     };
 
-    const buildInvoiceDataForPrint = useCallback((invoiceNumber) => {
-        const selectedEmployee = employees.find(emp => emp.employeeId === formData.employeeId);
+    const buildInvoiceDataForPrint = useCallback((invoiceNumber, overrideData) => {
+        const base = overrideData || formData;
+        const selectedEmployee = employees.find(emp => emp.employeeId === base.employeeId);
+        const mergedCustomerData = {
+            ...(formData.customerData || {}),
+            ...(base.customerData || {}),
+        };
+
         return {
-            ...formData,
+            ...base,
             invoiceNo: invoiceNumber,
-            salesMan: selectedEmployee?.employeeName || '',
-            salesDetails: formData.quotationDetails,
+            salesMan: base.salesMan || selectedEmployee?.employeeName || '',
+            salesDetails: (base.quotationDetails || formData.quotationDetails)?.map((detail, idx) => ({
+                ...detail,
+                unitName: detail.unitName || formData.quotationDetails?.[idx]?.unitName || detail.UnitName || ''
+            })),
+            customerData: mergedCustomerData,
         };
     }, [formData, employees]);
 
@@ -919,9 +985,11 @@ const SalesQuotationSkin = () => {
         const selectedPrintType = formData.printType || 'Type 1';
         switch (selectedPrintType) {
             case 'Type 1': await salesQuotationPrintOne(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
+            case 'AD': await salesQuotationPrintOneArabDesign(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
             case 'Type 2': await salesQuotationPrintTwo(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
             case 'Type 3': await salesQuotationPrintThree(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
             case 'Type 4': await salesQuotationPrintFour(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
+            case 'Type 6': await salesQuotationPrintSix(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
             default: await salesQuotationPrintOne(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency);
         }
     }, [formData.printType, selectedBranchDetails, currentCurrency]);
@@ -932,9 +1000,12 @@ const SalesQuotationSkin = () => {
             let result;
             switch (selectedPrintType) {
                 case 'Type 1': result = await salesQuotationPrintOneAsPDF(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
+                case 'AD': result = await salesQuotationPrintOneArabDesignAsPDF(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
                 case 'Type 2': result = await salesQuotationPrintTwoAsPDF(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
                 case 'Type 3': result = await salesQuotationPrintThreeAsPDF(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
                 case 'Type 4': result = await salesQuotationPrintFourAsPDF(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
+                case 'Type 6': await salesQuotationPrintSixAsPDF(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency); break;
+
                 default: result = await salesQuotationPrintTwoAsPDF(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency);
             }
             if (result.success) {
@@ -958,6 +1029,12 @@ const SalesQuotationSkin = () => {
 
     const handleSave = useCallback(async () => {
         if (!validateForm(formData, validationRules)) return;
+
+        if (formData.totalAmount <= 0) {
+            showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
+            return;
+        }
+
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
             showToast.error(validationErrors.join('\n'));
@@ -984,7 +1061,15 @@ const SalesQuotationSkin = () => {
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                ModifiedUser: isInEditMode ? userId : null,
+                vatLedgerId: generalSettings?.taxLedgerId,
+                CreatedUser: userId,
+                quotationDetails: (formData.quotationDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: isInEditMode ? userId : null,
+                    CreatedUser: userId,
+                })),
             };
             const api = isInEditMode
                 ? `update-sales-quotation/${saleQuotationId}`
@@ -995,10 +1080,16 @@ const SalesQuotationSkin = () => {
             if (!response.data.error) {
 
                 setIsSaving(false);
+                // ===== HOLD QUOTATION: Clean up restored held quotation after save =====
+                if (restoredHeldInvoiceId) {
+                    setHeldInvoices(prev => prev.filter(inv => inv.id !== restoredHeldInvoiceId));
+                    setRestoredHeldInvoiceId(null);
+                }
                 showToast.success(t("saveSuccess"));
+                const invoiceIdToPrint = editMode ? existingInvoiceNo : response?.data?.data?.quotationNo
+                const quotationData = response?.data?.data?.payload?.quotationMaster
 
-                const invoiceDataForPrint = buildInvoiceDataForPrint(editMode ? existingInvoiceNo : invoiceId);
-                // const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceId);
+                const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceIdToPrint, quotationData);
 
                 if (formData.printAfterSave) {
                     setTimeout(async () => { await printToPrinter(invoiceDataForPrint); }, 500);
@@ -1032,35 +1123,200 @@ const SalesQuotationSkin = () => {
             }
         } catch (error) {
             console.error('Error saving sales:', error);
+
+            // ✅ AUTO-HOLD QUOTATION ON ERROR
+            const hasValidData = formData.quotationDetails.some(detail => detail.productCode && detail.qty > 0);
+
+            if (hasValidData) {
+                const heldInvoice = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    invoiceId: invoiceId,
+                    customerName: formData.customerName || 'Unknown Customer',
+                    customerAddress: formData.CustomerAddress || '',
+                    totalAmount: formData.totalAmount || 0,
+                    itemCount: formData.quotationDetails.filter(d => d.productCode).length,
+                    branchId: selectedBranchId,
+                    formData: { ...formData },
+                    errorHeld: true
+                };
+
+                setHeldInvoices(prev => {
+                    if (prev.some(inv => inv.id === heldInvoice.id)) return prev;
+                    return [...prev, heldInvoice];
+                });
+
+                showToast.warning(
+                    `Save failed. Quotation has been automatically held. Total held: ${heldInvoices.length + 1}`
+                );
+            }
+
             Swal.fire({
-                icon: 'error', title: t('Error') || 'Error',
-                text: error.response?.data?.message || t('SaveFailed') || 'Failed to save sales quotation',
+                icon: 'error',
+                title: t('Error') || 'Error',
+                html: `
+                    <div class="text-left">
+                        <p class="mb-2">${error.response?.data?.message || t('SaveFailed') || 'Failed to save sales quotation'}</p>
+                        ${hasValidData ? '<p class="text-sm text-blue-600">Your quotation data has been automatically held and can be restored later.</p>' : ''}
+                    </div>
+                `,
+                confirmButtonColor: '#3085d6',
+                confirmButtonText: 'OK'
             });
         } finally {
             setIsSaving(false);
         }
-    }, [formData, time, saleSettings, generalSettings, editMode, invoiceId, employees, buildInvoiceDataForPrint, printToPrinter, printToPdf, handleListNavigate]);
+    }, [
+        formData,
+        time,
+        saleSettings,
+        generalSettings,
+        editMode,
+        isInEditMode,
+        saleQuotationId,
+        invoiceId,
+        employees,
+        buildInvoiceDataForPrint,
+        printToPrinter,
+        printToPdf,
+        handleListNavigate,
+        restoredHeldInvoiceId,
+        heldInvoices.length,
+        selectedBranchId,
+        userId,
+        existingInvoiceNo,
+        t
+    ]);
+
+    const fetchQuotationDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`get-sales-quotation-byId/${saleQuotationId}`);
+        const data = response.data.data;
+
+        const resolvedTaxData = taxData;
+        const resolvedLedgerName = otherChargeLedgers?.find(
+            l => Number(l.ledgerId) === Number(data?.otherChargeLedgerId)
+        )?.ledgerName || '';
+
+        const quotationDetailsWithProducts = (data?.quotationDetails || []).map((item) => {
+            const taxInfo = resolvedTaxData?.find(t => t.taxId === item?.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo?.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productName || item?.productname || '',
+                productNameArb: item?.productNameArb || item?.productnamearb || '',
+                unitName: item?.units?.find(u => u.unitid === item.unitId)?.unitname || item?.units?.find(u => u.unitId === item.unitId)?.unitName || item?.unitName || item?.UnitName || '',
+                qty: parseFloat(item.qty) || 0,
+                freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                rate: parseFloat(item.rate) || 0,
+                discountPercentage: parseFloat(item.discountPercentage) || 0,
+                discountAmount: parseFloat(item.discountAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
+                inclusiveRate: parseFloat(item.inclusiveRate) || 0,
+                taxRate,
+                PurchaseRate: parseFloat(item.PurchaseRate) || 0,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
+
+        const selectedEmployee = employees.find(emp => emp.employeeId === data.employeeId);
+
+        return {
+            ...data,
+            date: parseDateFromAPI(data.date),
+            partyRefDate: data.partyRefDate ? parseLocalDate(data.partyRefDate) : "",
+            exchangeDate: data.exchangeDate ? parseLocalDate(data.exchangeDate) : "",
+            postedDate: data.postedDate ? parseLocalDate(data.postedDate) : "",
+            otherChargeLedgerName: resolvedLedgerName,
+            OtherChargeRemark: resolvedLedgerName,
+            quotationDetails: quotationDetailsWithProducts,
+            salesMan: selectedEmployee?.employeeName || '',
+        };
+    }, [saleQuotationId, taxData, otherChargeLedgers, employees]);
 
     const handleReprintToPrinter = useCallback(async () => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo);
-        await printToPrinter(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, printToPrinter]);
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this invoice?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchQuotationDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData);
+            await printToPrinter(invoiceDataForPrint);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching quotation for reprint:', error);
+            showToast.error('Failed to fetch quotation data for printing');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, fetchQuotationDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinter, isElectron]);
 
     const handleReprintToPdf = useCallback(async () => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo);
-        await printToPdf(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, printToPdf]);
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchQuotationDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData);
+            await printToPdf(invoiceDataForPrint);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching quotation for PDF reprint:', error);
+            showToast.error('Failed to fetch quotation data for PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [fetchQuotationDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPdf, isElectron]);
+
+    const ctrlSPressed = useRef(false);
 
     useEffect(() => {
+        if (editMode) return;
+
         const handleKeyDown = (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
                 e.preventDefault();
+
+                if (ctrlSPressed.current) return;
+
+                ctrlSPressed.current = true;
                 handleSave();
             }
         };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleSave]);
+
+        const handleKeyUp = (e) => {
+            if (e.key.toLowerCase() === "s") {
+                ctrlSPressed.current = false;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+        };
+    }, [handleSave, editMode]);
 
     const [approving, setApproving] = useState(false)
     const approveQuotation = async () => {
@@ -1079,7 +1335,62 @@ const SalesQuotationSkin = () => {
         }
     }
 
-    if (fetchLoading || baseDataloading) {
+    const salesQuotationShortcuts = [
+        {
+            heading: 'General',
+            items: [
+                { keys: ['Ctrl', 'S'], description: 'Save / update quotation' },
+                { keys: ['Ctrl', 'H'], description: 'Hold current quotation' },
+                { keys: ['Alt', '/'], description: 'Open help and shortcuts panel' },
+            ],
+        },
+        {
+            heading: 'Product Grid',
+            items: [
+                { keys: ['Enter'], description: 'Move to next field or add a new row' },
+                { keys: ['←', '→'], description: 'Move between editable columns' },
+                { keys: ['↑', '↓'], description: 'Move between rows' },
+            ],
+        },
+    ];
+
+    const salesQuotationManual = [
+        {
+            heading: 'Creating a New Quotation',
+            steps: [
+                'Select the customer from the customer dropdown so the billing and shipping details can populate automatically.',
+                'Choose the relevant pricing level, sales account, and other header information before adding products.',
+                'In the product grid, enter a product name or scan a barcode to add an item to the quotation.',
+                'Set the quantity and rate, then review the totals in the footer before saving.',
+                'Press Ctrl+S to save or update the quotation, or use the Submit button at the top.',
+            ],
+        },
+        {
+            heading: 'Holding & Restoring Quotations',
+            steps: [
+                'Press Ctrl+H or click Hold Quotation to temporarily save the current quotation and start a new one.',
+                'Use Restore to view the list of held quotations and bring one back into the form.',
+                'Restoring a held quotation will replace the current form data, so review it before saving.',
+            ],
+        },
+        {
+            heading: 'Printing & Sharing',
+            steps: [
+                'Use the Print Type dropdown to choose the quotation layout before printing or saving as PDF.',
+                'Enable Print After Save to print automatically after submission, or choose PDF when prompted.',
+                'In edit mode, use the Print dropdown to reprint, download as PDF, or share the quotation through WhatsApp.',
+            ],
+        },
+        {
+            heading: 'Approvals & Conversions',
+            steps: [
+                'Approve a quotation from edit mode when the approval step is required by your workflow.',
+                'Use the Convert menu to create related documents such as a proforma invoice, sales order, delivery note, or sales invoice from the quotation.',
+            ],
+        },
+    ];
+
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
@@ -1094,14 +1405,14 @@ const SalesQuotationSkin = () => {
             </div>
         );
     }
-
+    if (!hasAccess) return <NoAcessComponent message={message} />
     return (
-        <div className='bg-primary dark:bg-primary'>
+        <div className='bg-primary dark:bg-primary pb-20'>
             <PopupPreloader
-                isOpen={isSaving}
+                isOpen={isSaving || isPrinting}
                 state="loading"
-                title={t("loadingText")}
-                subtitle={t("loadingDesc")}
+                title={isPrinting ? t("Printing") || "Preparing Print..." : t("loadingText")}
+                subtitle={isPrinting ? t("printingDesc") || "Please wait while we prepare your invoice for printing..." : t("loadingDesc")}
             />
 
             <WhatsAppModal
@@ -1113,7 +1424,7 @@ const SalesQuotationSkin = () => {
                 formData={formData}
                 defaultPhone={formData.CustomerPhone || ''}
             />
-  <HeldInvoicesPanel />
+            <HeldInvoicesPanel />
             <BreadCrumb
                 routes={[
                     { title: t("salesQuotation.breadcrumb.master"), url: "#" },
@@ -1129,7 +1440,7 @@ const SalesQuotationSkin = () => {
                 actions={[
                     { label: t("listBtn"), icon: Table, type: "secondary", onClick: () => handleListNavigate(true) },
                     !isEditMode && {
-                        label: `Hold Quotation${heldInvoices.length > 0 ? ` (${heldInvoices.length})` : ''}`,
+                        label: `Hold${heldInvoices.length > 0 ? ` (${heldInvoices.length})` : ''}`,
                         icon: Archive,
                         type: "secondary",
                         onClick: holdCurrentInvoice,
@@ -1171,24 +1482,30 @@ const SalesQuotationSkin = () => {
                             </label>
                         </div>
 
-                        <select
-                            name="printType" id="printType"
-                            className='border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none'
-                            value={formData.printType || 'Type 1'}
-                            onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
-                        >
-                            {invoiceTypes.map(type => <option key={type} value={type}>{type}</option>)}
-                        </select>
+                        {invoiceTypes.length > 0 && (
+                            <select
+                                name="printType" id="printType"
+                                className='border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none'
+                                value={formData.printType || 'Type 1'}
+                                onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
+                            >
+                                {invoiceTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                            </select>
+                        )}
 
                         {isEditMode && (
                             <PrintDropdown
                                 onPrintToPrinter={handleReprintToPrinter}
                                 onPrintToPdf={handleReprintToPdf}
                                 onSendWhatsApp={handleSendWhatsApp}
+                                loading={isPrinting}
                             />
                         )}
+
+                        {isEditMode && formData.approved && <ConvertMenu onConvert={handleConvert} page="quotation" />}
                     </div>
                 }
+                onHelpClick={() => setHelpOpen(true)}
             />
 
             <FormSectionMain
@@ -1227,6 +1544,15 @@ const SalesQuotationSkin = () => {
                 setUpdateCustomerId={setUpdateCustomerId}
                 updateCustomerId={updateCustomerId}
 
+            />
+            <HelpShortcuts
+                title="Sales Quotation Help"
+                groups={salesQuotationShortcuts}
+                manual={salesQuotationManual}
+                buttonPosition="bottom-6 right-22"
+                showFloatingButton={false}
+                open={helpOpen}
+                onOpenChange={setHelpOpen}
             />
         </div>
     )

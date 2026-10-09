@@ -139,14 +139,25 @@ const StaffAttendanceMasterForm = () => {
   };
 
   const handleDetailChange = (index, field, value) => {
-    const updated = [...details];
-    updated[index][field] = value;
-    setDetails(updated);
+  setDetails((prev) => {
+    const updated = [...prev];
+    updated[index] = { ...updated[index], [field]: value };
+    return updated;
+  });
 
-    const errKey = `detail_${index}_${field}`;
-    if (errors[errKey]) setErrors((prev) => ({ ...prev, [errKey]: "" }));
-  };
+  if (field === "employeeId") {
+    const isDuplicate = details.some(
+      (d, i) => i !== index && d.employeeId === value
+    );
 
+    setErrors((prev) => ({
+      ...prev,
+      [`detail_${index}_employeeId`]: isDuplicate
+        ? "This employee is already added in another row"
+        : undefined,
+    }));
+  }
+};
   const addDetailRow = () => {
     setDetails([...details, { employeeId: "", status: "", OTMnt: 0 }]);
   };
@@ -386,7 +397,7 @@ const StaffAttendanceMasterForm = () => {
               <div className="text-red-500 text-xs font-semibold">{errors.details}</div>
             )}
 
-            <div className="overflow-x-auto">
+            <div className="">
               <table className="w-full text-left border-collapse border border-gray-100 dark:border-gray-800">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-[#252525] border-b border-gray-150 dark:border-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -413,7 +424,13 @@ const StaffAttendanceMasterForm = () => {
 
                         <td className="px-4 py-2 min-w-[200px]">
                           <SearchableDropdown
-                            options={employees}
+                            options={employees.filter(
+      (emp) =>
+        emp.value === detail.employeeId || // keep current row's own selection visible
+        !details.some(
+          (d, i) => i !== index && d.employeeId === emp.value
+        )
+    )}
                             value={detail.employeeId}
                             onChange={(val) => handleDetailChange(index, "employeeId", val)}
                             error={employeeError}
@@ -445,6 +462,9 @@ const StaffAttendanceMasterForm = () => {
                               onBlur={(e) => {
                                 const val = Number(e.target.value);
                                 handleDetailChange(index, "OTMnt", isNaN(val) ? 0 : val);
+                              }}
+                              onKeyDown={(e) => {
+                                if(e.key === "-" || e.key === "+") e.preventDefault()
                               }}
                             />
                           </div>

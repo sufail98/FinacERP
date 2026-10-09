@@ -14,6 +14,7 @@ import { useSelector } from "react-redux";
 import Swal from "sweetalert2";
 import { showToast } from "@/utils/toast";
 import TextInput from "@/components/elements/theme/TextInput";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const AdvanceSalaryForm = () => {
     const { advanceSalaryId } = useParams();
@@ -180,7 +181,19 @@ const AdvanceSalaryForm = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
+        let updatedValue = value
+        if(["amount"].includes(name)){
+          if (value === "" || /^\d*\.?\d{0,2}$/.test(value)) {
+            updatedValue = value;
+        }
+        else {
+            return;
+        }
+        }
+        if(["chequeNo"].includes(name)){
+            updatedValue = sanitize.numbers(value)
+        }
+        setFormData((prev) => ({ ...prev, [name]: updatedValue }));
         if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
     };
 
@@ -480,6 +493,9 @@ const AdvanceSalaryForm = () => {
                                     name="amount"
                                     value={formData.amount}
                                     onChange={handleInputChange}
+                                    onKeyDown={(e) => {
+                                        if(e.key === "-") e.preventDefault()
+                                    }}
                                     placeholder="0.00"
                                     type="number"
                                     min="0"

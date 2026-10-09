@@ -7,14 +7,19 @@ import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
 import { useSelector } from 'react-redux';
-import AlertBox from '@/components/common/AlertBox';
+
 import { useNavigate, useParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
 import useFormValidation from '@/lib/hooks/useFormValidation';
 import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
 import { purchaseCartPrintOne } from '@/utils/prints/purchaseCartPrints/purchaseCartPrintOne';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import { showToast } from '@/utils/toast';
 
 const PurchasecartSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Purchase Cart");
+
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
     const { purchaseCartmasterId } = useParams();
 
@@ -27,47 +32,41 @@ const PurchasecartSkin = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [customers, setCustomers] = useState([]);
     const [invoiceId, setInvoiceId] = useState('');
-    const [alert, setAlert] = useState(null);
+ 
     const { userId, selectedBranchId, currentFinancialYear } = useAuth();
     const [time, setTime] = useState('');
-    const { generalSettings,purchaseSettings } = useSelector((state) => state.settings);
+    const { generalSettings, purchaseSettings } = useSelector((state) => state.settings);
     const [resetTableKey, setResetTableKey] = useState(0);
 
-    // ===== PRINT FUNCTIONALITY STATE =====
-    const [printType, setPrintType] = useState('a4');
-    const [printAfterSave, setPrintAfterSave] = useState(true);
+
 
     // ── Fetch edit data by ID (no more relying on location.state) ──
     useEffect(() => {
-    if (!purchaseCartmasterId) return;
-    const controller = new AbortController();
+        if (!purchaseCartmasterId) return;
+        const controller = new AbortController();
 
-    const fetchEditData = async () => {
-        setFetchLoading(true);
-        try {
-            const res = await axiosInstance.get(`purchase-cart/show-byId/${purchaseCartmasterId}`, {
-                signal: controller.signal,
-            });
-            const raw = res?.data?.data || res?.data;
-            
-            const data = Array.isArray(raw) ? raw[0] : raw;
-            setEditData(data);
-            
-        } catch (error) {
-            if (error.name === 'CanceledError' || error.name === 'AbortError') return;
-            console.error('Error fetching edit data', error);
-            setAlert({
-                id: Date.now(),
-                type: 'error',
-                message: error.response?.data?.message || 'Failed to load purchase cart data',
-            });
-        } finally {
-            if (!controller.signal.aborted) setFetchLoading(false);
-        }
-    };
-    fetchEditData();
-    return () => controller.abort(); // ← cleanup on unmount/navigate away
-}, [purchaseCartmasterId]);
+        const fetchEditData = async () => {
+            setFetchLoading(true);
+            try {
+                const res = await axiosInstance.get(`purchase-cart/show-byId/${purchaseCartmasterId}`, {
+                    signal: controller.signal,
+                });
+                const raw = res?.data?.data || res?.data;
+
+                const data = Array.isArray(raw) ? raw[0] : raw;
+                setEditData(data);
+
+            } catch (error) {
+                if (error.name === 'CanceledError' || error.name === 'AbortError') return;
+                console.error('Error fetching edit data', error);
+                showToast.error(error.response?.data?.message || 'Failed to load purchase cart data');
+            } finally {
+                if (!controller.signal.aborted) setFetchLoading(false);
+            }
+        };
+        fetchEditData();
+        return () => controller.abort(); // ← cleanup on unmount/navigate away
+    }, [purchaseCartmasterId]);
 
     useEffect(() => {
         const updateTime = () => {
@@ -111,29 +110,29 @@ const PurchasecartSkin = () => {
         printType: 'a4',
         details: [{ ...defaultDetail }],
     });
-  useEffect(() => {
-         if (editMode) return;
-    
-            // If it's past midnight (12 AM), update the date to today
-            setFormData(prev => {
-                const prevDate = new Date(prev.date);
-                const today = new Date();
-    
-                // Compare only date parts (ignore time)
-                const isSameDate =
-                    prevDate.getFullYear() === today.getFullYear() &&
-                    prevDate.getMonth() === today.getMonth() &&
-                    prevDate.getDate() === today.getDate();
-    
-                if (!isSameDate) {
-                    return { ...prev, date: today };
-                }
-                return prev;
-            });
-        }, [time]); // runs every second when time updates
-   
+    useEffect(() => {
+        if (editMode) return;
 
-        const handleListNavigate = async () => {
+        // If it's past midnight (12 AM), update the date to today
+        setFormData(prev => {
+            const prevDate = new Date(prev.date);
+            const today = new Date();
+
+            // Compare only date parts (ignore time)
+            const isSameDate =
+                prevDate.getFullYear() === today.getFullYear() &&
+                prevDate.getMonth() === today.getMonth() &&
+                prevDate.getDate() === today.getDate();
+
+            if (!isSameDate) {
+                return { ...prev, date: today };
+            }
+            return prev;
+        });
+    }, [time]); // runs every second when time updates
+
+
+    const handleListNavigate = async () => {
         if (generalSettings?.askConfirmationClose) {
             const result = await Swal.fire({
                 title: t('ConfirmCloseTitle'),
@@ -151,21 +150,21 @@ const PurchasecartSkin = () => {
     };
 
     const clearForm = async (skipConfirmation = false) => {
-    skipConfirmation = skipConfirmation === true;
+        skipConfirmation = skipConfirmation === true;
 
-    if (!skipConfirmation && generalSettings?.askConfirmationClear) {
-        const result = await Swal.fire({
-            title: t('ConfirmClearTitle'),
-            text: t('ConfirmClearText'),
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
-            confirmButtonText: t('YesClear'),
-            cancelButtonText: t('Cancel'),
-        });
-        if (!result.isConfirmed) return;
-    }
+        if (!skipConfirmation && generalSettings?.askConfirmationClear) {
+            const result = await Swal.fire({
+                title: t('ConfirmClearTitle'),
+                text: t('ConfirmClearText'),
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesClear'),
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
         setFormData({
             branchId: selectedBranchId,
             yearId: currentFinancialYear?.yearId,
@@ -267,40 +266,47 @@ const PurchasecartSkin = () => {
 
     const handleSave = useCallback(async () => {
         if (!validateForm(formData, validationRules)) return;
+         if (formData.totalAmount <= 0) {
+                    showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
+                    return;
+                }
 
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
-            setAlert({
-                id: Date.now(),
-                type: 'error',
-                message: validationErrors.join('\n'),
-            });
+            showToast.error(validationErrors.join(', '));
             return;
         }
 
         if (editMode && generalSettings?.askConfirmationEdit) {
-    const result = await Swal.fire({
-        title: t('ConfirmUpdateTitle'), text: t('ConfirmUpdateText'),
-        icon: 'question', showCancelButton: true,
-        confirmButtonColor: '#3085d6', cancelButtonColor: '#d33',
-        confirmButtonText: t('YesUpdate'), cancelButtonText: t('Cancel'),
-    });
-    if (!result.isConfirmed) return;
-} else if (!editMode && generalSettings?.askConfirmationSave) {
-    const result = await Swal.fire({
-        title: t('ConfirmSaveTitle'), text: t('ConfirmSaveText'),
-        icon: 'question', showCancelButton: true,
-        confirmButtonColor: '#3085d6', cancelButtonColor: '#d33',
-        confirmButtonText: t('YesSave'), cancelButtonText: t('Cancel'),
-    });
-    if (!result.isConfirmed) return;
-}
+            const result = await Swal.fire({
+                title: t('ConfirmUpdateTitle'), text: t('ConfirmUpdateText'),
+                icon: 'question', showCancelButton: true,
+                confirmButtonColor: '#3085d6', cancelButtonColor: '#d33',
+                confirmButtonText: t('YesUpdate'), cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        } else if (!editMode && generalSettings?.askConfirmationSave) {
+            const result = await Swal.fire({
+                title: t('ConfirmSaveTitle'), text: t('ConfirmSaveText'),
+                icon: 'question', showCancelButton: true,
+                confirmButtonColor: '#3085d6', cancelButtonColor: '#d33',
+                confirmButtonText: t('YesSave'), cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
 
         setIsSaving(true);
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                CreatedUser: userId,
+                ModifiedUser: editMode ? userId : null,
+                details: (formData.details || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: editMode ? userId : detail?.ModifiedUser ?? null,
+                    CreatedUser: editMode ? detail?.CreatedUser ?? userId : userId,
+                })),
             };
             const api = editMode
                 ? `purchase-cart/update/${purchaseCartmasterId}`
@@ -310,12 +316,8 @@ const PurchasecartSkin = () => {
 
             if (!response.data.error) {
                 const cartNumber = response.data.data?.PurchaseCartNo || invoiceId;
-                
-                setAlert({
-                    id: Date.now(),
-                    type: 'success',
-                    message: t('saveSuccess'),
-                });
+
+                showToast.success(t('saveSuccess'));
 
                 // Print after save if enabled
                 if (formData.printAfterSave && !editMode) {
@@ -324,7 +326,7 @@ const PurchasecartSkin = () => {
                         PurchaseCartNo: cartNumber,
                         voucherNo: cartNumber,
                     };
-                    
+
                     try {
                         await purchaseCartPrintOne(cartDataForPrint, { branchName: 'Company' });
                     } catch (printError) {
@@ -419,7 +421,7 @@ const PurchasecartSkin = () => {
     ];
 
     // Show preloader while generating voucher number (add mode)
-    if (voucherNoGenerating) {
+    if (voucherNoGenerating||privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
@@ -459,10 +461,11 @@ const PurchasecartSkin = () => {
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary">
-            {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+          
             <BreadCrumb
                 routes={[
                     { title: t('purchaseCart.breadcrumb.master'), url: '#' },

@@ -189,8 +189,14 @@ const DeliveryNoteFooterSection = ({ totals, formData, setFormData, otherChargeL
 
   // User typed in amount field → auto-calculates w/tax
   const handleBillDiscountAmountChange = (amountValue) => {
-    const amount = parseFloat(amountValue) || 0;
-    setBillDiscount(amount);
+    // allow empty, digits, and at most one decimal point while typing
+    if (amountValue !== "" && !/^\d*\.?\d*$/.test(amountValue)) {
+      return; // reject invalid characters, don't touch state
+    }
+
+    setBillDiscount(amountValue); // store raw string, preserves "12." ".5" etc.
+
+    const amount = parseFloat(amountValue) || 0; // only parse for math
 
     const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
     const perc = grandTotal > 0 ? (amount / grandTotal) * 100 : 0;
@@ -200,23 +206,67 @@ const DeliveryNoteFooterSection = ({ totals, formData, setFormData, otherChargeL
     const taxRate = parseFloat(formData.deliveryDetails?.[0]?.taxRate) || 15;
     const withTax = amount * (1 + taxRate / 100);
     setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings.decimalPart || 2)));
-  };
+};
 
   // User typed in % field → auto-calculates w/tax
+  // const handleBillDiscountPercChange = (percValue) => {
+  //    const decimalPart = generalSettings?.decimalPart || 2;
+
+  // // Allow only up to the configured decimal places
+  // const regex = new RegExp(`^\\d*(\\.\\d{0,${decimalPart}})?$`);
+
+  // if (percValue !== "" && !regex.test(percValue)) {
+  //   return;
+  // }
+
+  // const perc = Math.min(Math.max(parseFloat(percValue) || 0, 0), 100);
+
+  // setBillDiscountPerc(perc);
+
+  //   const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
+  //   const amount = (grandTotal * perc) / 100;
+  //   const calculatedAmount = parseFloat(amount.toFixed(generalSettings.decimalPart || 2));
+  //   setBillDiscount(calculatedAmount);
+
+  //   // Auto-calculate billDiscountWithTax from percentage
+  //   const taxRate = parseFloat(formData.deliveryDetails?.[0]?.taxRate) || 15;
+  //   const withTax = calculatedAmount * (1 + taxRate / 100);
+  //   setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings.decimalPart || 2)));
+  // };
   const handleBillDiscountPercChange = (percValue) => {
-    const perc = parseFloat(percValue) || 0;
-    setBillDiscountPerc(perc);
+  const decimalPart = generalSettings?.decimalPart || 2;
 
-    const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
-    const amount = (grandTotal * perc) / 100;
-    const calculatedAmount = parseFloat(amount.toFixed(generalSettings.decimalPart || 2));
-    setBillDiscount(calculatedAmount);
+  // Allow only up to the configured decimal places
+  const regex = new RegExp(`^\\d*(\\.\\d{0,${decimalPart}})?$`);
 
-    // Auto-calculate billDiscountWithTax from percentage
-    const taxRate = parseFloat(formData.deliveryDetails?.[0]?.taxRate) || 15;
-    const withTax = calculatedAmount * (1 + taxRate / 100);
-    setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings.decimalPart || 2)));
-  };
+  if (percValue !== "" && !regex.test(percValue)) {
+    return;
+  }
+
+  const perc = Math.min(Math.max(parseFloat(percValue) || 0, 0), 100);
+
+  setBillDiscountPerc(perc);
+
+  const grandTotal =
+    parseFloat(totals?.grandTotal || 0) +
+    parseFloat(totals?.totalTax || 0);
+
+  const amount = (grandTotal * perc) / 100;
+  const calculatedAmount = parseFloat(
+    amount.toFixed(decimalPart)
+  );
+
+  setBillDiscount(calculatedAmount);
+
+  const taxRate =
+    parseFloat(formData.deliveryDetails?.[0]?.taxRate) || 15;
+
+  const withTax = calculatedAmount * (1 + taxRate / 100);
+
+  setBillDiscountWithTaxInput(
+    parseFloat(withTax.toFixed(decimalPart))
+  );
+};
 
   // User typed in w/tax field → derive pre-tax discount
   const handleBillDiscountWithTaxChange = (withTaxValue) => {
@@ -499,12 +549,24 @@ if (formData.otherChargeLedgerId) {
                       <td className="px-2 py-1 border-l border-themed dark:border-themed">
                         <div className="flex items-center gap-1">
                           <input
-                            type="number"
+                          type="number"
+                          min="0"
+                            max="100"
+                            step={generalSettings?.decimalPart
+                                      ? `0.${"0".repeat(generalSettings.decimalPart - 1)}1`
+                              : "0.01"}
+  
                             value={billDiscountPerc}
                             onChange={(e) => handleBillDiscountPercChange(e.target.value)}
+                              onKeyDown={(e) => {
+    if (["-", "+", "e", "E"].includes(e.key)) {
+      e.preventDefault();
+    }
+  }}
                             onFocus={handleSelectAll}
                             className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                             placeholder="%"
+                            disabled = {Number(totals?.grandTotal) <= 0}
                           />
                           <span className="text-secondary dark:text-secondary">%</span>
                         </div>
@@ -551,6 +613,7 @@ if (formData.otherChargeLedgerId) {
                           }}
                           className="w-full bg-transparent focus:outline-none text-right"
                           placeholder="w/tax"
+                          disabled = {Number(totals?.grandTotal) <= 0}
                           title="Discount amount from total including tax"
                         />
                       </td>
@@ -560,10 +623,11 @@ if (formData.otherChargeLedgerId) {
                     {saleSettings?.showBillDiscountAmount ? (
                       <td className="px-2 py-1 border-l border-themed dark:border-themed">
                         <input
-                          type="number"
+                          type="text"
                           value={billDiscount}
                           onChange={(e) => handleBillDiscountAmountChange(e.target.value)}
                           onFocus={handleSelectAll}
+                          disabled = {Number(totals?.grandTotal) <= 0}
                           className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                           placeholder={t("salesInvoice.form.footerSection.paymentSummery.amntPlaceholder")}
                         />
@@ -616,6 +680,10 @@ if (formData.otherChargeLedgerId) {
                     <input
                       type="number"
                       value={otherChargeAmt}
+                      max={0}
+                      onKeyDown={(e) => {
+                        if(e.key === "-" || e.key === "+") e.preventDefault()
+                      }}
                       className="w-full bg-transparent text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none text-right"
                       onChange={(e) => {
                         const val = e.target.value;
@@ -626,7 +694,7 @@ if (formData.otherChargeLedgerId) {
                       }}
                       onFocus={handleSelectAll}
                       placeholder={t("salesInvoice.form.footerSection.paymentSummery.amntPlaceholder")}
-                      disabled={!selectedLedger}
+                      disabled={!selectedLedger || Number(totals?.grandTotal) <= 0}
                     />
                   </td>
                 </tr>
@@ -660,6 +728,7 @@ if (formData.otherChargeLedgerId) {
                           }
                         }}
                         onFocus={handleSelectAll}
+                        disabled = {Number(totals?.grandTotal) <= 0}
                         step={Math.pow(10, -(generalSettings?.RoundOffDigit ?? 2))}
                         className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                       />

@@ -5,7 +5,8 @@ import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 
-const PayableVoucherFooterSection = ({ totals, formData, setFormData,banks,cash }) => {
+const PayableVoucherFooterSection = ({ totals, formData, setFormData, banks, cash }) => {
+
   const { payableVoucherId } = useParams();
   const isEditMode = Boolean(payableVoucherId);
   const { generalSettings } = useSelector((state) => state.settings);
@@ -39,11 +40,9 @@ const PayableVoucherFooterSection = ({ totals, formData, setFormData,banks,cash 
   }, [isEditMode, formData, isInitialized]);
 
   // Simple calculation: Net Amount + Tax Amount = Grand Total
+  // Grand total comes directly from totals.grandTotal (already correctly computed)
   const finalGrandTotal = useMemo(() => {
-    const netAmount = parseFloat(totals?.totalNetAmount || 0);
-    const taxAmount = parseFloat(totals?.totalTaxAmount || 0);
-    const grandTotal = netAmount + taxAmount;
-    return grandTotal.toFixed(generalSettings.decimalPart);
+    return parseFloat(totals?.grandTotal || 0).toFixed(generalSettings.decimalPart);
   }, [totals]);
 
   useEffect(() => {
@@ -74,7 +73,7 @@ const PayableVoucherFooterSection = ({ totals, formData, setFormData,banks,cash 
       case "payment":
         return (
           <PaymentMode finalGrandTotal={finalGrandTotal} totals={totals} formData={formData} setFormData={setFormData} banks={banks}
-                cash={cash} />
+            cash={cash} />
         );
 
       case "other":
@@ -98,8 +97,8 @@ const PayableVoucherFooterSection = ({ totals, formData, setFormData,banks,cash 
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex-1 min-w-[120px] px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab.id
-                    ? "main-bg text-white border-b-2 border-[#2b216a]"
-                    : "bg-secondary dark:bg-secondary text-secondary dark:text-secondary hover:bg-hover dark:hover:bg-hover"
+                  ? "main-bg text-white border-b-2 border-[#2b216a]"
+                  : "bg-secondary dark:bg-secondary text-secondary dark:text-secondary hover:bg-hover dark:hover:bg-hover"
                   }`}
               >
                 {tab.label}
@@ -117,6 +116,7 @@ const PayableVoucherFooterSection = ({ totals, formData, setFormData,banks,cash 
         <div className="bg-primary dark:bg-primary rounded border border-themed dark:border-themed text-xs">
 
           {/* Total Net Amount */}
+          {/* Total Amount (without tax = subTotal) */}
           <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
             <label className="px-2 py-1 font-medium text-secondary dark:text-secondary sm:min-w-[100px] lg:min-w-0">
               {t("salesInvoice.form.footerSection.paymentSummery.totalAmt")}
@@ -124,13 +124,15 @@ const PayableVoucherFooterSection = ({ totals, formData, setFormData,banks,cash 
             <input
               type="number"
               value={Number(totals?.totalNetAmount || 0).toFixed(generalSettings?.decimalPart ?? 2)}
-              className="flex-1 px-2 py-1 sm:border-l border-themed dark:border-themed bg-secondary dark:bg-secondary text-primary dark:text-primary focus:outline-none text-right"
+              className="flex-1 px-2 py-1 sm:border-l border-themed dark:border-themed 
+                   bg-secondary dark:bg-secondary text-primary dark:text-primary 
+                   focus:outline-none text-right"
               readOnly
             />
           </div>
 
           {/* Total Tax */}
-          {(formData.taxType==="applicable to ledgers"&&generalSettings?.ActivateTax) && (
+          {(formData.taxType === "applicable to ledgers" && generalSettings?.ActivateTax) && (
             <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
               <label className="px-2 py-1 font-medium text-secondary dark:text-secondary sm:min-w-[100px] lg:w-28">
                 {t("salesInvoice.form.footerSection.paymentSummery.totalTax")}

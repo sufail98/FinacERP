@@ -34,12 +34,12 @@ const ContraVoucherList = () => {
     const [toDate, setToDate] = useState(getTodayDate());
 
     // Server-side pagination states
-    const [limit, setLimit] = useState(10);
+    const [limit, setLimit] = useState(80);
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState({
         total: 0,
         page: 1,
-        limit: 10,
+        limit: 80,
         total_pages: 1
     });
 
@@ -47,12 +47,12 @@ const ContraVoucherList = () => {
 
     const columns = [
         { key: "SNo", label: "#", sortable: true, align: "right" },
-        { key: "contraNo", label: t("contraVoucher.list.columns.contraNo"), sortable: true, align: "left",width:'80px' },
-        { key: "date", label: t("contraVoucher.list.columns.date"), sortable: true, align: "center" ,width:'100px'},
-        { key: "type", label: t("contraVoucher.list.columns.type"), sortable: true, align: "center",width:'120px' },
-        { key: "ledgerName", label: t("contraVoucher.list.columns.ledgerName"), sortable: true, align: "left" },
+        { key: "contraNo", label: t("contraVoucher.list.columns.contraNo"), sortable: true, align: "left", width: '80px' },
+        { key: "date", label: t("contraVoucher.list.columns.date"), sortable: true, align: "left", width: '100px' },
+        { key: "type", label: t("contraVoucher.list.columns.type"), sortable: true, align: "left", width: '80px' },
+        { key: "ledgerName", label: t("contraVoucher.list.columns.ledgerName"), sortable: true, align: "left",width:"200px" },
         { key: "narration", label: t("contraVoucher.list.columns.narration"), sortable: true, align: "left" },
-        { key: "totalAmount", label: t("contraVoucher.list.columns.totalAmt"), sortable: true, align: "right",width:'100px' },
+        { key: "totalAmount", label: t("contraVoucher.list.columns.totalAmt"), sortable: true, align: "right", width: '100px' },
     ];
 
     // Fetch data when page or limit changes
@@ -75,7 +75,7 @@ const ContraVoucherList = () => {
             item.type?.toLowerCase().includes(lowerSearchTerm)
         );
     }, [contraVouchers, searchTerm]);
-const formatDate = (dateString) => {
+    const formatDate = (dateString) => {
         if (!dateString) return '';
 
         const date = new Date(dateString);
@@ -90,12 +90,27 @@ const formatDate = (dateString) => {
             .replace('MM', MM)
             .replace('yyyy', yyyy);
     };
+    const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
     // Update SNo for filtered data
     const displayData = useMemo(() => {
         return filteredData.map((item, index) => ({
             ...item,
             SNo: index + 1,
-            date: formatDate(item.date),
+            date: (() => {
+                const datePart = formatDate(item.date);
+                const timePart = formatTime(item.CreatedDate);
+                return timePart ? `${datePart} ${timePart}` : datePart;
+            })(),
         }));
     }, [filteredData]);
 
@@ -158,7 +173,7 @@ const formatDate = (dateString) => {
         setFromDate(today);
         setToDate(today);
         setPage(1);
-        setLimit(10);
+        setLimit(80);
         setSearchTerm(''); // Clear search on reset
 
         setLoading(true)
@@ -166,7 +181,7 @@ const formatDate = (dateString) => {
             const payload = {
                 fromDate: today,
                 toDate: today,
-                limits: 10,
+                limits: 80,
                 page: 1,
                 branchId: selectedBranchId
             };
@@ -184,7 +199,7 @@ const formatDate = (dateString) => {
                 setMeta({
                     total: response.data.meta.total || 0,
                     page: response.data.meta.page || 1,
-                    limit: response.data.meta.limit || 10,
+                    limit: response.data.meta.limit || 80,
                     total_pages: response.data.meta.total_pages || 1
                 });
             }
@@ -283,7 +298,7 @@ const formatDate = (dateString) => {
     }
 
     const renderCell = (key, row) => {
-     
+
         if (key === "totalAmount") {
             return (
                 <div className="text-sm">

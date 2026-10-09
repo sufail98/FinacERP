@@ -19,6 +19,7 @@ import { useMediaQuery } from "@mui/material";
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
 import { showToast } from "@/utils/toast";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const UserGroupAddModal = ({ open, handleClose, onSuccess, editId }) => {
     const isMobile = useMediaQuery("(max-width:600px)");
@@ -86,7 +87,12 @@ const UserGroupAddModal = ({ open, handleClose, onSuccess, editId }) => {
     };
 
     const handleInputChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const {name,value} = e.target
+        let updatedValue = value
+        if(["groupName"].includes(name)){
+            updatedValue = sanitize.alphaNumericSpace(value)
+        }
+        setFormData({ ...formData, [name]: updatedValue });
     };
 
     const handleStatusChange = (e) => {
@@ -152,6 +158,7 @@ const UserGroupAddModal = ({ open, handleClose, onSuccess, editId }) => {
                 usergroupName: formData.groupName.trim(),
                 activeStatus: formData.status === "active" ? 1 : 0,
                 CreatedUser: userId,
+                 ModifiedUser: editId ? userId : null,
             };
 
             if (editId) {

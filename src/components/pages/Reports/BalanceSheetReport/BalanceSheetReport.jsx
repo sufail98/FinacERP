@@ -18,9 +18,20 @@ const BalanceSheetReport = () => {
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState(null);
     const [alert, setAlert] = useState(null);
-    const { generalSettings } = useSelector(state => state.settings);
+    const { generalSettings, inventorySettings } = useSelector(state => state.settings);
 
-    const { selectedBranchId, currentCurrency } = useAuth();
+    const { selectedBranchId, currentCurrency, branches, selectedBranchDetails } = useAuth();
+    const isMainBranch = selectedBranchDetails?.mainBranch === true && branches?.length > 1; // Check if the user is in the main branch and there are multiple branches
+    const branchOptions = useMemo(() => {
+        if (!branches || !Array.isArray(branches)) return [];
+        return [
+            { label: 'All', value: null },
+            ...branches.map(b => ({
+                label: b.branchCode,
+                value: Number(b.branchId)
+            }))
+        ];
+    }, [branches]);
     const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Balance Sheet");
 
     const { exportGenericToExcel, exportGenericToPdf, exportGenericToCsv } = useReportExport();
@@ -29,15 +40,51 @@ const BalanceSheetReport = () => {
 
     const [filters, setFilters] = useState({
         toDate: getDefaultDate(),
-        reportType: 'condensed'
+        reportType: 'condensed',
+        selectedBranchId: isMainBranch ? null : Number(selectedBranchId)
     });
+    // Map stockValueCalculation setting -> balance-sheet stock API endpoint + response value key
+    const BALANCE_SHEET_STOCK_CONFIG = {
+        'FIFO': {
+            endpoint: 'calculation-method/balance-sheet-stock-opening-value-fifo',
+            valueKey: 'Value'
+        },
+        'Low Cost': {
+            endpoint: 'calculation-method/balance-sheet-opening-stock-low-cost',
+            valueKey: 'actualvalue'
+        },
+        'High Cost': {
+            endpoint: 'calculation-method/opening-stock-high-cost-balance-sheet',
+            valueKey: 'actualvalue'
+        },
+        'Last Purchase Rate': {
+            endpoint: 'calculation-method/stock-opening-value-last-purchase-rate-balance-sheet',
+            valueKey: 'actualvalue'
+        },
+        'Average Cost': {
+            endpoint: 'calculation-method/opening-stock-avco-balance-sheet',
+            valueKey: 'actualvalue'
+        }
+    }
 
+    const getBalanceSheetStockConfig = (method) => {
+        const config = BALANCE_SHEET_STOCK_CONFIG[method]
+        if (!config) {
+            console.warn(`No config mapped for stockValueCalculation: "${method}", falling back to FIFO`)
+            return BALANCE_SHEET_STOCK_CONFIG['FIFO']
+        }
+        return config
+    }
     const fetchReport = async () => {
+        const resolvedBranchId = isMainBranch
+                ? (filters.selectedBranchId ?? null)
+                : Number(selectedBranchId);
+
         setLoading(true);
         setAlert(null);
 
         try {
-            const branchId = parseInt(selectedBranchId) || 1;
+            const branchId = resolvedBranchId;
             const currencyId = parseInt(currentCurrency?.currencyId) || 1;
             const baseBody = { branchId, currencyId };
 
@@ -63,7 +110,7 @@ const BalanceSheetReport = () => {
                     try {
                         const res = await axiosInstance.post('balance-sheet/detailed', {
                             toDate: filters.toDate,
-                            branchId,
+                            branchId: resolvedBranchId,
                             currencyId,
                             group_id: groupId,
                             is_asset: isAsset,
@@ -88,8 +135,11 @@ const BalanceSheetReport = () => {
             }
 
             // ── STEP 3: Closing Stock ──
+            // ── STEP 3: Closing Stock ──
+            const stockConfig = getBalanceSheetStockConfig(inventorySettings?.stockValueCalculation)
+
             const stockRes = await axiosInstance.post(
-                'calculation-method/balance-sheet-stock-opening-value-fifo',
+                stockConfig.endpoint,
                 {
                     date: filters.toDate,
                     from_date: filters.toDate,
@@ -97,7 +147,7 @@ const BalanceSheetReport = () => {
                     currency_id: currencyId,
                 }
             );
-            const stockValue = parseFloat(stockRes.data.data?.[0]?.Value || 0);
+            const stockValue = parseFloat(stockRes.data.data?.[0]?.[stockConfig.valueKey] || 0);
 
             // ── STEP 4: Profit / Loss ──
             const rawAssets = condensedGroups
@@ -388,6 +438,8 @@ const BalanceSheetReport = () => {
                     loading={loading}
                     hasReportData={!!reportData}
                     resetFilters={resetFilters}
+                    branchOptions={branchOptions}
+                    isMainBranch={isMainBranch}
                 />
 
                 {reportData && (

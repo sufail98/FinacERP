@@ -16,6 +16,7 @@ import AlertBox from "@/components/common/AlertBox";
 import TextInput from "@/components/elements/theme/TextInput";
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
+import { sanitize } from "@/lib/inputSanitizer";
 
 // ✅ Updated style - removed bgcolor and border (will use classes instead)
 const style = {
@@ -186,7 +187,13 @@ const AddMasterModal = ({ open, handleClose, title, mode = "add", id = null, onS
 
   const handleInputChange = (e) => {
     setFinalError("");
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+     const { name, value } = e.target;
+     let updatedValue = value
+     if(["name"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+     }
+      setFormData((prev) => ({ ...prev, [name]: updatedValue }));
+    // setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   useEffect(() => {

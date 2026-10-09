@@ -17,7 +17,7 @@ const CashAndBankBook = ({ type }) => {
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState(null);
     const [costCenterData, setCostCenterData] = useState([]);
-    const { selectedBranchId, currentCurrency } = useAuth();
+    const { selectedBranchId, currentCurrency,selectedBranchDetails } = useAuth();
     const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges(type === 'cash' ? "Cash Book" : "Bank Book");
     const { t } = useTranslation();
     const { generalSettings } = useSelector((state) => state.settings);
@@ -41,6 +41,19 @@ const CashAndBankBook = ({ type }) => {
         fetchCostCenterData();
     }, []);
 
+    // ADD THIS — resets stale data/filters when switching between cash and bank
+    useEffect(() => {
+        setReportData(null);
+        setFilters({
+            fromDate: new Date().toISOString().split('T')[0],
+            toDate: new Date().toISOString().split('T')[0],
+            groupId: type === 'cash' ? 8 : 5,
+            costCentreId: '',
+            isShowOpeningBalance: true,
+            isMainGroup: true
+        });
+    }, [type]);
+
     const fetchReport = async () => {
         if (!filters.groupId) {
             alert(t('Please select an account group'));
@@ -52,7 +65,7 @@ const CashAndBankBook = ({ type }) => {
             const res = await axiosInstance.post("accountgroup-detailed-report", {
                 fromDate: filters.fromDate,
                 toDate: filters.toDate,
-                branchId: selectedBranchId,
+                branchId: selectedBranchDetails?.mainBranch ? null : selectedBranchId,
                 groupId: type === 'cash' ? 8 : 5,
                 currencyId: currentCurrency.currencyId,
                 isShowOpeningBalance: true,
@@ -348,7 +361,7 @@ const CashAndBankBook = ({ type }) => {
                 loading={loading}
                 hasReportData={!!reportData}
                 resetFilters={resetFilters}
-                fromPage={'customer&Supplier'}
+                fromPage={'cashBook'}
             />
             <div className='px-1'>
                 <ContentTable

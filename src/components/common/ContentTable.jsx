@@ -1,10 +1,45 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import PropTypes from "prop-types";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import Preloader from "./Preloader";
+
+// ── Sort cycle: null → "asc" → "desc" → null
+const nextSortDir = (current) => {
+    if (!current) return "asc";
+    if (current === "asc") return "desc";
+    return null;
+};
+
+// ── Generic comparator aware of numbers vs strings
+const compareValues = (a, b, direction) => {
+    if (a === null || a === undefined) a = "";
+    if (b === null || b === undefined) b = "";
+
+    const aNum = Number(a);
+    const bNum = Number(b);
+    const isNumeric = !isNaN(aNum) && !isNaN(bNum) && a !== "" && b !== "";
+
+    let result;
+    if (isNumeric) {
+        result = aNum - bNum;
+    } else {
+        result = String(a).localeCompare(String(b), undefined, { sensitivity: "base" });
+    }
+    return direction === "asc" ? result : -result;
+};
+
+// ── Sort icon component
+const SortIcon = ({ columnKey, sortKey, sortDir }) => {
+    if (sortKey !== columnKey) {
+        return <ArrowUpDown className="h-3 w-3 opacity-40 shrink-0" />;
+    }
+    if (sortDir === "asc") return <ArrowUp className="h-3 w-3 opacity-90 shrink-0" />;
+    if (sortDir === "desc") return <ArrowDown className="h-3 w-3 opacity-90 shrink-0" />;
+    return <ArrowUpDown className="h-3 w-3 opacity-40 shrink-0" />;
+};
 
 const ContentTable = ({
     onRowClick,
@@ -16,6 +51,7 @@ const ContentTable = ({
     totalItems,
     totalPages,
     onPageChange,
+    itemsPerPage,
     loading = false,
     serverPagination = false,
     staticSearchable = false,
@@ -23,17 +59,16 @@ const ContentTable = ({
     minColumnWidth = 50,
     tableId = "default",
     stickyActions = true,
-    pageSize = 80,
+    pageSize = 4000,
     autoFocusSearch = false,
     maxHeight = "72vh",
-    // ── NEW grouping props ──────────────────────────────────────────────────
-    // groupBy: the row key whose value identifies a group (e.g. 'salesMasterId')
-    // When set, rows sharing the same groupBy value are visually merged.
+    // ── Sorting prop ────────────────────────────────────────────────────────
+    // sortable: when true, clicking any column header toggles A→Z / Z→A / unsorted
+    // (or 0→1 / 1→0 for numeric columns). Sorting is client-side only.
+    sortable = false,
+    // ── Grouping props ──────────────────────────────────────────────────────
     groupBy = null,
-    // mergedColumns: column keys whose cells should be rowspan-merged (rendered
-    // only on the first row of each group). All other columns repeat per row.
     mergedColumns = [],
-    // ───────────────────────────────────────────────────────────────────────
 }) => {
     const { t } = useTranslation();
     const { generalSettings, saleSettings } = useSelector((state) => state.settings);
@@ -44,10 +79,10 @@ const ContentTable = ({
     const filteredColumns = useMemo(() => {
         return columns.filter((col) => {
             const keyLowerCase = col.key.toLowerCase();
-            if (keyLowerCase.includes('costcentre')) {
+            if (keyLowerCase.includes("costcentre")) {
                 return generalSettings?.costCentre === true;
             }
-            if (keyLowerCase.includes('godown')) {
+            if (keyLowerCase.includes("godown")) {
                 return saleSettings?.ActiveGodown === true;
             }
             return true;
@@ -72,8 +107,29 @@ const ContentTable = ({
     const [clientPage, setClientPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState("");
 
+    // ── Sort state ──────────────────────────────────────────────────────────
+    const [sortKey, setSortKey] = useState(null);   // column key being sorted
+    const [sortDir, setSortDir] = useState(null);   // "asc" | "desc" | null
+
+    const handleHeaderClick = useCallback(
+        (col) => {
+            if (!sortable || col.key === "SNo") return;
+            setSortKey((prevKey) => {
+                if (prevKey !== col.key) {
+                    setSortDir("asc");
+                    return col.key;
+                }
+                const next = nextSortDir(sortDir);
+                setSortDir(next);
+                if (!next) return null;
+                return col.key;
+            });
+        },
+        [sortable, sortDir]
+    );
+
     const activePage = serverPagination ? currentPage : clientPage;
-    const activeItemsPerPage = pageSize;
+    const activeItemsPerPage = serverPagination ? itemsPerPage : pageSize;
 
     const totalTableWidth = useMemo(() => {
         const columnsWidth = Object.values(columnWidths).reduce((sum, width) => sum + width, 0);
@@ -213,6 +269,7 @@ const ContentTable = ({
 
     const getActionHoverBg = () => "group-hover:bg-indigo-50/60 dark:group-hover:bg-[#252540]";
 
+    // ── Filter ──────────────────────────────────────────────────────────────
     const filteredData = useMemo(() => {
         if (serverPagination || !staticSearchable || !searchQuery.trim()) return data;
         const query = searchQuery.toLowerCase();
@@ -226,7 +283,13 @@ const ContentTable = ({
         );
     }, [data, searchQuery, columns, serverPagination, staticSearchable]);
 
-    const sortedData = useMemo(() => filteredData, [filteredData]);
+    // ── Sort (client-side only, skipped when serverPagination=true) ─────────
+    const sortedData = useMemo(() => {
+        if (serverPagination || !sortable || !sortKey || !sortDir) return filteredData;
+        return [...(filteredData || [])].sort((a, b) =>
+            compareValues(a[sortKey], b[sortKey], sortDir)
+        );
+    }, [filteredData, serverPagination, sortable, sortKey, sortDir]);
 
     const { paginatedData, clientTotalPages, clientTotalItems } = useMemo(() => {
         if (serverPagination) return { paginatedData: data, clientTotalPages: totalPages, clientTotalItems: totalItems };
@@ -251,6 +314,11 @@ const ContentTable = ({
         if (!serverPagination && searchQuery) setClientPage(1);
     }, [searchQuery, serverPagination]);
 
+    // Reset to page 1 when sort changes
+    useEffect(() => {
+        if (!serverPagination) setClientPage(1);
+    }, [sortKey, sortDir, serverPagination]);
+
     const handlePrevious = () => {
         if (activePage > 1) serverPagination ? onPageChange(activePage - 1) : setClientPage(activePage - 1);
     };
@@ -265,9 +333,7 @@ const ContentTable = ({
         return isLastColumn ? "" : "border-r border-gray-200/60 dark:border-gray-700/40";
     };
 
-    // ── Group display data by groupBy key ──────────────────────────────────
-    // Returns an array of { groupKey, rows } in the order they first appear.
-    // Used only in the desktop table when groupBy is active.
+    // ── Group display data ──────────────────────────────────────────────────
     const groupedDisplayData = useMemo(() => {
         if (!groupBy || !displayData?.length) return null;
         const map = new Map();
@@ -279,9 +345,6 @@ const ContentTable = ({
         });
         return order.map((key) => ({ groupKey: key, rows: map.get(key) }));
     }, [groupBy, displayData]);
-
-    // Absolute row index across all groups (for alternating bg stripes)
-    // We track this as a running counter inside the render below.
 
     const ResizeHandle = ({ columnKey, isLast = false }) => (
         <div
@@ -322,9 +385,6 @@ const ContentTable = ({
     };
 
     // ── Grouped tbody renderer ─────────────────────────────────────────────
-    // Renders rows with rowspan on mergedColumns. Each group gets a stripe
-    // based on its group index (not flat row index) so merged cells and their
-    // repeated siblings share the same background.
     const renderGroupedRows = () => {
         if (!groupedDisplayData?.length) return (
             <tr>
@@ -347,7 +407,6 @@ const ContentTable = ({
 
         groupedDisplayData.forEach(({ rows: groupRows }, groupIndex) => {
             const rowspan = groupRows.length;
-            // Stripe by group index so all rows in a group share the same bg
             const stripeBg = groupIndex % 2 === 0
                 ? "bg-white dark:bg-[#1a1a1a]"
                 : "bg-[#f8f9fc] dark:bg-[#1e1e2a]";
@@ -357,21 +416,14 @@ const ContentTable = ({
 
             groupRows.forEach((row, rowInGroup) => {
                 const isFirst = rowInGroup === 0;
-                // Border between groups: only on last row of each group
                 const isLastInGroup = rowInGroup === groupRows.length - 1;
 
                 const tds = filteredColumns.map((col, colIndex) => {
                     const isMerged = mergedSet.has(col.key);
-
-                    // Merged column: only render on the first row with rowspan
                     if (isMerged && !isFirst) return null;
 
                     const cellStyle = isMerged
-                        ? {
-                            ...getColumnWidthStyle(col.key),
-                            // Right border accent to visually separate merged region
-                            borderRight: "2px solid rgb(203 213 225 / 0.6)",
-                        }
+                        ? { ...getColumnWidthStyle(col.key), borderRight: "2px solid rgb(203 213 225 / 0.6)" }
                         : getColumnWidthStyle(col.key);
 
                     const mergedBorderClass = isMerged
@@ -379,7 +431,7 @@ const ContentTable = ({
                         : "";
 
                     const content = col.key === "SNo"
-                        ? (startIndex + groupIndex + 1)   // sequential invoice number
+                        ? (startIndex + groupIndex + 1)
                         : renderCell
                             ? renderCell(col.key, row)
                             : (row[col.key] !== "" && row[col.key] !== null && row[col.key] !== undefined
@@ -407,10 +459,7 @@ const ContentTable = ({
                             `}
                         >
                             {isMerged ? (
-                                // Merged cells: full content, no truncation needed
-                                <div className={`text-sm ${col.key === "SNo" ? "" : "break-words"}`}>
-                                    {content}
-                                </div>
+                                <div className={`text-sm ${col.key === "SNo" ? "" : "break-words"}`}>{content}</div>
                             ) : (
                                 <div
                                     className="truncate text-sm"
@@ -432,8 +481,7 @@ const ContentTable = ({
                         className={`px-4 py-1 ${actionBg} ${getActionHoverBg()} transition-colors duration-150 border-b border-slate-200 dark:border-slate-700/50
                             ${hasHorizontalScroll && stickyActions
                                 ? "shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)] dark:shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.3)]"
-                                : ""
-                            }`}
+                                : ""}`}
                         style={{ ...getColumnWidthStyle("__actions__"), ...getStickyActionStyles(false) }}
                     >
                         <div className="flex gap-3 justify-center">
@@ -467,6 +515,15 @@ const ContentTable = ({
         });
 
         return rows;
+    };
+
+    // ── Sort tooltip label ─────────────────────────────────────────────────
+    const getSortLabel = (col) => {
+        if (!sortable || col.key === "SNo") return "";
+        if (sortKey !== col.key) return "Click to sort";
+        if (sortDir === "asc") return "Sorted ascending — click for descending";
+        if (sortDir === "desc") return "Sorted descending — click to clear";
+        return "Click to sort";
     };
 
     return (
@@ -518,7 +575,7 @@ const ContentTable = ({
             <div className="w-full" ref={containerRef}>
                 {loading && <Preloader />}
 
-                {/* Mobile Card View — always flat, grouping not applied on mobile */}
+                {/* Mobile Card View */}
                 <div className="block md:hidden">
                     <div className="overflow-visible">
                         {displayData?.length > 0 ? (
@@ -613,25 +670,38 @@ const ContentTable = ({
                             {/* HEADER */}
                             <thead className="bg-gradient-to-r from-[#4e2348] to-[#3b1a36] dark:from-[#3a1a35] dark:to-[#2a1226] sticky top-0 z-20">
                                 <tr>
-                                    {filteredColumns.map((col, colIndex) => (
-                                        <th
-                                            key={col.key}
-                                            style={getColumnWidthStyle(col.key)}
-                                            className={`relative font-semibold whitespace-nowrap px-4 py-2 border-b border-slate-600/30 dark:border-slate-600/20 text-white/90 dark:text-slate-200 text-[13px] tracking-wide
-                                                ${getAlignmentClass(col.align || "left")}
-                                                ${colIndex !== filteredColumns.length - 1 || actions?.length > 0
-                                                    ? "border-r border-r-slate-600/20 dark:border-r-slate-600/15"
-                                                    : ""}`}
-                                        >
-                                            <div className="flex items-center justify-between gap-2 pr-2">
-                                                <span className="truncate capitalize">{col.label}</span>
-                                            </div>
-                                            <ResizeHandle
-                                                columnKey={col.key}
-                                                isLast={colIndex === filteredColumns.length - 1 && !actions?.length}
-                                            />
-                                        </th>
-                                    ))}
+                                    {filteredColumns.map((col, colIndex) => {
+                                        const isSortableCol = sortable && col.key !== "SNo";
+                                        return (
+                                            <th
+                                                key={col.key}
+                                                style={getColumnWidthStyle(col.key)}
+                                                title={getSortLabel(col)}
+                                                onClick={() => handleHeaderClick(col)}
+                                                className={`relative font-semibold whitespace-nowrap px-4 py-2 border-b border-slate-600/30 dark:border-slate-600/20 text-white/90 dark:text-slate-200 text-[13px] tracking-wide
+                                                    ${getAlignmentClass(col.align || "left")}
+                                                    ${colIndex !== filteredColumns.length - 1 || actions?.length > 0
+                                                        ? "border-r border-r-slate-600/20 dark:border-r-slate-600/15"
+                                                        : ""}
+                                                    ${isSortableCol ? "cursor-pointer select-none hover:bg-white/10 transition-colors duration-150" : ""}`}
+                                            >
+                                                <div className="flex items-center justify-between gap-2 pr-2">
+                                                    <span className="truncate capitalize">{col.label}</span>
+                                                    {isSortableCol && (
+                                                        <SortIcon
+                                                            columnKey={col.key}
+                                                            sortKey={sortKey}
+                                                            sortDir={sortDir}
+                                                        />
+                                                    )}
+                                                </div>
+                                                <ResizeHandle
+                                                    columnKey={col.key}
+                                                    isLast={colIndex === filteredColumns.length - 1 && !actions?.length}
+                                                />
+                                            </th>
+                                        );
+                                    })}
                                     {actions?.length > 0 && (
                                         <th
                                             className={`relative whitespace-nowrap text-center px-4 py-2 border-b border-[#4e2348]/30 dark:border-[#4e2348]/20 text-white/90 dark:text-white text-[13px] tracking-wide capitalize bg-gradient-to-r from-[#4e2348] to-[#3b1a36] dark:from-[#3a1a35] dark:to-[#2a1226]
@@ -734,12 +804,21 @@ const ContentTable = ({
 
                             {/* FOOTER */}
                             {footerData && displayData?.length > 0 && (
-                                <tfoot className="bg-gradient-to-r from-slate-100 to-slate-50 dark:from-[#1e1e2a] dark:to-[#1a1a2e] border-t-2 border-slate-300 dark:border-slate-600/50">
-                                    <tr>
+                                <tfoot
+                                    className="bg-gradient-to-r from-slate-100 to-slate-50 dark:from-[#1e1e2a] dark:to-[#1a1a2e] border-t-2 border-slate-300 dark:border-slate-600/50"
+                                    style={{ position: "sticky", bottom: 0, zIndex: 15 }}
+                                >
+                                    <tr style={{ position: "sticky", bottom: 0 }}>
                                         {filteredColumns.map((col, colIndex) => (
                                             <td
                                                 key={col.key}
-                                                style={getColumnWidthStyle(col.key)}
+                                                style={{
+                                                    ...getColumnWidthStyle(col.key),
+                                                    position: "sticky",
+                                                    bottom: 0,
+                                                    background: "inherit",
+                                                    zIndex: 1,
+                                                }}
                                                 className={`px-4 py-3 text-sm font-bold text-slate-800 dark:text-slate-100 ${getAlignmentClass(col.align || "left")} ${getColumnBorderClass(colIndex, filteredColumns.length, actions?.length > 0)}`}
                                             >
                                                 {footerData[col.key] || ""}
@@ -751,7 +830,15 @@ const ContentTable = ({
                                                     ${hasHorizontalScroll && stickyActions
                                                         ? "shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.15)] dark:shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.4)]"
                                                         : ""}`}
-                                                style={{ ...getColumnWidthStyle("__actions__"), ...getStickyActionStyles(false, true) }}
+                                                style={{
+                                                    ...getColumnWidthStyle("__actions__"),
+                                                    ...getStickyActionStyles(false, true),
+                                                    position: "sticky",
+                                                    right: 0,
+                                                    bottom: 0,
+                                                    background: "inherit",
+                                                    zIndex: 1,
+                                                }}
                                             />
                                         )}
                                     </tr>
@@ -794,7 +881,9 @@ ContentTable.propTypes = {
     stickyActions: PropTypes.bool,
     pageSize: PropTypes.number,
     autoFocusSearch: PropTypes.bool,
-    // New grouping props
+    // Sorting
+    sortable: PropTypes.bool,
+    // Grouping
     groupBy: PropTypes.string,
     mergedColumns: PropTypes.arrayOf(PropTypes.string),
 };

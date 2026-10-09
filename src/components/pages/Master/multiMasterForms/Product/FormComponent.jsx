@@ -22,6 +22,7 @@ import Swal from "sweetalert2";
 import { Button } from "@/components/ui/button";
 import { refreshProductsByType } from "@/redux/slice/productSlice";
 import GodownStockTab from "./GodownStockTab";
+import { sanitize } from "@/lib/inputSanitizer";
 
 // Reusable Components matching Customer Form Style
 const InputRow = ({ label, required, children, error }) => (
@@ -45,6 +46,7 @@ const UnderlineInput = ({
   type = "text",
   required,
   disabled,
+  onKeyDown,
   readOnly
 }) => (
   <input
@@ -55,6 +57,7 @@ const UnderlineInput = ({
     onBlur={onBlur}
     placeholder={placeholder}
     required={required}
+    onKeyDown={onKeyDown}
     disabled={disabled}
     readOnly={readOnly}
     className="w-full px-0 py-1.5 bg-transparent border-0 border-b border-gray-300 dark:border-gray-600 
@@ -285,10 +288,19 @@ const FormComponent = ({
   viewMode = false,
   onSuccess,
   modalMode = false,
+  loadProductById
 }) => {
 
   const { selectedBranchId, userId, currentFinancialYear } = useAuth();
   const { inventorySettings, generalSettings, saleSettings } = useSelector((state) => state.settings);
+  const orgData = useSelector((state) => state.organization.organizationData);
+
+  const allProducts = useSelector((state) => state.products.allProducts);
+
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef(null);
+
   const navigate = useNavigate();
   const [errors, setErrors] = useState({});
   const [alert, setAlert] = useState(null);
@@ -308,20 +320,20 @@ const FormComponent = ({
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [nutritionData, setNutritionData] = useState([]);
   const [bomData, setBomData] = useState([]);
-const handleSubmitRef = useRef(null);
-useEffect(() => {
-  handleSubmitRef.current = handleSubmit;
-});
-useEffect(() => {
-  const handleKeyDown = (e) => {
-    if (e.ctrlKey && e.key === "s") {
-      e.preventDefault();
-      handleSubmitRef.current?.(e); // always calls latest version
-    }
-  };
-  window.addEventListener("keydown", handleKeyDown);
-  return () => window.removeEventListener("keydown", handleKeyDown);
-}, []); // ← empty deps is now safe because we use the ref
+  const handleSubmitRef = useRef(null);
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  });
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey && e.key === "s") {
+        e.preventDefault();
+        handleSubmitRef.current?.(e); // always calls latest version
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []); // ← empty deps is now safe because we use the ref
   // Dropdown visibility states
   const [showGroupCodeDropdown, setShowGroupCodeDropdown] = useState(false);
   const [showGroup1Dropdown, setShowGroup1Dropdown] = useState(false);
@@ -378,13 +390,18 @@ useEffect(() => {
     group4Id: subGrp4[0]?.groupId ?? '',
     brandId: 1,
     unitId: unitList[0]?.unitId ?? '',
+    singleBarcode: '',
     partNo: '',
     costPrice: 0,
     salesTaxId: settings?.ActivateTax
-      ? taxList?.length > 0 ? [taxList[taxList.length - 1]?.taxId] : []
+      ? taxList?.length > 0 ? [
+          (taxList.find(t => Number(t.rate) === 15 || Number(t.taxPercentage) === 15 || String(t.taxName).includes('15')) || taxList[taxList.length - 1])?.taxId
+        ] : []
       : [],
     PurchaseTaxId: settings?.ActivateTax
-      ? taxList?.length > 0 ? [taxList[taxList.length - 1]?.taxId] : []
+      ? taxList?.length > 0 ? [
+          (taxList.find(t => Number(t.rate) === 15 || Number(t.taxPercentage) === 15 || String(t.taxName).includes('15')) || taxList[taxList.length - 1])?.taxId
+        ] : []
       : [],
     taxType: !settings?.taxincluded ? 'Excluded' : 'Included',
     minimumStock: '',
@@ -436,7 +453,9 @@ useEffect(() => {
       if (groupCodeDropdownRef.current && !groupCodeDropdownRef.current.contains(event.target)) {
         setShowGroupCodeDropdown(false);
       }
-
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
       if (group1DropdownRef.current && !group1DropdownRef.current.contains(event.target)) {
         setShowGroup1Dropdown(false);
       }
@@ -479,6 +498,53 @@ useEffect(() => {
 
   }, []);
 
+  const checkDuplicateProduct = async (fieldName, value) => {
+    if (!value || !Array.isArray(allProducts) || allProducts.length === 0) return;
+
+    let match = null;
+
+    if (fieldName === 'productCode') {
+      match = allProducts.find(
+        p => p.productCode?.toLowerCase() === value.trim().toLowerCase()
+      );
+    } else if (fieldName === 'singleBarcode') {
+      match = allProducts.find(
+        p => p.barcode === value.trim()           // ← direct field from API
+          || p.unit_conversions?.some(u => u.barcode === value.trim())
+      );
+    }
+
+    if (match) {
+      const result = await Swal.fire({
+        title: t('product.duplicate.title') || 'Item Already Exists',
+        html: `<b>${match.productName}</b><br/><span style="color:gray;font-size:13px">${t('product.duplicate.code') || 'Code'}: ${match.productCode}</span>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: t('product.duplicate.load') || 'Load the Item',
+        cancelButtonText: t('product.duplicate.ok') || 'OK',
+      });
+
+      if (result.isConfirmed) {
+        hasInitializedEditData.current = false;
+        loadProductById(match.productCode);  // ← fetch & populate, no navigation
+      }
+    }
+
+
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      const { name, value } = e.target;
+      if (name === 'productCode' || name === 'singleBarcode') {
+        e.preventDefault(); // don't submit form
+        checkDuplicateProduct(name, value);
+      }
+    }
+  };
+
   const resetFormData = () => {
     // Pass currently-loaded dropdown data so defaults are correct
     setFormData(getInitialFormData({
@@ -492,7 +558,13 @@ useEffect(() => {
       subGrp4: prodSubGroupByCatFour,
     }));
 
-    setBarcodeData([{ id: 1, unit: units[0]?.unitId ?? '', conversion: 1, barcode: '' }]);
+    setBarcodeData(
+      inventorySettings?.activateMultyUnit === false
+        ? [{ id: 1, unit: units[0]?.unitId ?? '', conversion: 1, barcode: '' }]
+        : [{ id: 1, unit: units[0]?.unitId ?? '', conversion: 1, barcode: '' }]
+    );
+    // Also reset the field:
+    setFormData(prev => ({ ...prev, singleBarcode: '' }));
     setSalePriceData([{
       salespriceId: null,
       id: 1,
@@ -528,12 +600,15 @@ useEffect(() => {
 
   useEffect(() => {
     if (tax?.length && generalSettings?.ActivateTax) {
-      setFormData(prev => ({
-        ...prev,
-        // Convert to string
-        salesTaxId: prev.salesTaxId?.length > 0 ? prev.salesTaxId : [tax[tax.length - 1].taxId.toString()],
-        PurchaseTaxId: prev.PurchaseTaxId?.length > 0 ? prev.PurchaseTaxId : [tax[tax.length - 1].taxId.toString()]
-      }));
+      setFormData(prev => {
+        const defaultTaxId = (tax.find(t => Number(t.rate) === 15 || Number(t.taxPercentage) === 15 || String(t.taxName).includes('15')) || tax[tax.length - 1])?.taxId?.toString();
+        return {
+          ...prev,
+          // Convert to string
+          salesTaxId: prev.salesTaxId?.length > 0 ? prev.salesTaxId : (defaultTaxId ? [defaultTaxId] : []),
+          PurchaseTaxId: prev.PurchaseTaxId?.length > 0 ? prev.PurchaseTaxId : (defaultTaxId ? [defaultTaxId] : [])
+        };
+      });
     }
   }, [tax, generalSettings?.ActivateTax]);
 
@@ -576,6 +651,7 @@ useEffect(() => {
         group4Id: editData.group4Id || "",
         brandId: editData.brandId || "",
         unitId: editData.unitId || "",
+        singleBarcode: editData.unit_conversions?.[0]?.barcode || '',
         partNo: editData.partNo || "",
         costPrice: editData.purchaseRate || "",
         // Handle both old taxId format and new array format
@@ -722,6 +798,23 @@ useEffect(() => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    let updatedValue = value;
+
+    if (name === "productName") {
+      const trimmed = value.trim();
+      if (trimmed.length >= 1 && Array.isArray(allProducts) && allProducts.length > 0) {
+        const lower = trimmed.toLowerCase();
+        const matched = allProducts
+          .filter(p => p.productName?.toLowerCase().includes(lower))
+          .slice(0, 8); // show max 8 suggestions
+        setSuggestions(matched);
+        setShowSuggestions(matched.length > 0);
+      } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }
     if (name === "productCode") {
       setFormData((prev) => ({ ...prev, [name]: value.replace(/[\\/:*?"<>|]/g, "") }));
       return;
@@ -731,11 +824,38 @@ useEffect(() => {
       if (errors[name]) setErrors(prev => ({ ...prev, [name]: undefined }));
       return;
     }
-    setFormData((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+    if (name === "singleBarcode") {
+      updatedValue = sanitize.uppercaseAlphaNumeric(value);
+      setBarcodeData(prev => prev.map((row, i) => i === 0 ? { ...row, barcode: value } : row));
+    }
+    if (
+      [
+        "PurchaseRatePer",
+        "costPrice",
+        "openingStock",
+        "minimumStock",
+        "maximumStock",
+        "reorderLevel",
+      ].includes(name)
+    ) {
+      updatedValue = value.replace(/[^0-9.]/g, "");
+    }
+    if (["partNo"].includes(name)) {
+      updatedValue = sanitize.numbersSpace(value);
+    }
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : updatedValue,
+    }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: undefined }));
   };
 
-  const handleInputBlur = (e) => validateFieldOnBlur(e.target.name);
+  const handleInputBlur = (e) => {
+    validateFieldOnBlur(e.target.name);
+    if (e.target.name === 'productCode' || e.target.name === 'singleBarcode') {
+      checkDuplicateProduct(e.target.name, e.target.value);
+    }
+  };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -783,7 +903,8 @@ useEffect(() => {
       Location: formData.Location, AlternativeNo: formData.AlternativeNo, Ingredients: formData.Ingredients,
       NutritionFact: formData.NutritionFact, NutritionName: formData.NutritionName,
       NutritionDetails: JSON.stringify(nutritionDetails) || null, allowBatch: true,
-      PurchaseRatePer: formData.PurchaseRatePer || 0, branchId: selectedBranchId, CreatedUser: userId,
+      PurchaseRatePer: formData.PurchaseRatePer || 0, branchId: selectedBranchId,
+      ...(isEditMode ? { ModifiedUser: userId } : { CreatedUser: userId }),
       unitConversions: barcodeData
         .filter(row => row.unit && row.conversion)  // ← just needs unit + conversion
         .map(row => ({
@@ -816,9 +937,15 @@ useEffect(() => {
       { field: "unitId", label: t("product.form.baseUnit") },
       { field: "group4Id", label: t("product.form.subGroup4") },
     ];
+
+    if (generalSettings?.ActivateTax) {
+      requiredFields.push({ field: "salesTaxId", label: t("product.form.salesTax") || "Sales Tax" });
+      requiredFields.push({ field: "PurchaseTaxId", label: t("product.form.purchaseTax") || "Purchase Tax" });
+    }
+
     requiredFields.forEach(({ field, label }) => {
       const value = formData[field];
-      if (!value || String(value).trim() === "") newErrors[field] = `${label} is required`;
+      if (!value || (Array.isArray(value) && value.length === 0) || String(value).trim() === "") newErrors[field] = `${label} is required`;
     });
 
     // At least one valid unit conversion row (has unit + conversion)
@@ -855,7 +982,6 @@ useEffect(() => {
   };
 
   const submitProduct = async (payload) => {
-    
 
     try {
       onSubmitStateChange?.(true);
@@ -935,13 +1061,21 @@ useEffect(() => {
   // Updated tabs - merged "groups" and "details" into "general"
   const tabs = [
     { id: "general", label: "General" },
-    { id: "barcode", label: t("Barcode") || "Barcode" },
+    ...(inventorySettings?.activateMultyUnit !== false
+      ? [{ id: "barcode", label: t("Barcode") || "Barcode" }]
+      : []),
     { id: 'salesPrice', label: 'Sales Price' },
-    { id: 'bom', label: 'BOM' },
+    ...(orgData?.subscriptionPlan != 'Basic'
+      ? [{ id: 'bom', label: 'BOM' }]
+      : []),
     { id: 'nutrition', label: 'Nutrition' },
-    ...(isEditMode ? [{ id: 'stock', label: 'Stock' }] : []),   // ← add this line
+    ...((isEditMode || !!editData) ? [{ id: 'stock', label: 'Stock' }] : []),   // ← add this line
   ];
-
+  useEffect(() => {
+    if (inventorySettings?.activateMultyUnit === false && formData.unitId) {
+      setBarcodeData([{ id: 1, unit: formData.unitId, conversion: 1, barcode: formData.singleBarcode || '' }]);
+    }
+  }, [inventorySettings?.activateMultyUnit, formData.unitId, formData.singleBarcode]);
   // Helper to get image preview URL
   const getImagePreview = () => {
     if (formData.productImage && formData.productImage instanceof File) {
@@ -955,59 +1089,120 @@ useEffect(() => {
 
   return (
     <>
-      {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+      {alert && (
+        <AlertBox key={alert.id} message={alert.message} type={alert.type} />
+      )}
       <div className="mx-auto px-4 py-2">
         <div className="max-w-6xl mx-auto bg-white dark:bg-[#1e1e1e] rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3">
             <form onSubmit={handleSubmit}>
-
               {/* ═══════════════════════════════════════════════════════════ */}
               {/* MAIN SECTION - Always Visible                              */}
               {/* ═══════════════════════════════════════════════════════════ */}
               <div className="flex gap-6 mb-4">
-
                 {/* Left Side - Core Fields */}
                 <div className="flex-1 space-y-2">
-
                   {/* Product Name - Large Title with Favourite Star */}
                   <div>
                     <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">
-                      {t("product.form.productName")} <span className="text-red-500">*</span>
+                      {t("product.form.productName")}{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <div className="flex items-center gap-2">
                       {!viewMode && (
                         <button
                           type="button"
-                          onClick={() => setFormData(prev => ({ ...prev, favourite: !prev.favourite }))}
+                          onClick={() =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              favourite: !prev.favourite,
+                            }))
+                          }
                           className={`flex-shrink-0 p-1 rounded transition-colors ${formData.favourite
-                            ? 'text-yellow-500 hover:text-yellow-600'
-                            : 'text-gray-400 hover:text-gray-500'
+                              ? "text-yellow-500 hover:text-yellow-600"
+                              : "text-gray-400 hover:text-gray-500"
                             }`}
-                          title={formData.favourite ? t("product.form.removeFromFavourite") : t("product.form.addToFavourite")}
+                          title={
+                            formData.favourite
+                              ? t("product.form.removeFromFavourite")
+                              : t("product.form.addToFavourite")
+                          }
                         >
-                          <Star className={`w-5 h-5 ${formData.favourite ? 'fill-current' : ''}`} />
+                          <Star
+                            className={`w-5 h-5 ${formData.favourite ? "fill-current" : ""}`}
+                          />
                         </button>
                       )}
                       {viewMode && formData.favourite && (
                         <Star className="w-5 h-5 text-yellow-500 fill-current flex-shrink-0" />
                       )}
-                      <input
-                        type="text"
-                        name="productName"
-                        value={formData.productName}
-                        onChange={handleInputChange}
-                        onBlur={handleInputBlur}
-                        placeholder={t("product.placeholders.productName")}
-                        required
-                        readOnly={viewMode}
-                        className="flex-1 text-xl font-bold bg-transparent border-0 border-b-2 border-gray-800 dark:border-gray-300 
-                                 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500
-                                 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400 pb-1 transition-colors
-                                 read-only:border-gray-500"
-                      />
+                      <div className="flex-1 relative" ref={suggestionsRef}>
+                        <input
+                          type="text"
+                          name="productName"
+                          value={formData.productName}
+                          onChange={handleInputChange}
+                          onBlur={handleInputBlur}
+                          onFocus={() =>
+                            suggestions.length > 0 && setShowSuggestions(true)
+                          }
+                          placeholder={t("product.placeholders.productName")}
+                          required
+                          readOnly={viewMode}
+                          className="w-full text-xl font-bold bg-transparent border-0 border-b-2 border-gray-800 dark:border-gray-300 
+             text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500
+             focus:outline-none focus:border-teal-600 dark:focus:border-teal-400 pb-1 transition-colors
+             read-only:border-gray-500"
+                        />
+
+                        {showSuggestions && !viewMode && (
+                          <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white dark:bg-[#242424] border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-64 overflow-y-auto">
+                            {suggestions.map((product) => (
+                              <button
+                                key={product.productCode}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()} // prevent blur before click
+                                onClick={() => {
+                                  // Just warn — don't auto-fill. User is aware it exists.
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    productName: product.productName,
+                                  }));
+                                  setShowSuggestions(false);
+                                  setSuggestions([]);
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-0"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div>
+                                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                      {product.productName}
+                                    </span>
+                                    {product.productNameArb && (
+                                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                                        {product.productNameArb}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0 font-mono">
+                                    {product.productCode}
+                                  </span>
+                                </div>
+                                {product.unitName && (
+                                  <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                    Unit: {product.unitName}
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {errors.productName && (
-                      <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{errors.productName}</p>
+                      <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                        {errors.productName}
+                      </p>
                     )}
                   </div>
 
@@ -1027,7 +1222,9 @@ useEffect(() => {
                         <button
                           type="button"
                           onClick={handleTranslate}
-                          disabled={translating || !formData.productName?.trim()}
+                          disabled={
+                            translating || !formData.productName?.trim()
+                          }
                           className={`h-8 px-2.5 main-bg text-gray-200 rounded-md hover:main-bg dark:hover:bg-blue-500 transition-colors flex items-center justify-center flex-shrink-0 ${translating || !formData.productName?.trim() ? "opacity-60 cursor-not-allowed" : ""}`}
                           title={t("product.buttons.translate")}
                         >
@@ -1038,39 +1235,58 @@ useEffect(() => {
                   </InputRow>
 
                   {/* Product Code, Main Group, Base Unit - All in one line */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                  <div
+                    className={`grid grid-cols-1 md:grid-cols-3  gap-4 pt-1`}
+                  >
                     {/* Product Code */}
                     <div>
                       <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">
-                        {t("product.form.productCode")} <span className="text-red-500">*</span>
+                        {t("product.form.productCode")}{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <UnderlineInput
                         name="productCode"
                         value={formData.productCode}
                         onChange={handleInputChange}
                         onBlur={handleInputBlur}
+                        onKeyDown={handleKeyDown}
                         placeholder={t("product.placeholders.productCode")}
                         required
                         readOnly={viewMode || isEditMode}
                       />
-                      {errors.productCode && <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{errors.productCode}</p>}
+                      {errors.productCode && (
+                        <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                          {errors.productCode}
+                        </p>
+                      )}
                     </div>
 
                     {/* Main Group */}
                     <div>
                       <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">
-                        {t("product.form.mainGroup")} <span className="text-red-500">*</span>
+                        {t("product.form.mainGroup")}{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <div className="flex gap-2 items-center">
                         <div className="flex-1">
                           <UnderlineDropdown
                             name="groupCode"
                             value={formData.groupCode}
-                            options={productMainGroups.map(d => ({ value: d.groupCode, label: d.groupName }))}
+                            options={productMainGroups.map((d) => ({
+                              value: d.groupCode,
+                              label: d.groupName,
+                            }))}
                             onChange={(value) => {
-                              setFormData(prev => ({ ...prev, groupCode: value }));
+                              setFormData((prev) => ({
+                                ...prev,
+                                groupCode: value,
+                              }));
                               if (value) fetchProductCode(value);
-                              if (errors.groupCode) setErrors(prev => ({ ...prev, groupCode: undefined }));
+                              if (errors.groupCode)
+                                setErrors((prev) => ({
+                                  ...prev,
+                                  groupCode: undefined,
+                                }));
                             }}
                             placeholder={t("product.form.mainGroup")}
                             loading={loadings.prodMain}
@@ -1080,25 +1296,43 @@ useEffect(() => {
                             dropdownRef={groupCodeDropdownRef}
                           />
                         </div>
-                        <AddBtn onClick={() => setProdMainGroupOpen(true)} title={t('product.buttons.addMainGroup')} />
+                        <AddBtn
+                          onClick={() => setProdMainGroupOpen(true)}
+                          title={t("product.buttons.addMainGroup")}
+                        />
                       </div>
-                      {errors.groupCode && <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{errors.groupCode}</p>}
+                      {errors.groupCode && (
+                        <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                          {errors.groupCode}
+                        </p>
+                      )}
                     </div>
 
                     {/* Base Unit */}
                     <div>
                       <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">
-                        {t("product.form.baseUnit")} <span className="text-red-500">*</span>
+                        {t("product.form.baseUnit")}{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <div className="flex gap-2 items-center">
                         <div className="flex-1">
                           <UnderlineDropdown
                             name="unitId"
                             value={Number(formData.unitId)}
-                            options={units.map(d => ({ value: d.unitId, label: d.UnitName }))}
+                            options={units.map((d) => ({
+                              value: d.unitId,
+                              label: d.UnitName,
+                            }))}
                             onChange={(value) => {
-                              setFormData(prev => ({ ...prev, unitId: value }));
-                              if (errors.unitId) setErrors(prev => ({ ...prev, unitId: undefined }));
+                              setFormData((prev) => ({
+                                ...prev,
+                                unitId: value,
+                              }));
+                              if (errors.unitId)
+                                setErrors((prev) => ({
+                                  ...prev,
+                                  unitId: undefined,
+                                }));
                             }}
                             placeholder={t("product.placeholders.baseUnit")}
                             loading={loadings.unit}
@@ -1108,9 +1342,82 @@ useEffect(() => {
                             dropdownRef={unitDropdownRef}
                           />
                         </div>
-                        <AddBtn onClick={() => { setActiveMasterForm(t("unit.breadcrumb.title")); setBrandModalIsOpen(true); }} title={t('product.buttons.addUnit')} />
+                        <AddBtn
+                          onClick={() => {
+                            setActiveMasterForm(t("unit.breadcrumb.title"));
+                            setBrandModalIsOpen(true);
+                          }}
+                          title={t("product.buttons.addUnit")}
+                        />
                       </div>
-                      {errors.unitId && <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{errors.unitId}</p>}
+                      {errors.unitId && (
+                        <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                          {errors.unitId}
+                        </p>
+                      )}
+                    </div>
+                    {inventorySettings?.activateMultyUnit === false && (
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block">
+                          {t("product.list.columns.barcode")}{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <UnderlineInput
+                          name="singleBarcode"
+                          value={formData.singleBarcode}
+                          onChange={handleInputChange}
+                          onKeyDown={handleKeyDown}
+                          placeholder={
+                            t("product.placeholders.barcode") || "Barcode"
+                          }
+                          readOnly={viewMode}
+                        />
+                        {errors.productCode && (
+                          <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                            {errors.productCode}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {/* Cost Price */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block">
+                        {t("product.form.costPrice")}
+                      </label>
+                      <UnderlineInput
+                        name="costPrice"
+                        value={formData.costPrice}
+                        onChange={handleInputChange}
+                        placeholder={t("product.placeholders.costPrice")}
+                        type="number"
+                        min={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "-") e.preventDefault();
+                        }}
+                        readOnly={viewMode}
+                      />
+                      {errors.costPrice && (
+                        <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                          {errors.costPrice}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block">
+                        {t("product.form.PurchaseRatePer")}
+                      </label>
+                      <UnderlineInput
+                        name="PurchaseRatePer"
+                        value={formData.PurchaseRatePer}
+                        onChange={handleInputChange}
+                        placeholder="%"
+                        type="number"
+                        min={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "-") e.preventDefault();
+                        }}
+                        readOnly={viewMode}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1120,9 +1427,11 @@ useEffect(() => {
                   <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 block">
                     {t("product.form.logo")}
                   </label>
-                  <div className="w-36 h-36 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg 
+                  <div
+                    className="w-36 h-36 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg 
                                 flex flex-col items-center justify-center relative overflow-hidden
-                                hover:border-teal-400 dark:hover:border-teal-500 transition-colors group bg-gray-50 dark:bg-[#242424]">
+                                hover:border-teal-400 dark:hover:border-teal-500 transition-colors group bg-gray-50 dark:bg-[#242424]"
+                  >
                     {getImagePreview() ? (
                       <>
                         <img
@@ -1141,11 +1450,18 @@ useEffect(() => {
                             </label>
                             <button
                               type="button"
-                              onClick={() => setFormData(prev => ({ ...prev, productImage: null }))}
+                              onClick={() =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  productImage: null,
+                                }))
+                              }
                               className="p-2 bg-red-500/90 rounded-full hover:bg-red-500 transition-colors"
                               title="Remove image"
                             >
-                              <span className="text-white text-sm font-bold leading-none">×</span>
+                              <span className="text-white text-sm font-bold leading-none">
+                                ×
+                              </span>
                             </button>
                           </div>
                         )}
@@ -1153,7 +1469,7 @@ useEffect(() => {
                     ) : (
                       <label
                         htmlFor="product-image-upload"
-                        className={`flex flex-col items-center justify-center w-full h-full ${!viewMode ? 'cursor-pointer' : 'cursor-default'}`}
+                        className={`flex flex-col items-center justify-center w-full h-full ${!viewMode ? "cursor-pointer" : "cursor-default"}`}
                       >
                         <ImageIcon className="w-8 h-8 text-gray-400 dark:text-gray-500 mb-1" />
                         {!viewMode && (
@@ -1181,17 +1497,59 @@ useEffect(() => {
               {/* ═══════════════════════════════════════════════════════════ */}
               <div className="mb-4 py-2.5 px-3 bg-gray-50 dark:bg-[#242424] rounded-lg border border-gray-200 dark:border-gray-700">
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                  <Cb id="active" name="active" checked={formData.active} onChange={handleInputChange} label={t("product.form.active")} disabled={viewMode} />
+                  <Cb
+                    id="active"
+                    name="active"
+                    checked={formData.active}
+                    onChange={handleInputChange}
+                    label={t("product.form.active")}
+                    disabled={viewMode}
+                  />
                   <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 hidden sm:block"></div>
-                  <Cb id="showReminder" name="showReminder" checked={formData.showReminder} onChange={handleInputChange} label={t("product.form.showReminder")} disabled={viewMode} />
+                  <Cb
+                    id="showReminder"
+                    name="showReminder"
+                    checked={formData.showReminder}
+                    onChange={handleInputChange}
+                    label={t("product.form.showReminder")}
+                    disabled={viewMode}
+                  />
                   <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 hidden sm:block"></div>
-                  <Cb id="pointOfSale" name="pointOfSale" checked={formData.pointOfSale} onChange={handleInputChange} label={t("product.form.pointOfSale")} disabled={viewMode} />
+                  <Cb
+                    id="pointOfSale"
+                    name="pointOfSale"
+                    checked={formData.pointOfSale}
+                    onChange={handleInputChange}
+                    label={t("product.form.pointOfSale")}
+                    disabled={viewMode}
+                  />
                   <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 hidden sm:block"></div>
-                  <Cb id="EnableSales" name="EnableSales" checked={formData.EnableSales} onChange={handleInputChange} label={t("product.form.enableSales")} disabled={viewMode} />
+                  <Cb
+                    id="EnableSales"
+                    name="EnableSales"
+                    checked={formData.EnableSales}
+                    onChange={handleInputChange}
+                    label={t("product.form.enableSales")}
+                    disabled={viewMode}
+                  />
                   <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 hidden sm:block"></div>
-                  <Cb id="EnablePurchase" name="EnablePurchase" checked={formData.EnablePurchase} onChange={handleInputChange} label={t("product.form.enablePurchase")} disabled={viewMode} />
+                  <Cb
+                    id="EnablePurchase"
+                    name="EnablePurchase"
+                    checked={formData.EnablePurchase}
+                    onChange={handleInputChange}
+                    label={t("product.form.enablePurchase")}
+                    disabled={viewMode}
+                  />
                   <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 hidden sm:block"></div>
-                  <Cb id="EnableInventory" name="EnableInventory" checked={formData.EnableInventory} onChange={handleInputChange} label={t("product.form.enableInventory")} disabled={viewMode} />
+                  <Cb
+                    id="EnableInventory"
+                    name="EnableInventory"
+                    checked={formData.EnableInventory}
+                    onChange={handleInputChange}
+                    label={t("product.form.enableInventory")}
+                    disabled={viewMode}
+                  />
                   <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 hidden sm:block"></div>
 
                   {/* Show Expiry with inline days input */}
@@ -1205,7 +1563,10 @@ useEffect(() => {
                       className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                       disabled={viewMode}
                     />
-                    <label htmlFor="ShowExpiry" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label
+                      htmlFor="ShowExpiry"
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
                       {t("product.form.ShowExpiry")}
                     </label>
                     {formData.ShowExpiry && (
@@ -1231,23 +1592,25 @@ useEffect(() => {
               <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
                 <div className="flex border-b border-gray-300 dark:border-gray-600 overflow-x-auto">
                   {tabs.map((tab, index) => {
-
                     // Which tabs have errors
                     const tabHasError =
-                      (tab.id === 'barcode' && errors.barcodeData) ||
-                      (tab.id === 'salesPrice' && errors.salePriceData);
+                      (tab.id === "barcode" && errors.barcodeData) ||
+                      (tab.id === "salesPrice" && errors.salePriceData);
 
                     return (
-                      <div key={tab.id} className="flex items-center flex-shrink-0">
+                      <div
+                        key={tab.id}
+                        className="flex items-center flex-shrink-0"
+                      >
                         <button
                           type="button"
                           onClick={() => setActiveTab(tab.id)}
                           className={`px-4 py-2 text-sm font-medium transition-all relative whitespace-nowrap flex items-center gap-1.5
               ${activeTab === tab.id
-                              ? 'bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 border-b-2 border-teal-600 dark:border-teal-400'
+                              ? "bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 border-b-2 border-teal-600 dark:border-teal-400"
                               : tabHasError
-                                ? 'bg-white dark:bg-[#1e1e1e] text-red-500 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                                : 'bg-white dark:bg-[#1e1e1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                ? "bg-white dark:bg-[#1e1e1e] text-red-500 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                : "bg-white dark:bg-[#1e1e1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
                             }`}
                         >
                           {tab.label}
@@ -1270,12 +1633,14 @@ useEffect(() => {
                   <div className="flex flex-col gap-1 mt-1.5 px-1">
                     {errors.barcodeData && (
                       <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1">
-                        <span className="font-medium">Barcode:</span> {errors.barcodeData}
+                        <span className="font-medium">Barcode:</span>{" "}
+                        {errors.barcodeData}
                       </p>
                     )}
                     {errors.salePriceData && (
                       <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1">
-                        <span className="font-medium">Sales Price:</span> {errors.salePriceData}
+                        <span className="font-medium">Sales Price:</span>{" "}
+                        {errors.salePriceData}
                       </p>
                     )}
                   </div>
@@ -1286,14 +1651,11 @@ useEffect(() => {
               {/* ═══════════════════════════════════════════════════════════ */}
               {activeTab && (
                 <div className="border border-gray-200 dark:border-gray-700 border-t-0 rounded-b-lg p-4 bg-gray-50 dark:bg-[#242424] min-h-[380px]">
-
                   {/* ─── GENERAL TAB (Merged Groups + Details) ─── */}
                   {activeTab === "general" && (
                     <div className="space-y-4">
-
                       {/* Product Groups Fields */}
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-2">
-
                         {/* Sub Group 1 */}
                         <InputRow label={t("product.form.subGroup1")}>
                           <div className="flex gap-2 items-center">
@@ -1301,9 +1663,15 @@ useEffect(() => {
                               <UnderlineDropdown
                                 name="group1Id"
                                 value={formData.group1Id}
-                                options={prodSubGroupByCatOne.map(d => ({ value: d.groupId, label: d.groupName }))}
+                                options={prodSubGroupByCatOne.map((d) => ({
+                                  value: d.groupId,
+                                  label: d.groupName,
+                                }))}
                                 onChange={(value) => {
-                                  setFormData(prev => ({ ...prev, group1Id: value }));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    group1Id: value,
+                                  }));
                                 }}
                                 placeholder={t("product.form.subGroup1")}
                                 loading={loadings.subGrpByCatOne}
@@ -1313,7 +1681,13 @@ useEffect(() => {
                                 dropdownRef={group1DropdownRef}
                               />
                             </div>
-                            <AddBtn onClick={() => { setProdGroupOpen(true); setSelectedCatgoryGrp('category-1'); }} title={t('product.buttons.addSubGroup')} />
+                            <AddBtn
+                              onClick={() => {
+                                setProdGroupOpen(true);
+                                setSelectedCatgoryGrp("category-1");
+                              }}
+                              title={t("product.buttons.addSubGroup")}
+                            />
                           </div>
                         </InputRow>
 
@@ -1324,9 +1698,15 @@ useEffect(() => {
                               <UnderlineDropdown
                                 name="group2Id"
                                 value={formData.group2Id}
-                                options={prodSubGroupByCatTwo.map(d => ({ value: d.groupId, label: d.groupName }))}
+                                options={prodSubGroupByCatTwo.map((d) => ({
+                                  value: d.groupId,
+                                  label: d.groupName,
+                                }))}
                                 onChange={(value) => {
-                                  setFormData(prev => ({ ...prev, group2Id: value }));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    group2Id: value,
+                                  }));
                                 }}
                                 placeholder={t("product.form.subGroup2")}
                                 loading={loadings.subGrpByCatTwo}
@@ -1336,7 +1716,13 @@ useEffect(() => {
                                 dropdownRef={group2DropdownRef}
                               />
                             </div>
-                            <AddBtn onClick={() => { setProdGroupOpen(true); setSelectedCatgoryGrp('category-2'); }} title={t('product.buttons.addSubGroup')} />
+                            <AddBtn
+                              onClick={() => {
+                                setProdGroupOpen(true);
+                                setSelectedCatgoryGrp("category-2");
+                              }}
+                              title={t("product.buttons.addSubGroup")}
+                            />
                           </div>
                         </InputRow>
 
@@ -1347,9 +1733,15 @@ useEffect(() => {
                               <UnderlineDropdown
                                 name="group3Id"
                                 value={formData.group3Id}
-                                options={prodSubGroupByCatThree.map(d => ({ value: d.groupId, label: d.groupName }))}
+                                options={prodSubGroupByCatThree.map((d) => ({
+                                  value: d.groupId,
+                                  label: d.groupName,
+                                }))}
                                 onChange={(value) => {
-                                  setFormData(prev => ({ ...prev, group3Id: value }));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    group3Id: value,
+                                  }));
                                 }}
                                 placeholder={t("product.form.subGroup3")}
                                 loading={loadings.subGrpByCatThree}
@@ -1359,21 +1751,41 @@ useEffect(() => {
                                 dropdownRef={group3DropdownRef}
                               />
                             </div>
-                            <AddBtn onClick={() => { setProdGroupOpen(true); setSelectedCatgoryGrp('category-3'); }} title={t('product.buttons.addSubGroup')} />
+                            <AddBtn
+                              onClick={() => {
+                                setProdGroupOpen(true);
+                                setSelectedCatgoryGrp("category-3");
+                              }}
+                              title={t("product.buttons.addSubGroup")}
+                            />
                           </div>
                         </InputRow>
 
                         {/* Sub Group 4 */}
-                        <InputRow label={t("product.form.subGroup4")} required error={errors.group4Id}>
+                        <InputRow
+                          label={t("product.form.subGroup4")}
+                          required
+                          error={errors.group4Id}
+                        >
                           <div className="flex gap-2 items-center">
                             <div className="flex-1">
                               <UnderlineDropdown
                                 name="group4Id"
                                 value={formData.group4Id}
-                                options={prodSubGroupByCatFour.map(d => ({ value: d.groupId, label: d.groupName }))}
+                                options={prodSubGroupByCatFour.map((d) => ({
+                                  value: d.groupId,
+                                  label: d.groupName,
+                                }))}
                                 onChange={(value) => {
-                                  setFormData(prev => ({ ...prev, group4Id: value }));
-                                  if (errors.group4Id) setErrors(prev => ({ ...prev, group4Id: undefined }));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    group4Id: value,
+                                  }));
+                                  if (errors.group4Id)
+                                    setErrors((prev) => ({
+                                      ...prev,
+                                      group4Id: undefined,
+                                    }));
                                 }}
                                 placeholder={t("product.form.subGroup4")}
                                 loading={loadings.subGrpByCatFour}
@@ -1383,7 +1795,13 @@ useEffect(() => {
                                 dropdownRef={group4DropdownRef}
                               />
                             </div>
-                            <AddBtn onClick={() => { setProdGroupOpen(true); setSelectedCatgoryGrp('category-4'); }} title={t('product.buttons.addSubGroup')} />
+                            <AddBtn
+                              onClick={() => {
+                                setProdGroupOpen(true);
+                                setSelectedCatgoryGrp("category-4");
+                              }}
+                              title={t("product.buttons.addSubGroup")}
+                            />
                           </div>
                         </InputRow>
 
@@ -1394,9 +1812,15 @@ useEffect(() => {
                               <UnderlineDropdown
                                 name="brandId"
                                 value={formData.brandId}
-                                options={brands.map(d => ({ value: d.brandId, label: d.brandName }))}
+                                options={brands.map((d) => ({
+                                  value: d.brandId,
+                                  label: d.brandName,
+                                }))}
                                 onChange={(value) => {
-                                  setFormData(prev => ({ ...prev, brandId: value }));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    brandId: value,
+                                  }));
                                 }}
                                 placeholder={t("product.form.brand")}
                                 loading={loadings.brand}
@@ -1406,7 +1830,13 @@ useEffect(() => {
                                 dropdownRef={brandDropdownRef}
                               />
                             </div>
-                            <AddBtn onClick={() => { setActiveMasterForm("Brand"); setBrandModalIsOpen(true); }} title={t('product.buttons.addBrand')} />
+                            <AddBtn
+                              onClick={() => {
+                                setActiveMasterForm("Brand");
+                                setBrandModalIsOpen(true);
+                              }}
+                              title={t("product.buttons.addBrand")}
+                            />
                           </div>
                         </InputRow>
 
@@ -1417,10 +1847,16 @@ useEffect(() => {
                             value={formData.category}
                             options={[
                               { value: "Inventory", label: "Inventory" },
-                              { value: "Non Inventory", label: "Non Inventory" }
+                              {
+                                value: "Non Inventory",
+                                label: "Non Inventory",
+                              },
                             ]}
                             onChange={(value) => {
-                              setFormData(prev => ({ ...prev, category: value }));
+                              setFormData((prev) => ({
+                                ...prev,
+                                category: value,
+                              }));
                             }}
                             placeholder={t("product.placeholders.category")}
                             readOnly={viewMode}
@@ -1441,28 +1877,6 @@ useEffect(() => {
                           />
                         </InputRow>
 
-                        {/* Cost Price */}
-                        <InputRow label={t("product.form.costPrice")}>
-                          <div className="grid grid-cols-2 gap-2">
-                            <UnderlineInput
-                              name="costPrice"
-                              value={formData.costPrice}
-                              onChange={handleInputChange}
-                              placeholder={t("product.placeholders.costPrice")}
-                              type="number"
-                              readOnly={viewMode}
-                            />
-                            <UnderlineInput
-                              name="PurchaseRatePer"
-                              value={formData.PurchaseRatePer}
-                              onChange={handleInputChange}
-                              placeholder="%"
-                              type="number"
-                              readOnly={viewMode}
-                            />
-                          </div>
-                        </InputRow>
-
                         {/* Sales Tax */}
                         {generalSettings?.ActivateTax && (
                           <InputRow label={t("product.form.salesTax")}>
@@ -1471,9 +1885,15 @@ useEffect(() => {
                                 <UnderlineMultiSelect
                                   name="salesTaxId"
                                   value={formData.salesTaxId}
-                                  options={tax.map(d => ({ value: d.taxId.toString(), label: d.taxName }))}
+                                  options={tax.map((d) => ({
+                                    value: d.taxId.toString(),
+                                    label: d.taxName,
+                                  }))}
                                   onChange={(values) => {
-                                    setFormData(prev => ({ ...prev, salesTaxId: values }));
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      salesTaxId: values,
+                                    }));
                                   }}
                                   placeholder={t("product.form.salesTax")}
                                   loading={loadings.tax}
@@ -1483,7 +1903,10 @@ useEffect(() => {
                                   dropdownRef={salesTaxDropdownRef}
                                 />
                               </div>
-                              <AddBtn onClick={() => setTaxMasterIsOpen(true)} title={t('product.buttons.addTax')} />
+                              <AddBtn
+                                onClick={() => setTaxMasterIsOpen(true)}
+                                title={t("product.buttons.addTax")}
+                              />
                             </div>
                           </InputRow>
                         )}
@@ -1496,11 +1919,19 @@ useEffect(() => {
                                 <UnderlineMultiSelect
                                   name="PurchaseTaxId"
                                   value={formData.PurchaseTaxId}
-                                  options={tax.map(d => ({ value: d.taxId.toString(), label: d.taxName }))}
+                                  options={tax.map((d) => ({
+                                    value: d.taxId.toString(),
+                                    label: d.taxName,
+                                  }))}
                                   onChange={(values) => {
-                                    setFormData(prev => ({ ...prev, PurchaseTaxId: values }));
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      PurchaseTaxId: values,
+                                    }));
                                   }}
-                                  placeholder={t("product.placeholders.purchaseTax")}
+                                  placeholder={t(
+                                    "product.placeholders.purchaseTax",
+                                  )}
                                   loading={loadings.tax}
                                   readOnly={viewMode}
                                   showDropdown={showPurchaseTaxDropdown}
@@ -1508,7 +1939,10 @@ useEffect(() => {
                                   dropdownRef={purchaseTaxDropdownRef}
                                 />
                               </div>
-                              <AddBtn onClick={() => setTaxMasterIsOpen(true)} title={t('product.buttons.addTax')} />
+                              <AddBtn
+                                onClick={() => setTaxMasterIsOpen(true)}
+                                title={t("product.buttons.addTax")}
+                              />
                             </div>
                           </InputRow>
                         )}
@@ -1522,6 +1956,10 @@ useEffect(() => {
                               onChange={handleInputChange}
                               placeholder="Min"
                               type="number"
+                              min={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "-") e.preventDefault()
+                              }}
                               readOnly={viewMode}
                             />
                             <UnderlineInput
@@ -1530,6 +1968,10 @@ useEffect(() => {
                               onChange={handleInputChange}
                               placeholder="Max"
                               type="number"
+                              min={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "-") e.preventDefault()
+                              }}
                               readOnly={viewMode}
                             />
                             <UnderlineInput
@@ -1538,18 +1980,28 @@ useEffect(() => {
                               onChange={handleInputChange}
                               placeholder="Reorder"
                               type="number"
+                              min={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "-") e.preventDefault()
+                              }}
                               readOnly={viewMode}
                             />
                           </div>
                         </InputRow>
 
-                        <InputRow label={t("product.placeholders.openingStock")}>
+                        <InputRow
+                          label={t("product.placeholders.openingStock")}
+                        >
                           <UnderlineInput
                             name="openingStock"
                             value={formData.openingStock}
                             onChange={handleInputChange}
                             placeholder={t("product.placeholders.openingStock")}
                             type="number"
+                            min={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "-") e.preventDefault();
+                            }}
                             readOnly={viewMode}
                           />
                         </InputRow>
@@ -1600,7 +2052,7 @@ useEffect(() => {
                   )}
 
                   {/* ─── BARCODE TAB ─── */}
-                  {activeTab === 'barcode' && (
+                  {activeTab === "barcode" && (
                     <BarcodeTable
                       units={units}
                       loadings={loadings}
@@ -1613,7 +2065,7 @@ useEffect(() => {
                   )}
 
                   {/* ─── SALES PRICE TAB ─── */}
-                  {activeTab === 'salesPrice' && (
+                  {activeTab === "salesPrice" && (
                     <SalesPriceTable
                       units={units}
                       isEditMode={isEditMode}
@@ -1625,13 +2077,13 @@ useEffect(() => {
                       taxList={tax}
                       selectedTaxIds={formData.salesTaxId}
                       taxType={formData.taxType}
-                      costPrice={formData.costPrice}           // ← add this
+                      costPrice={formData.costPrice} // ← add this
                       purchaseRatePer={formData.PurchaseRatePer} // ← add this
                     />
                   )}
 
                   {/* ─── BOM TAB ─── */}
-                  {activeTab === 'bom' && (
+                  {activeTab === "bom" && (
                     <BOMComponent
                       formData={formData}
                       handleInputChange={handleInputChange}
@@ -1642,7 +2094,7 @@ useEffect(() => {
                   )}
 
                   {/* ─── NUTRITION TAB ─── */}
-                  {activeTab === 'nutrition' && (
+                  {activeTab === "nutrition" && (
                     <NutritionDetails
                       formData={formData}
                       handleInputChange={handleInputChange}
@@ -1652,7 +2104,7 @@ useEffect(() => {
                     />
                   )}
                   {/* ─── STOCK TAB (Only in Edit Mode) ─── */}
-                  {activeTab === 'stock' && (
+                  {activeTab === "stock" && (
                     <GodownStockTab productCode={formData.productCode} />
                   )}
                 </div>
@@ -1663,9 +2115,15 @@ useEffect(() => {
       </div>
 
       {/* Modals */}
-      {(ProdMainGroupHasAccess || canAddProdMainGroup || canEditProdMainGroup) && (
-        <AddProdGroup open={prodMainGroupIsOpen} handleClose={() => setProdMainGroupOpen(false)} onSuccess={getProdMainGroup} />
-      )}
+      {(ProdMainGroupHasAccess ||
+        canAddProdMainGroup ||
+        canEditProdMainGroup) && (
+          <AddProdGroup
+            open={prodMainGroupIsOpen}
+            handleClose={() => setProdMainGroupOpen(false)}
+            onSuccess={getProdMainGroup}
+          />
+        )}
 
       {(ProdGroupHasAccess || canAddProdGroup || canEditProdGroup) && (
         <AddProductGroup
@@ -1685,17 +2143,29 @@ useEffect(() => {
         open={brandModalIsOpen}
         handleClose={() => setBrandModalIsOpen(false)}
         title={activeMasterForm || ""}
-        onSaved={() => { fetchBrands(); fetchUnit(); setActiveMasterForm(null); }}
+        onSaved={() => {
+          fetchBrands();
+          fetchUnit();
+          setActiveMasterForm(null);
+        }}
       />
 
-      <AddTaxMatser open={taxMasterIsOpen} handleClose={() => setTaxMasterIsOpen(false)} onSuccess={fetchTaxes} />
+      <AddTaxMatser
+        open={taxMasterIsOpen}
+        handleClose={() => setTaxMasterIsOpen(false)}
+        onSuccess={fetchTaxes}
+      />
 
       {modalMode && (
         <div className="flex justify-end p-4 border-t sticky bottom-0 bg-white dark:bg-[#1e1e1e] gap-2">
           <Button onClick={modalCloase} variant="outline" className="px-6">
             {t("cancelBtn")}
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting} className="main-bg text-white px-6">
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="main-bg text-white px-6"
+          >
             {submitting ? t("saving") : t("save")}
           </Button>
         </div>
@@ -1732,4 +2202,5 @@ FormComponent.propTypes = {
   modalCloase: PropTypes.func,
   onSuccess: PropTypes.func,
   modalMode: PropTypes.bool,
+  loadProductById: PropTypes.func,
 };

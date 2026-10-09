@@ -8,7 +8,6 @@ import JournalVoucherFormHeader from './JournalVoucherFormHeader'
 import useAuth from '@/redux/hook/auth/useAuth'
 import { useSelector } from 'react-redux'
 import JournalVoucherFormTable from './JournalVoucherFormTable'
-import JournalVoucherFormFooter from './JournalVoucherFormFooter'
 import axiosInstance from '@/lib/axiosConfig'
 import AlertBox from '@/components/common/AlertBox'
 import Preloader from '@/components/common/Preloader'
@@ -16,28 +15,40 @@ import Swal from 'sweetalert2'
 import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat'
 import { showToast } from '@/utils/toast'
 import PopupPreloader from '@/components/common/PopupPreloader'
+import PrintDropdown from '@/components/common/PrintDropdown'
+import { Checkbox } from '@/components/ui/checkbox'
+import printJournalVoucher, { saveJournalVoucherAsPDF } from '@/utils/prints/journalVoucherPrints/journalVoucherPrintOne'
+import { isElectron } from '@/utils/electronPrint'
 
 const JournalVoucherForm = () => {
     const { t } = useTranslation();
     const { journalVoucherId } = useParams()
     const editMode = Boolean(journalVoucherId);
-    const { userId, currentFinancialYear, selectedBranchId, currentCurrencyConversion, currentCurrency } = useAuth();
-    const { generalSettings, purchaseSettings } = useSelector((state) => state.settings);
+    const { userId, currentFinancialYear, selectedBranchId, selectedBranchDetails, currentCurrencyConversion, currentCurrency } = useAuth();
+    const { generalSettings, purchaseSettings, financeSettings } = useSelector((state) => state.settings);
     const navigate = useNavigate();
-    const [alert, setAlert] = useState(null);
     const [fetchLoading, setFetchLoading] = useState(false);
     const [existingJournalNo, setExistingJournalNo] = useState('');
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [voucherNo, setVoucherNo] = useState('');
+    const [currency, setCurrency] = useState([]);
+    const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
     const [resetTableKey, setResetTableKey] = useState(0);
     const [time, setTime] = useState("");
     const [ledgerBalance, setLedgerBalance] = useState(null);
+    const [documents, setDocuments] = useState([]);            // File[] — newly attached
+    const [existingDocuments, setExistingDocuments] = useState([]); // string[] — URLs from server
+    const [removedDocuments, setRemovedDocuments] = useState([]);   // string[] — URLs user removed
+    // ===== PRINT STATE =====
+    const [isPrinting, setIsPrinting] = useState(false);
 
     // ===== HOLD VOUCHER STATE =====
     const [heldVouchers, setHeldVouchers] = useState([]);
     const [showHeldVouchers, setShowHeldVouchers] = useState(false);
     const [restoredHeldVoucherId, setRestoredHeldVoucherId] = useState(null);
+    const [costCenters, setCostCenters] = useState([]);
+
 
     useEffect(() => {
         const updateTime = () => {
@@ -60,6 +71,8 @@ const JournalVoucherForm = () => {
 
     const { privileges, loading: privilegeLoading } = usePrivileges("Journal Voucher");
 
+
+
     const [formData, setFormData] = useState({
         voucherType: "Journal Voucher",
         branchId: selectedBranchId,
@@ -67,15 +80,17 @@ const JournalVoucherForm = () => {
         date: new Date(),
         narration: "",
         totalAmount: 0,
-        costCentreId: null,
+        costCentreId: 1,
         referenceNo: "",
         referenceDate: new Date(),
-        postedStatus: generalSettings?.AccountPosting ? "Pending" : "Yes",
+        postedStatus: generalSettings?.AccountPosting ? "No" : "Yes",
         postedBy: generalSettings?.AccountPosting ? null : userId,
         postedDate: generalSettings?.AccountPosting ? null : new Date(),
         CreatedUser: userId,
+        currencyConversionId: currentCurrencyConversion?.currencyConversionId || null,
         exchangeRate: currentCurrencyConversion?.rate || 1.0,
         exchangeDate: currentCurrencyConversion?.date || new Date(),
+        printAfterSave: financeSettings?.printAfterSave !== undefined ? financeSettings.printAfterSave : false,
         debitTotal: 0,
         creditTotal: 0,
         journalDetails: [
@@ -88,7 +103,7 @@ const JournalVoucherForm = () => {
                 credit: (0).toFixed(generalSettings?.decimalPart ?? 2),
                 Narration: "",
                 RefNo: "",
-                costCentreId: "",
+                costCentreId: 1,
                 currencyConversionId: currentCurrencyConversion?.currencyConversionId,
                 ledgerBalance: (0).toFixed(generalSettings?.decimalPart ?? 2),
                 billByBill: false // Add this
@@ -96,7 +111,9 @@ const JournalVoucherForm = () => {
         ],
         partyDetails: []
     });
-
+    const getDefaultCostCentreId = useCallback(() => {
+        return costCenters?.[0]?.costCentreId || formData.costCentreId || 1;
+    }, [costCenters, formData.costCentreId]);
     useEffect(() => {
         if (editMode) return;
 
@@ -129,7 +146,6 @@ const JournalVoucherForm = () => {
     const [voucherNoGenarating, setVoucherNumberGenarating] = useState(false)
     const [baseDataloading, setBaseDataloading] = useState(false)
     const [baseDataLoaded, setBaseDataLoaded] = useState(false) // Track if base data is loaded
-    const [costCenters, setCostCenters] = useState([]);
     const [ledgers, setLedgers] = useState([]);
 
 
@@ -144,7 +160,10 @@ const JournalVoucherForm = () => {
                 try {
                     const allHeldVouchers = JSON.parse(savedHeldVouchers);
                     const branchHeldVouchers = allHeldVouchers.filter(voucher => voucher.branchId === selectedBranchId);
-                    setHeldVouchers(branchHeldVouchers);
+                    const deduped = Array.from(
+                        new Map(branchHeldVouchers.map(v => [v.id, v])).values()
+                    );
+                    setHeldVouchers(deduped);
                 } catch (error) {
                     console.error('Error parsing held vouchers from localStorage:', error);
                     setHeldVouchers([]);
@@ -159,7 +178,17 @@ const JournalVoucherForm = () => {
         const savedHeldVouchers = localStorage.getItem('heldJournalVouchers');
         const allHeldVouchers = savedHeldVouchers ? JSON.parse(savedHeldVouchers) : [];
         const otherBranchVouchers = allHeldVouchers.filter(voucher => voucher.branchId !== selectedBranchId);
-        const updatedAllVouchers = [...otherBranchVouchers, ...heldVouchers];
+
+        // Drop any zero-amount / entryless junk before persisting
+        const cleanedHeldVouchers = heldVouchers.filter(
+            v => (v.debitTotal || 0) > 0 || (v.creditTotal || 0) > 0
+        );
+
+        const dedupedHeldVouchers = Array.from(
+            new Map(cleanedHeldVouchers.map(v => [v.id, v])).values()
+        );
+
+        const updatedAllVouchers = [...otherBranchVouchers, ...dedupedHeldVouchers];
         if (updatedAllVouchers.length > 0) {
             localStorage.setItem('heldJournalVouchers', JSON.stringify(updatedAllVouchers));
         } else {
@@ -177,7 +206,10 @@ const JournalVoucherForm = () => {
                     try {
                         const allHeldVouchers = JSON.parse(savedHeldVouchers);
                         const branchHeldVouchers = allHeldVouchers.filter(voucher => voucher.branchId === selectedBranchId);
-                        setHeldVouchers(branchHeldVouchers);
+                        const deduped = Array.from(
+                            new Map(branchHeldVouchers.map(v => [v.id, v])).values()
+                        );
+                        setHeldVouchers(deduped);
                     } catch (error) {
                         console.error('Error parsing held vouchers:', error);
                     }
@@ -191,7 +223,11 @@ const JournalVoucherForm = () => {
 
     const holdCurrentVoucher = useCallback(() => {
         const validRows = tableRef.current?.getValidRows() || [];
-        if (validRows.length === 0) {
+        const hasMeaningfulData = validRows.length > 0 && validRows.some(
+            row => row.ledgerId && ((parseFloat(row.debit) || 0) > 0 || (parseFloat(row.credit) || 0) > 0)
+        );
+
+        if (!hasMeaningfulData) {
             showToast.warning("No data to hold. Please add journal entries first.");
             return;
         }
@@ -208,7 +244,10 @@ const JournalVoucherForm = () => {
             formData: { ...formData }
         };
 
-        setHeldVouchers(prev => [...prev, heldVoucher]);
+        setHeldVouchers(prev => {
+            if (prev.some(v => v.id === heldVoucher.id)) return prev;
+            return [...prev, heldVoucher];
+        });
         showToast.success(`Voucher held successfully. Total held vouchers: ${heldVouchers.length + 1}`);
         clearForm();
     }, [formData, voucherNo, heldVouchers.length, selectedBranchId]);
@@ -228,7 +267,21 @@ const JournalVoucherForm = () => {
 
     const restoreHeldVoucher = (heldVoucher) => {
         const validRows = tableRef.current?.getValidRows() || [];
-        if (validRows.length > 0) {
+
+        // Only re-hold the current form if it has real, non-empty data
+        const hasMeaningfulData = validRows.length > 0 && validRows.some(
+            row => (parseFloat(row.debit) || 0) > 0 || (parseFloat(row.credit) || 0) > 0
+        );
+
+        setHeldVouchers(prev => {
+            // Always drop the voucher being restored first
+            const withoutRestored = prev.filter(inv => inv.id !== heldVoucher.id);
+
+            if (!hasMeaningfulData) {
+                // Nothing worth keeping on the current form — just drop it
+                return withoutRestored;
+            }
+
             const currentHeld = {
                 id: Date.now(),
                 timestamp: new Date().toISOString(),
@@ -240,10 +293,8 @@ const JournalVoucherForm = () => {
                 branchId: selectedBranchId,
                 formData: { ...formData }
             };
-            setHeldVouchers(prev => [...prev.filter(inv => inv.id !== heldVoucher.id), currentHeld]);
-        } else {
-            setHeldVouchers(prev => prev.filter(inv => inv.id !== heldVoucher.id));
-        }
+            return [...withoutRestored, currentHeld];
+        });
 
         setFormData(heldVoucher.formData);
         setVoucherNo(heldVoucher.voucherNo);
@@ -344,10 +395,10 @@ const JournalVoucherForm = () => {
             date: new Date(),
             narration: "",
             totalAmount: 0,
-            costCentreId: null,
+            costCentreId: costCenters?.[0]?.costCentreId || 1,
             referenceNo: "",
             referenceDate: new Date(),
-            postedStatus: generalSettings?.AccountPosting ? "Pending" : "Yes",
+            postedStatus: generalSettings?.AccountPosting ? "No" : "Yes",
             postedBy: generalSettings?.AccountPosting ? null : userId,
             postedDate: generalSettings?.AccountPosting ? null : new Date(),
             CreatedUser: userId,
@@ -364,50 +415,81 @@ const JournalVoucherForm = () => {
                 credit: (0).toFixed(generalSettings?.decimalPart ?? 2),
                 Narration: "",
                 RefNo: "",
-                costCentreId: "",
+                costCentreId: costCenters?.[0]?.costCentreId || 1,
                 currencyConversionId: currentCurrencyConversion?.currencyConversionId,
                 ledgerBalance: (0).toFixed(generalSettings?.decimalPart ?? 2),
                 billByBill: false // Add this
             }],
             partyDetails: []
         });
+        setDocuments([]);
+        setExistingDocuments([]);
+        setRemovedDocuments([]);
         setErrors({});
         setResetTableKey(prev => prev + 1);
     };
 
+    const fetchFinanceData = async (silent = false) => {
+        if (!silent) setBaseDataloading(true)
+        try {
+            const res = await axiosInstance.post('all-finance-data', {
+                voucherType: "Journal Voucher",
+                branchId: selectedBranchId,
+                yearId: currentFinancialYear.yearId,
+                ledgerTypes: ["Supplier", "Customer&Supplier"],
+                ledgerId: formData.ledgerId,
+                currencyId: currentCurrency?.currencyId
+            })
+            const data = res?.data?.data;
+
+            setVoucherNo(data?.voucherdata?.voucherCode)
+            setCostCenters(data?.costcentre)
+            setCurrency(data?.currencywithConversion)
+            setLedgers(data?.allAccountLedger)
+            setBaseDataLoaded(true) // Mark base data as loaded
+            const firstCostCentreId = data?.costcentre?.length > 0 ? data?.costcentre[0]?.costCentreId : 1;
+
+            setFormData(prev => ({
+                ...prev,
+                costCentreId: firstCostCentreId,
+                journalDetails: prev.journalDetails?.map((detail, index) => ({
+                    ...detail,
+                    costCentreId: detail.costCentreId || firstCostCentreId,
+                    lineIndex: index + 1,
+                })) || prev.journalDetails,
+            }))
+        } catch (error) {
+            console.error('error fetching default data', error)
+            setBaseDataLoaded(true) // Mark as loaded even if error
+        } finally {
+            if (!silent) setBaseDataloading(false)
+        }
+    }
+
     // Fetch base data (ledgers, cost centers, etc.)
     useEffect(() => {
-        const getSalesRequiredData = async () => {
-            setBaseDataloading(true)
-            try {
-                const res = await axiosInstance.post('all-finance-data', {
-                    voucherType: "Journal Voucher",
-                    branchId: selectedBranchId,
-                    yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Supplier"],
-                    ledgerId: formData.ledgerId,
-                    currencyId: currentCurrency?.currencyId
-                })
-                const data = res?.data?.data;
-
-                setVoucherNo(data?.voucherdata?.voucherCode)
-                setCostCenters(data?.costcentre)
-                setLedgers(data?.allAccountLedger)
-                setBaseDataLoaded(true) // Mark base data as loaded
-
-            } catch (error) {
-                console.error('error fetching default data', error)
-                setBaseDataLoaded(true) // Mark as loaded even if error
-            } finally {
-                setBaseDataloading(false)
-            }
-        }
-        getSalesRequiredData()
+        fetchFinanceData()
     }, [])
 
+    const fetchCurrencyConvertion = async () => {
+        try {
+            const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+            const formattedData = (response.data.data || []).map((item) => ({ ...item }));
+            setCurrencyConvertionData(formattedData);
+        } catch (error) {
+            console.error('Error fetching currency conversions:', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchCurrencyConvertion();
+    }, [selectedBranchId]);
+
+    const hasFetchedVoucherRef = React.useRef(false);
     // Fetch journal data AFTER base data is loaded
     useEffect(() => {
-        if (editMode && journalVoucherId && baseDataLoaded && ledgers.length > 0) {
+        if (editMode && journalVoucherId && baseDataLoaded && ledgers.length > 0 && !hasFetchedVoucherRef.current) {
+            hasFetchedVoucherRef.current = true;
             fetchJournalData();
         }
     }, [journalVoucherId, editMode, baseDataLoaded, ledgers]);
@@ -523,11 +605,11 @@ const JournalVoucherForm = () => {
                 date: data.date ? parseDateFromAPI(data.date) : null,
                 narration: data.narration || "",
                 totalAmount: data.totalAmount || 0,
-                costCentreId: data.costCentreId || null,
-                ReferenceNo: data.ReferenceNo || "",
-                ReferenceDate: data.ReferenceDate ? parseDateFromAPI(data.ReferenceDate) : null,
+                costCentreId: data.costCentreId || 1,
+                referenceNo: data.ReferenceNo || "",
+                referenceDate: data.ReferenceDate ? parseDateFromAPI(data.ReferenceDate) : null,
                 postedStatus: data.postedStatus || "No",
-                postedBy: data.postedBy || null,
+                postedBy: data.postedBy,
                 postedDate: data.postedDate ? parseDateFromAPI(data.postedDate) : null,
                 CreatedUser: data.createdUser || userId,
                 exchangeRate: data.exchangeRate || currentCurrencyConversion?.rate,
@@ -537,7 +619,8 @@ const JournalVoucherForm = () => {
                 journalDetails: journalDetailsForForm,
                 partyDetails: data.partyDetails || []
             });
-
+            setExistingDocuments(data.Documents || []);
+            setRemovedDocuments([]);
             // Fetch ledger balances for each detail
             if (data.journalDetails && data.journalDetails.length > 0) {
                 const updatedDetails = await Promise.all(
@@ -603,11 +686,7 @@ const JournalVoucherForm = () => {
         // Check if debit and credit totals match
         if (formData.debitTotal !== formData.creditTotal) {
             newErrors.totals = t("journalVoucher.form.messages.debitCreditMismatch");
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: t('journalVoucher.form.messages.debitCreditMismatch')
-            });
+            showToast.error(t('journalVoucher.form.messages.debitCreditMismatch'));
         }
 
         setErrors(newErrors);
@@ -620,14 +699,12 @@ const JournalVoucherForm = () => {
         try {
             // Get only valid rows (non-empty rows) from the table
             const validRows = tableRef.current?.getValidRows() || [];
+            console.log(validRows);
+
 
             // Check if there are no valid rows
             if (validRows.length === 0) {
-                setAlert({
-                    id: Date.now(),
-                    type: "error",
-                    message: t('Please fill the rows')
-                });
+                showToast.error(t('Please fill the rows'));
                 return;
             }
 
@@ -635,11 +712,7 @@ const JournalVoucherForm = () => {
             const hasEmptyLedger = validRows.some(detail => !detail.ledgerId);
 
             if (hasEmptyLedger) {
-                setAlert({
-                    id: Date.now(),
-                    type: "error",
-                    message: t('journalVoucher.form.messages.selectLedgerInAllRows')
-                });
+                showToast.error(t('journalVoucher.form.messages.selectLedgerInAllRows'));
                 return;
             }
             if (generalSettings?.negativeCashTransaction !== 'Allow') {
@@ -710,20 +783,39 @@ const JournalVoucherForm = () => {
                 if (!result.isConfirmed) return;
             }
             setIsSubmitting(true);
-
-          // AFTER
-const allPartyDetails = validRows
-    .filter(row => row.partyDetails && row.partyDetails.length > 0)
-    .flatMap(row => {
-        const rowCrOrDr = (parseFloat(row.debit) || 0) > 0 ? 'Dr' : 'Cr';
-        return row.partyDetails.map(p => ({
-            ...p,
-            amount: parseFloat(p.amount) || 0,
-            debit:  rowCrOrDr === 'Dr' ? (parseFloat(p.amount) || 0) : 0,
-            credit: rowCrOrDr === 'Cr' ? (parseFloat(p.amount) || 0) : 0,
-            crOrDr: rowCrOrDr,
-        }));
-    });
+            const appendFormData = (fd, key, value, options = {}) => {
+                const { keepEmpty = false } = options;
+                if (value === null || value === undefined) {
+                    if (keepEmpty) fd.append(key, '');
+                    return;
+                }
+                if (Array.isArray(value)) {
+                    value.forEach((item, index) => {
+                        appendFormData(fd, `${key}[${index}]`, item, { keepEmpty: true });
+                    });
+                } else if (value instanceof Date) {
+                    fd.append(key, value.toISOString());
+                } else if (typeof value === 'object' && !(value instanceof File)) {
+                    Object.entries(value).forEach(([subKey, subValue]) => {
+                        appendFormData(fd, `${key}[${subKey}]`, subValue, { keepEmpty });
+                    });
+                } else {
+                    fd.append(key, value);
+                }
+            };
+            // AFTER
+            const allPartyDetails = validRows
+                .filter(row => row.partyDetails && row.partyDetails.length > 0)
+                .flatMap(row => {
+                    const rowCrOrDr = (parseFloat(row.debit) || 0) > 0 ? 'Dr' : 'Cr';
+                    return row.partyDetails.map(p => ({
+                        ...p,
+                        amount: parseFloat(p.amount) || 0,
+                        debit: rowCrOrDr === 'Dr' ? (parseFloat(p.amount) || 0) : 0,
+                        credit: rowCrOrDr === 'Cr' ? (parseFloat(p.amount) || 0) : 0,
+                        crOrDr: rowCrOrDr,
+                    }));
+                });
 
             // Format the data for API
             const formattedData = {
@@ -732,16 +824,17 @@ const allPartyDetails = validRows
                 yearId: formData.yearId,
                 date: formData.date ? new Date(formData.date).toISOString().slice(0, 19).replace('T', ' ') : null,
                 narration: formData.narration || "",
-                totalAmount: parseFloat(formData.debitTotal) || 0,
-                costCentreId: formData.costCentreId || null,
+                totalAmount: parseFloat(formData.debitTotal).toFixed(generalSettings?.decimalPart ?? 2) || 0,
+                costCentreId: formData.costCentreId || 1,
                 referenceNo: formData.referenceNo || "",
                 referenceDate: formData.referenceDate ? new Date(formData.referenceDate).toISOString().slice(0, 10) : null,
-                postedStatus: formData.postedStatus || "Pending",
-                postedBy: formData.postedBy || userId,
+                postedStatus: formData.postedStatus || "No",
+                postedBy: formData.postedBy,
                 postedDate: formData.postedDate ? new Date(formData.postedDate).toISOString().slice(0, 19).replace('T', ' ') : null,
                 createdUser: userId,
                 exchangeRate: parseFloat(formData.exchangeRate) || 1.0,
                 exchangeDate: formData.exchangeDate ? new Date(formData.exchangeDate).toISOString().slice(0, 19).replace('T', ' ') : null,
+
                 // Use validRows instead of formData.journalDetails
                 journalDetails: validRows.map(detail => ({
                     branchId: selectedBranchId,
@@ -752,29 +845,112 @@ const allPartyDetails = validRows
                     lineIndex: detail.lineIndex,
                     Narration: detail.Narration || "",
                     RefNo: detail.RefNo || "",
-                    costCentreId: detail.costCentreId ? parseInt(detail.costCentreId) : null
+
+                    costCentreId: parseInt(detail.costCentreId || getDefaultCostCentreId())
                 })),
                 partyDetails: allPartyDetails || []
             };
 
             const dataToSave = {
                 ...formattedData,
-                date: formatDateWithTime(formattedData.date)
+                date: formatDateWithTime(formattedData.date),
+                ModifiedUser: editMode ? userId : null,
+                journalDetails: validRows.map((detail) => ({
+                    branchId: selectedBranchId,
+                    ledgerId: parseInt(detail.ledgerId),
+                    credit: parseFloat(detail.credit) || 0,
+                    debit: parseFloat(detail.debit) || 0,
+                    currencyConversionId: detail.currencyConversionId ? parseInt(detail.currencyConversionId) : null,
+                    lineIndex: detail.lineIndex,
+                    Narration: detail.Narration || "",
+                    RefNo: detail.RefNo || "",
+                    costCentreId: parseInt(detail.costCentreId || getDefaultCostCentreId()),
+                    ModifiedUser: editMode ? userId : null,
+                    ModifiedDate: editMode ? formatDateWithTime(new Date()) : null,
+                    createduser: userId,
+                })),
             };
 
             if (editMode) {
                 // Update existing journal voucher
-                await axiosInstance.post(`update-journal-voucher/${journalVoucherId}`, dataToSave);
+                const hasDocuments = documents.length > 0;
+                let response;
+
+                if (hasDocuments) {
+                    const fd = new FormData();
+                    Object.entries(dataToSave).forEach(([key, value]) => {
+                        appendFormData(fd, key, value);
+                    });
+                    documents.forEach((file) => fd.append('Documents[]', file));
+
+                    const config = { headers: { "Content-Type": "multipart/form-data" } };
+                    response = await axiosInstance.post(`update-journal-voucher/${journalVoucherId}`, fd, config);
+                } else {
+                    response = await axiosInstance.post(`update-journal-voucher/${journalVoucherId}`, dataToSave);
+                }
                 showToast.success(t('updateSuccess'));
 
+                // ===== PRINT LOGIC (edit mode: honor printAfterSave toggle) =====
+                if (formData?.printAfterSave) {
+                    const freshData = response?.data?.data || {};
+                    const voucherDataForPrint = buildVoucherDataForPrint(
+                        existingJournalNo,
+                        { ...formData, ...freshData }
+                    );
+                    printToPrinterFn(voucherDataForPrint);
+                }
+
                 // Navigate to list after update if setting is enabled
-                if (purchaseSettings?.CloseAfterSave) {
+                if (financeSettings?.CloseAfterSave) {
                     navigate('/transaction/journal-voucher');
                 }
             } else {
                 // Create new journal voucher
-                await axiosInstance.post('save-journal-voucher', dataToSave);
+                const hasDocuments = documents.length > 0;
+                let response;
+
+                if (hasDocuments) {
+                    const fd = new FormData();
+                    Object.entries(dataToSave).forEach(([key, value]) => {
+                        appendFormData(fd, key, value);
+                    });
+                    documents.forEach((file) => fd.append('Documents[]', file));
+
+                    const config = { headers: { "Content-Type": "multipart/form-data" } };
+                    response = await axiosInstance.post('save-journal-voucher', fd, config);
+                } else {
+                    response = await axiosInstance.post('save-journal-voucher', dataToSave);
+                }
                 showToast.success(t('saveSuccess'));
+
+                // ===== PRINT LOGIC (new voucher) =====
+                const freshData = response?.data?.data || {};
+                const voucherDataForPrint = buildVoucherDataForPrint(
+                    freshData?.voucherNo || voucherNo,
+                    { ...formData, ...freshData }
+                );
+
+                if (formData?.printAfterSave) {
+                    printToPrinterFn(voucherDataForPrint);
+                } else {
+                    const pdfResult = await Swal.fire({
+                        title: t('Print As Pdf') || 'Print as PDF?',
+                        text: t('Do you want to download this voucher as a PDF?') ||
+                            'Do you want to download this voucher as a PDF?',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
+                        cancelButtonText: t('No, Just Save') || 'No, Just Save',
+                    });
+
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            printToPdfFn(voucherDataForPrint);
+                        }, 500);
+                    }
+                }
 
                 // Handle held vouchers cleanup
                 if (restoredHeldVoucherId) {
@@ -783,7 +959,7 @@ const allPartyDetails = validRows
                 }
 
                 // Navigate to list or clear form based on setting
-                if (purchaseSettings?.CloseAfterSave) {
+                if (financeSettings?.CloseAfterSave) {
                     navigate('/transaction/journal-voucher');
                 } else {
                     // Clear form after successful save
@@ -795,10 +971,46 @@ const allPartyDetails = validRows
 
         } catch (error) {
             console.error('Error saving journal:', error);
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: error.response?.data?.message || t('saveError') || 'Failed to save Journal Voucher',
+
+            // ✅ AUTO-HOLD VOUCHER ON ERROR
+            const validRows = tableRef.current?.getValidRows() || [];
+            const hasValidData = validRows.length > 0;
+
+            if (hasValidData) {
+                const heldVoucher = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    voucherNo: voucherNo,
+                    narration: formData.narration || 'No Description',
+                    debitTotal: formData.debitTotal || 0,
+                    creditTotal: formData.creditTotal || 0,
+                    entryCount: validRows.length,
+                    branchId: selectedBranchId,
+                    formData: { ...formData },
+                    errorHeld: true
+                };
+
+                setHeldVouchers(prev => {
+                    if (prev.some(v => v.id === heldVoucher.id)) return prev;
+                    return [...prev, heldVoucher];
+                });
+
+                showToast.warning(
+                    `Save failed. Voucher has been automatically held. Total held vouchers: ${heldVouchers.length + 1}`
+                );
+            }
+
+            Swal.fire({
+                icon: 'error',
+                title: t('Error') || 'Error',
+                html: `
+                    <div class="text-left">
+                        <p class="mb-2">${error.response?.data?.message || t('saveError') || 'Failed to save Journal Voucher'}</p>
+                        ${hasValidData ? '<p class="text-sm text-blue-600">Your voucher data has been automatically held and can be restored later.</p>' : ''}
+                    </div>
+                `,
+                confirmButtonColor: '#3085d6',
+                confirmButtonText: 'OK'
             });
         } finally {
             setIsSubmitting(false);
@@ -822,40 +1034,83 @@ const allPartyDetails = validRows
 
         try {
             await axiosInstance.get(`delete-journal-voucher/${journalVoucherId}`);
-            setAlert({
-                id: Date.now(),
-                type: "success",
-                message: t("deleteSuccess") || 'Journal Voucher deleted successfully'
-            });
+            showToast.success(t("deleteSuccess") || 'Journal Voucher deleted successfully');
             setTimeout(() => {
                 navigate('/transaction/journal-voucher');
             }, 1000);
         } catch (error) {
             console.error('Error deleting journal:', error);
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: error.response?.data?.message || t("deleteError") || 'Failed to delete Journal Voucher',
-            });
+            showToast.error(t('deleteError') || 'Failed to delete Journal Voucher');
         }
     };
 
-    const handleListNavigate = async () => {
-        if (generalSettings?.askConfirmationClose) {
+
+    // ===== PRINT HELPERS =====
+    const buildVoucherDataForPrint = useCallback((voucherNumber, overrideData) => {
+        const base = overrideData || formData;
+        return {
+            ...base,
+            voucherNo: base?.voucherNo || voucherNumber || voucherNo,
+        };
+    }, [formData, voucherNo]);
+
+    const printToPrinterFn = useCallback((voucherDataForPrint) => {
+        printJournalVoucher(voucherDataForPrint, selectedBranchDetails, time, currentCurrency);
+    }, [selectedBranchDetails, time, currentCurrency]);
+
+    const printToPdfFn = useCallback((voucherDataForPrint) => {
+        saveJournalVoucherAsPDF(voucherDataForPrint, selectedBranchDetails, time, currentCurrency);
+    }, [selectedBranchDetails, time, currentCurrency]);
+
+    // ===== EDIT MODE: Reprint to Printer =====
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
             const result = await Swal.fire({
-                title: t('ConfirmCloseTitle'),
-                text: t('ConfirmCloseText'),
-                icon: 'warning',
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this journal voucher?',
+                icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#3085d6',
                 cancelButtonColor: '#d33',
-                confirmButtonText: t('YesClose'),
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
                 cancelButtonText: t('Cancel'),
             });
             if (!result.isConfirmed) return;
         }
-        navigate('/transaction/journal-voucher');
-    };
+
+        setIsPrinting(true);
+        try {
+            const voucherDataForPrint = buildVoucherDataForPrint(existingJournalNo);
+            printToPrinterFn(voucherDataForPrint);
+
+            if (isElectron()) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        } catch (error) {
+            console.error('Error printing journal voucher:', error);
+            showToast.error('Failed to print journal voucher');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, buildVoucherDataForPrint, existingJournalNo, printToPrinterFn]);
+
+    // ===== EDIT MODE: Reprint to PDF =====
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const voucherDataForPrint = buildVoucherDataForPrint(existingJournalNo);
+            printToPdfFn(voucherDataForPrint);
+
+            if (isElectron()) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        } catch (error) {
+            console.error('Error generating journal voucher PDF:', error);
+            showToast.error('Failed to generate journal voucher PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [buildVoucherDataForPrint, existingJournalNo, printToPdfFn]);
 
     // ===== BREADCRUMB ACTIONS =====
     const breadcrumbActions = [
@@ -867,7 +1122,7 @@ const allPartyDetails = validRows
             onClick: () => navigate('/transaction/journal-voucher'),
         },
         !editMode && {
-            label: `Hold Voucher${heldVouchers.length > 0 ? ` (${heldVouchers.length})` : ''}`,
+            label: `Hold${heldVouchers.length > 0 ? ` (${heldVouchers.length})` : ''}`,
             icon: Archive,
             type: "secondary",
             onClick: holdCurrentVoucher,
@@ -929,12 +1184,11 @@ const allPartyDetails = validRows
 
     return (
         <div>
-            {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
             <PopupPreloader
-                isOpen={isSubmitting}
+                isOpen={isSubmitting || isPrinting}
                 state="loading"
-                title={t("loadingText")}
-                subtitle={t("loadingDesc")}
+                title={isPrinting ? (t("Printing") || "Preparing Print...") : (isSubmitting ? (editMode ? t("updating") : t("saving")) : "")}
+                subtitle={isPrinting ? (t("printingDesc") || "Please wait while we prepare your voucher for printing...") : (t("loadingDesc") || "Please wait...")}
             />
             <HeldVouchersPanel />
 
@@ -946,6 +1200,32 @@ const allPartyDetails = validRows
                 ]}
                 heading={{ icon: BookOpen, title: editMode ? t("journalVoucher.form.breadcrumb.edit.title") : t("journalVoucher.form.breadcrumb.title") }}
                 actions={breadcrumbActions}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="printAfterSaveJournalVoucher"
+                                checked={formData.printAfterSave || false}
+                                onCheckedChange={(value) =>
+                                    setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                }
+                            />
+                            <label
+                                htmlFor="printAfterSaveJournalVoucher"
+                                className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                            >
+                                {t("salesInvoice.form.footerSection.otherDetails.label.printAfterSave") || "Print After Save"}
+                            </label>
+                        </div>
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
             />
 
             <div className='p-1' key={resetTableKey}>
@@ -958,6 +1238,15 @@ const allPartyDetails = validRows
                     errors={errors}
                     voucherNo={voucherNo}
                     costCenters={costCenters}
+                    documents={documents}
+                    setDocuments={setDocuments}
+                    existingDocuments={existingDocuments}
+                    setExistingDocuments={setExistingDocuments}
+                    removedDocuments={removedDocuments}
+                    setRemovedDocuments={setRemovedDocuments}
+                    currency={currency}
+                    currencyConvertionData={currencyConvertionData}
+                    financeSettings={financeSettings}
                 />
                 <JournalVoucherFormTable
                     ref={tableRef}
@@ -969,6 +1258,7 @@ const allPartyDetails = validRows
                     onRowRemove={handleRowRemove}
                     setLedgerBalance={fetchLedgerBalance}
                     ledgerBalance={ledgerBalance}
+                    onLedgerCreated={() => fetchFinanceData(true)}
                 />
             </div>
         </div>

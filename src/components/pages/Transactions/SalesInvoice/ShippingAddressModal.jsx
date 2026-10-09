@@ -6,9 +6,10 @@ import useAuth from '@/redux/hook/auth/useAuth'
 import TextInput from '@/components/elements/theme/TextInput'
 import TextArea from '@/components/elements/theme/TextArea'
 import axiosInstance from '@/lib/axiosConfig'
+import { sanitize } from '@/lib/inputSanitizer'
 
 const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
-    const { currentFinancialYear, currentCurrencyConversion ,userId} = useAuth()
+    const { currentFinancialYear, currentCurrencyConversion, userId } = useAuth()
     const [errors, setErrors] = useState({})
     const [loadingData, setLoadingData] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -34,6 +35,13 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
     // Input handler (for both main fields and nested ShippingAddress)
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target
+        let updatedValue = value
+        if (["customerName"].includes(name)) {
+            updatedValue = sanitize.alphaNumericSpace(value)
+        }
+        if (["phoneNo", "vatNo"].includes(name)) {
+            updatedValue = sanitize.numbers(value)
+        }
 
         if (["address1", "address2", "address3", "address4"].includes(name)) {
             setFormData((prev) => ({
@@ -54,7 +62,7 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
         } else {
             setFormData((prev) => ({
                 ...prev,
-                [name]: value,
+                [name]: updatedValue,
             }))
         }
     }
@@ -122,7 +130,7 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
                     address2: formData.ShippingAddress.address2 || "",
                     address3: formData.ShippingAddress.address3 || "",
                     address4: formData.ShippingAddress.address4 || "",
-                    Isdefault: formData.ShippingAddress.Isdefault ?? false, // ✅ Always include
+                    Isdefault: formData.ShippingAddress.Isdefault ?? false,
                 },
                 exchangeDate: formData.exchangeDate,
                 exchangeRate: formData.exchangeRate,
@@ -131,13 +139,33 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
                 ModifiedUser: editId ? userId : null,
             }
 
-
+            // API 1: update ledger (name, phone, vat, etc.)
             const { data } = await axiosInstance.post(
                 `update-account-ledger/${editId}`,
                 payload
             )
 
-            if (!data.error) {
+            // API 2: dedicated shipping address save/update
+            const isEditingAddress = Boolean(formData.ShippingAddress.addressId)
+
+            const shippingPayload = {
+                ledgerId: editId,
+                address1: formData.ShippingAddress.address1 || "",
+                address2: formData.ShippingAddress.address2 || "",
+                address3: formData.ShippingAddress.address3 || "",
+                address4: formData.ShippingAddress.address4 || "",
+                Isdefault: formData.ShippingAddress.Isdefault ?? false,
+                CreatedUser: userId,
+                ModifiedUser: userId,
+            }
+
+            const shippingApiUrl = isEditingAddress
+                ? `update-shipping-address/${formData.ShippingAddress.addressId}`
+                : `save-shipping-address`
+
+            const shippingRes = await axiosInstance.post(shippingApiUrl, shippingPayload)
+
+            if (!data.error && !shippingRes.data.error) {
                 onSuccess?.()
                 handleClose()
             }
@@ -168,6 +196,8 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
                     />
                     <TextInput
                         name="phoneNo"
+                        type="text"
+                        maxLength={10}
                         label="Phone Number"
                         value={formData.phoneNo}
                         onChange={handleInputChange}

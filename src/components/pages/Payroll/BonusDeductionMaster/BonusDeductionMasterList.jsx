@@ -10,6 +10,8 @@ import Swal from "sweetalert2";
 import { useTranslation } from "react-i18next";
 import FormattedDate from "@/components/common/FormattedDate";
 import { useNavigate } from "react-router-dom";
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
 const BonusDeductionMasterList = () => {
   const [data, setData] = useState([]);
@@ -18,6 +20,7 @@ const BonusDeductionMasterList = () => {
   const { t } = useTranslation();
   const { selectedBranchId } = useAuth();
   const navigate = useNavigate();
+   const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Bonus and Deduction");
 
   useEffect(() => {
     fetchData();
@@ -64,6 +67,12 @@ const BonusDeductionMasterList = () => {
   }, [navigate]);
 
   const handleDelete = async (id) => {
+
+     if (!privileges?.can_delete) {
+            setAlert({ key: new Date(), type: "error", message: t("deletePermission") });
+            return;
+        }
+
     const result = await Swal.fire({
       title: t("delete.title") || "Are you sure?",
       text: t("delete.text") || "You won't be able to revert this!",
@@ -127,17 +136,18 @@ const BonusDeductionMasterList = () => {
       sortable: true,
       render: (row) => row.narration || row.Narration || "-",
     },
-    {
-      key: "employeeCount",
-      label: "Employee Count",
-      sortable: true,
-      render: (row) =>
-        row.employeeCount ?? row.EmployeeCount ?? (row.details ? row.details.length : "-"),
-    },
+    // {
+    //   key: "employeeCount",
+    //   label: "Employee Count",
+    //   sortable: true,
+    //   render: (row) =>
+    //     row.employeeCount ?? row.EmployeeCount ?? (row.details ? row.details.length : "-"),
+    // },
   ];
 
-  const actions = [
-    {
+  const actions = []
+  if(privileges?.can_edit){
+    actions.push( {
       icon: <Edit className="h-4 w-4" />,
       onClick: (row) => {
         const id = row.bonusDeductionMasterId || row.BonusDeductionMasterId || row.id;
@@ -146,8 +156,10 @@ const BonusDeductionMasterList = () => {
       className:
         "text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300",
       tooltip: "Edit",
-    },
-    {
+    },)
+  }
+  if(privileges?.can_delete){
+    actions.push( {
       icon: <Trash2 className="h-4 w-4" />,
       className:
         "text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300",
@@ -156,30 +168,37 @@ const BonusDeductionMasterList = () => {
         handleDelete(id);
       },
       tooltip: "Delete",
-    },
-  ];
-
-  if (loading)
-    return (
-      <div>
-        <BreadCrumb
+    },)
+  }
+  
+  if (privilegeLoading || loading) {
+        return <div>
+            <BreadCrumb
           routes={[
             { title: "Payroll", url: "#" },
             { title: "Bonus & Deduction", url: "#" },
           ]}
           heading={{ icon: BadgeDollarSign, title: "Bonus & Deduction List" }}
-          actions={[
-            {
-              label: "Create New",
-              type: "primary",
-              icon: Plus,
-              onClick: () => navigate("/payroll/bonus-deduction/add-new"),
-            },
-          ]}
+          
         />
-        <Preloader />
-      </div>
-    );
+            <Preloader />
+        </div>
+    }
+     if (!hasAccess) {
+        return (
+            <div>
+              <BreadCrumb
+          routes={[
+            { title: "Payroll", url: "#" },
+            { title: "Bonus & Deduction", url: "#" },
+          ]}
+          heading={{ icon: BadgeDollarSign, title: "Bonus & Deduction List" }}
+          
+        />
+                <NoAcessComponent message={message} />
+            </div>
+        );
+    }
 
   return (
     <div>
@@ -191,14 +210,15 @@ const BonusDeductionMasterList = () => {
           { title: "Bonus & Deduction", url: "#" },
         ]}
         heading={{ icon: BadgeDollarSign, title: "Bonus & Deduction List" }}
-        actions={[
+        actions={ 
+          privileges?.can_add ? [
           {
             label: `${t("createNewBtn") || "Create New"} (Ctrl+C)`,
             type: "primary",
             icon: Plus,
             onClick: () => navigate("/payroll/bonus-deduction/add-new"),
           },
-        ]}
+        ] : []}
       />
 
       <div className="w-full bg-white dark:bg-[#1e1e1e] px-2 py-2 transition-colors">

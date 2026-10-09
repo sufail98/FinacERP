@@ -52,16 +52,7 @@ const PurchaseDayReportGrid = ({
     const columns = [
         { key: 'SNo', label: '#', align: 'center' },
         { key: 'Date', label: t('purchaseDayReport.grid.columns.date'), align: 'center' },
-        { key: 'InvoiceNo', label: t('purchaseDayReport.grid.columns.invoiceNo'), align: 'center' },
-        { key: 'VendorInvoiceNo', label: t('purchaseDayReport.grid.columns.vendorInvoiceNo'), align: 'center' },
-        { key: 'Supplier', label: t('purchaseDayReport.grid.columns.supplier'), align: 'left' },
         { key: 'TotalAmount', label: t('purchaseDayReport.grid.columns.totalAmount'), align: 'right' },
-        { key: 'TaxAmount', label: t('purchaseDayReport.grid.columns.taxAmount'), align: 'right' },
-        { key: 'NetAmount', label: t('purchaseDayReport.grid.columns.netAmount'), align: 'right' },
-        { key: 'CashAmount', label: t('purchaseDayReport.grid.columns.cashAmount'), align: 'right' },
-        { key: 'BankAmount', label: t('purchaseDayReport.grid.columns.bankAmount'), align: 'right' },
-        { key: 'CreditAmount', label: t('purchaseDayReport.grid.columns.creditAmount'), align: 'right' },
-        { key: 'CreatedBy', label: t('purchaseDayReport.grid.columns.createdBy'), align: 'center' }
     ];
 
     // Get cell value with fallbacks for different API response formats
@@ -71,26 +62,10 @@ const PurchaseDayReportGrid = ({
                 return row.SNo || row.sNo || row.SlNo || row.slNo;
             case 'Date':
                 return row.Date || row.date || row.PurchaseDate || row.purchaseDate || row.InvoiceDate || '-';
-            case 'InvoiceNo':
-                return row.InvoiceNo || row.invoiceNo || row.VoucherNo || row.voucherNo || row.PurchaseNo || '-';
-            case 'VendorInvoiceNo':
-                return row.VendorInvoiceNo || row.vendorInvoiceNo || row.SupplierInvoiceNo || '-';
-            case 'Supplier':
-                return row.Supplier || row.supplier || row.Party || row.party || row.SupplierName || row.supplierName || row.LedgerName || '-';
+        
             case 'TotalAmount':
                 return formatAmount(row.TotalAmount || row.totalAmount || row.Amount || row.amount);
-            case 'TaxAmount':
-                return formatAmount(row.TaxAmount || row.taxAmount || row.TotalTax || row.totalTax);
-            case 'NetAmount':
-                return formatAmount(row.NetAmount || row.netAmount || row.BillAmount || row.billAmount);
-            case 'CashAmount':
-                return formatAmount(row.CashAmount || row.cashAmount);
-            case 'BankAmount':
-                return formatAmount(row.BankAmount || row.bankAmount);
-            case 'CreditAmount':
-                return formatAmount(row.CreditAmount || row.creditAmount);
-            case 'CreatedBy':
-                return row.CreatedBy || row.createdBy || row.DoneBy || row.doneBy || row.UserName || '-';
+         
             default:
                 return row[colKey] ?? '-';
         }
@@ -146,21 +121,7 @@ const PurchaseDayReportGrid = ({
                                 <td className="px-2 py-2 text-right text-gray-900 dark:text-white">
                                     {formatAmount(totals.totalAmount)}
                                 </td>
-                                <td className="px-2 py-2 text-right text-orange-600">
-                                    {formatAmount(totals.taxAmount)}
-                                </td>
-                                <td className="px-2 py-2 text-right text-green-600">
-                                    {formatAmount(totals.netAmount)}
-                                </td>
-                                <td className="px-2 py-2 text-right text-blue-600">
-                                    {formatAmount(totals.cashAmount)}
-                                </td>
-                                <td className="px-2 py-2 text-right text-purple-600">
-                                    {formatAmount(totals.bankAmount)}
-                                </td>
-                                <td className="px-2 py-2 text-right text-red-600">
-                                    {formatAmount(totals.creditAmount)}
-                                </td>
+                              
                                 <td></td>
                             </tr>
                         </tfoot>
@@ -168,61 +129,7 @@ const PurchaseDayReportGrid = ({
                 </table>
             </div>
             
-            {/* Summary Cards */}
-            {totals && (
-                <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/50">
-                    <div className="flex flex-wrap gap-4 justify-end text-xs">
-                        <div className="flex items-center gap-2">
-                            <span className="text-gray-500 dark:text-gray-400">
-                                {t('purchaseDayReport.grid.summary.records')}:
-                            </span>
-                            <span className="font-semibold text-gray-700 dark:text-gray-300">
-                                {totals.count}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-gray-500 dark:text-gray-400">
-                                {t('purchaseDayReport.grid.summary.totalTax')}:
-                            </span>
-                            <span className="font-semibold text-orange-600">
-                                {formatAmount(totals.taxAmount)}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-gray-500 dark:text-gray-400">
-                                {t('purchaseDayReport.grid.summary.cash')}:
-                            </span>
-                            <span className="font-semibold text-blue-600">
-                                {formatAmount(totals.cashAmount)}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-gray-500 dark:text-gray-400">
-                                {t('purchaseDayReport.grid.summary.bank')}:
-                            </span>
-                            <span className="font-semibold text-purple-600">
-                                {formatAmount(totals.bankAmount)}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-gray-500 dark:text-gray-400">
-                                {t('purchaseDayReport.grid.summary.credit')}:
-                            </span>
-                            <span className="font-semibold text-red-600">
-                                {formatAmount(totals.creditAmount)}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-gray-500 dark:text-gray-400">
-                                {t('purchaseDayReport.grid.summary.grandTotal')}:
-                            </span>
-                            <span className="font-semibold text-green-600">
-                                {formatAmount(totals.netAmount)}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            )}
+          
         </div>
     );
 };

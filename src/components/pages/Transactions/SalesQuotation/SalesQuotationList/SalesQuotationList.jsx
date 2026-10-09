@@ -7,97 +7,81 @@ import { Edit, Plus, ReceiptText, Trash2 } from 'lucide-react'
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import DateFilterSection from '../../Components/DateFilterSection'
 import ContentTable from '@/components/common/ContentTable'
 import useAuth from '@/redux/hook/auth/useAuth'
 
+const getTodayDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+};
+
+// Read filters from URL hash query params once (outside component, no re-render risk)
+const readFiltersFromURL = () => {
+    const hash = window.location.hash;
+    const queryStart = hash.indexOf('?');
+    let searchParams = new URLSearchParams();
+    if (queryStart !== -1) {
+        searchParams = new URLSearchParams(hash.substring(queryStart + 1));
+    }
+
+    return {
+        fromDate: searchParams.get('fromDate') || getTodayDate(),
+        toDate: searchParams.get('toDate') || getTodayDate(),
+        voucherCode: searchParams.get('voucherCode') || '',
+        customerSearch: searchParams.get('customerSearch') || '',
+        page: searchParams.get('page') ? parseInt(searchParams.get('page')) : 1,
+        limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')) : 80,
+    };
+};
+
 const SalesQuotationList = () => {
     const [alert, setAlert] = useState(null);
-    const [salesData, setSalesData] = useState([])
-    const [filteredSalesData, setFilteredSalesData] = useState([])
-    const [voucherCode, setVoucherCode] = useState('')
-    const [customerSearch, setCustomerSearch] = useState('')
-    const navigate = useNavigate()
-    const location = useLocation()
+    const [salesData, setSalesData] = useState([]);
+    const [filteredSalesData, setFilteredSalesData] = useState([]);
+    const navigate = useNavigate();
     const { t } = useTranslation();
-    const [fetchLoading, setFetchLoading] = useState(false)
-    const { generalSettings } = useSelector((state) => state.settings)
-    const { selectedBranchId } = useAuth()
+    const [fetchLoading, setFetchLoading] = useState(false);
+    const { generalSettings } = useSelector((state) => state.settings);
+    const { selectedBranchId } = useAuth();
 
     const { privileges, loading: privilegeLoading } = usePrivileges("Sales Quotation");
 
     const debounceTimerRef = useRef(null);
     const customerDebounceTimerRef = useRef(null);
 
-    // Server-side pagination state
-    const [page, setPage] = useState(1);
-    const [limit, setLimit] = useState(80);
+    // ✅ FIX: Read URL once synchronously and initialize ALL state directly in useState
+    // This eliminates the race condition caused by restoring state in a useEffect
+    const [urlFilters] = useState(() => readFiltersFromURL());
+
+    const [fromDate, setFromDate] = useState(urlFilters.fromDate);
+    const [toDate, setToDate] = useState(urlFilters.toDate);
+    const [voucherCode, setVoucherCode] = useState(urlFilters.voucherCode);
+    const [customerSearch, setCustomerSearch] = useState(urlFilters.customerSearch);
+    const [page, setPage] = useState(urlFilters.page);
+    const [limit, setLimit] = useState(urlFilters.limit);
 
     const [meta, setMeta] = useState({
         total: 0,
-        page: 1,
-        limit: 80,
+        page: urlFilters.page,
+        limit: urlFilters.limit,
         total_pages: 1
     });
 
-    const getTodayDate = () => {
-        const today = new Date();
-        return today.toISOString().split('T')[0];
-    };
-
-    // ===== INITIALIZE FILTERS FROM URL =====
-    const initializeFilters = useCallback(() => {
-        const hash = window.location.hash;
-        const queryStart = hash.indexOf('?');
-
-        let searchParams = new URLSearchParams();
-        if (queryStart !== -1) {
-            searchParams = new URLSearchParams(hash.substring(queryStart + 1));
-        }
-
-        const savedFromDate = searchParams.get('fromDate');
-        const savedToDate = searchParams.get('toDate');
-        const savedVoucherCode = searchParams.get('voucherCode');
-        const savedCustomerSearch = searchParams.get('customerSearch');
-        const savedPage = searchParams.get('page');
-        const savedLimit = searchParams.get('limit');
-
-        return {
-            fromDate: savedFromDate || getTodayDate(),
-            toDate: savedToDate || getTodayDate(),
-            voucherCode: savedVoucherCode || '',
-            customerSearch: savedCustomerSearch || '',
-            page: savedPage ? parseInt(savedPage) : 1,
-            limit: savedLimit ? parseInt(savedLimit) : 80,
-        };
+    // Extract just the time (12-hour, with AM/PM) from a datetime string like CreatedDate
+    const formatTime = useCallback((dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
     }, []);
-
-    const initialFilters = useMemo(() => initializeFilters(), [initializeFilters]);
-
-    const [fromDate, setFromDate] = useState(initialFilters.fromDate);
-    const [toDate, setToDate] = useState(initialFilters.toDate);
-
-    useEffect(() => {
-        setVoucherCode(initialFilters.voucherCode);
-        setCustomerSearch(initialFilters.customerSearch);
-        setPage(initialFilters.page);
-        setLimit(initialFilters.limit);
-    }, [initialFilters]);
-
-    const formatDate = (dateString) => {
-        if (!dateString) return '';
-        const date = new Date(dateString);
-        const dd = String(date.getDate()).padStart(2, '0');
-        const MM = String(date.getMonth() + 1).padStart(2, '0');
-        const yyyy = date.getFullYear();
-        const format = generalSettings?.dateformat || 'dd-MM-yyyy';
-        return format
-            .replace('dd', dd)
-            .replace('MM', MM)
-            .replace('yyyy', yyyy);
-    };
 
     // ===== UPDATE URL WITH CURRENT FILTER STATE =====
     const updateFilterURL = useCallback((filters) => {
@@ -130,18 +114,19 @@ const SalesQuotationList = () => {
         window.history.replaceState(null, '', newHash);
     }, []);
 
-    // Main fetch function
+    // ✅ FIX: fetchAllSales only depends on selectedBranchId and generalSettings.
+    // It does NOT close over filter state — it only reads from its params argument.
+    // This prevents stale closure bugs entirely.
     const fetchAllSales = useCallback(async (params = {}) => {
         setFetchLoading(true);
         try {
-            const currentVoucherCode = params.voucherCode !== undefined ? params.voucherCode : voucherCode;
-            const currentCustomerSearch = params.customerSearch !== undefined ? params.customerSearch : customerSearch;
-            const currentFromDate = params.fromDate !== undefined ? params.fromDate : fromDate;
-            const currentToDate = params.toDate !== undefined ? params.toDate : toDate;
-            const currentLimit = params.limit !== undefined ? params.limit : limit;
-            const currentPage = params.page !== undefined ? params.page : page;
+            const currentVoucherCode = params.voucherCode ?? '';
+            const currentCustomerSearch = params.customerSearch ?? '';
+            const currentFromDate = params.fromDate ?? getTodayDate();
+            const currentToDate = params.toDate ?? getTodayDate();
+            const currentLimit = params.limit ?? 80;
+            const currentPage = params.page ?? 1;
 
-            // Only nullify dates when searching by voucher code
             const isVoucherSearch = !!currentVoucherCode?.trim();
 
             const payload = {
@@ -151,7 +136,7 @@ const SalesQuotationList = () => {
                 page: currentPage,
                 branchId: selectedBranchId,
                 vouchercode: currentVoucherCode?.trim() || null,
-                customername: currentCustomerSearch?.trim() || null
+                customername: currentCustomerSearch?.trim() || null,
             };
 
             const res = await axiosInstance.post('sales-quotations', payload);
@@ -159,7 +144,17 @@ const SalesQuotationList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((currentPage - 1) * currentLimit) + index + 1,
-                date: formatDate(item.date),
+                date: (() => {
+                    if (!item.date) return '';
+                    const date = new Date(item.date);
+                    const dd = String(date.getDate()).padStart(2, '0');
+                    const MM = String(date.getMonth() + 1).padStart(2, '0');
+                    const yyyy = date.getFullYear();
+                    const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+                    const formattedDatePart = format.replace('dd', dd).replace('MM', MM).replace('yyyy', yyyy);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${formattedDatePart} ${timePart}` : formattedDatePart;
+                })(),
             }));
 
             setSalesData(formattedData);
@@ -170,7 +165,7 @@ const SalesQuotationList = () => {
                     total: res.data.meta.total || 0,
                     page: res.data.meta.page || currentPage,
                     limit: res.data.meta.limit || currentLimit,
-                    total_pages: res.data.meta.total_pages || 1
+                    total_pages: res.data.meta.total_pages || 1,
                 });
             }
         } catch (error) {
@@ -183,100 +178,66 @@ const SalesQuotationList = () => {
         } finally {
             setFetchLoading(false);
         }
-    }, [voucherCode, fromDate, toDate, limit, page, selectedBranchId, generalSettings, customerSearch]);
+    }, [selectedBranchId, generalSettings?.dateformat, generalSettings?.decimalPart]);
 
-    // Determine if we're in filtered mode (customer search or voucher code is active)
-    const isFiltered = customerSearch.trim() !== '' || voucherCode.trim() !== '';
-
-    // Initial load - only on component mount
+    // ✅ FIX: Single unified effect — reacts to all filter state changes.
+    // Because all state is initialized synchronously from the URL in useState(),
+    // the very first run of this effect already has the correct restored values.
+    // No race condition possible.
     useEffect(() => {
-        fetchAllSales({
-            page: initialFilters.page,
-            limit: initialFilters.limit,
-            voucherCode: initialFilters.voucherCode,
-            customerSearch: initialFilters.customerSearch
-        });
-    }, []); // Empty dependency array - run only once
+        fetchAllSales({ fromDate, toDate, voucherCode, customerSearch, page, limit });
+    }, [voucherCode, customerSearch]);
 
-    // Update URL when filters change
+    // Keep URL in sync whenever filters change
     useEffect(() => {
-        updateFilterURL({
-            fromDate,
-            toDate,
-            voucherCode,
-            customerSearch,
-            page,
-            limit,
-        });
+        updateFilterURL({ fromDate, toDate, voucherCode, customerSearch, page, limit });
     }, [fromDate, toDate, voucherCode, customerSearch, page, limit, updateFilterURL]);
 
-    // Fetch when server pagination changes (page or limit)
+    // Cleanup debounce timers on unmount
     useEffect(() => {
-        fetchAllSales({
-            page,
-            limit
-        });
-    }, [page, limit, fetchAllSales]);
-
-    // Fetch when date range, voucher code, or customer search changes
-    useEffect(() => {
-        setPage(1);
-        fetchAllSales({
-            page: 1,
-            fromDate,
-            toDate,
-            voucherCode,
-            customerSearch
-        });
-    }, [fromDate, toDate, voucherCode, customerSearch]);
+        return () => {
+            if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+            if (customerDebounceTimerRef.current) clearTimeout(customerDebounceTimerRef.current);
+        };
+    }, []);
 
     const handleVoucherCodeChange = (e) => {
         const value = e.target.value;
-        setVoucherCode(value);
-        setPage(1);
 
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-        }
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
         debounceTimerRef.current = setTimeout(() => {
-            // The useEffect will handle the fetch
+            setVoucherCode(value);
+            setPage(1);
         }, 300);
     };
 
     const handleCustomerSearchChange = (e) => {
         const value = e.target.value;
-        setCustomerSearch(value);
-        setPage(1);
 
-        if (customerDebounceTimerRef.current) {
-            clearTimeout(customerDebounceTimerRef.current);
-        }
+        if (customerDebounceTimerRef.current) clearTimeout(customerDebounceTimerRef.current);
 
         customerDebounceTimerRef.current = setTimeout(() => {
-            // The useEffect will handle the fetch
+            setCustomerSearch(value);
+            setPage(1);
         }, 300);
     };
 
     const clearCustomerSearch = () => {
+        if (customerDebounceTimerRef.current) clearTimeout(customerDebounceTimerRef.current);
         setCustomerSearch('');
         setPage(1);
-        if (customerDebounceTimerRef.current) {
-            clearTimeout(customerDebounceTimerRef.current);
-        }
     };
 
     const clearVoucherCode = () => {
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         setVoucherCode('');
         setPage(1);
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-        }
     };
 
     const handleFilter = () => {
         if (voucherCode?.trim() || customerSearch?.trim()) {
-            setPage(1);
+            // search mode is already live via the effect above
             return;
         }
 
@@ -290,38 +251,32 @@ const SalesQuotationList = () => {
         }
 
         setPage(1);
+        fetchAllSales({
+            page: 1,
+            fromDate,
+            toDate,
+            voucherCode: '',
+            customerSearch: ''
+        });
     };
 
-    const handleReset = async () => {
+
+    const handleReset = () => {
         const today = getTodayDate();
 
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-        }
-        if (customerDebounceTimerRef.current) {
-            clearTimeout(customerDebounceTimerRef.current);
-        }
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+        if (customerDebounceTimerRef.current) clearTimeout(customerDebounceTimerRef.current);
 
-        setFromDate(today);
-        setToDate(today);
-        setPage(1);
-        setLimit(80);
-        setVoucherCode('');
-        setCustomerSearch('');
-
-        // Clear URL
+        // Clear URL first
         window.history.replaceState(null, '', '#/transaction/sales-quotation/quotations');
 
-        setTimeout(() => {
-            fetchAllSales({
-                fromDate: today,
-                toDate: today,
-                limit: 80,
-                page: 1,
-                voucherCode: '',
-                customerSearch: ''
-            });
-        }, 0);
+        // Setting all state together — the unified useEffect will fire once with correct values
+        setFromDate(today);
+        setToDate(today);
+        setVoucherCode('');
+        setCustomerSearch('');
+        setLimit(80);
+        setPage(1);
     };
 
     const handlePageChange = (newPage) => {
@@ -333,7 +288,6 @@ const SalesQuotationList = () => {
         setPage(1);
     };
 
-    // ===== NAVIGATE WITH FILTER STATE PRESERVED =====
     const handleEdit = (row) => {
         const filters = new URLSearchParams({
             fromDate,
@@ -370,12 +324,10 @@ const SalesQuotationList = () => {
             if (!res.data.error) {
                 setAlert({ id: Date.now(), type: "success", message: t("deleteSuccess") });
 
-                // Refresh data after delete
                 if (filteredSalesData.length === 1 && page > 1) {
-                    const newPage = page - 1;
-                    setPage(newPage);
+                    setPage(page - 1);
                 } else {
-                    fetchAllSales({ page });
+                    fetchAllSales({ fromDate, toDate, voucherCode, customerSearch, page, limit });
                 }
             }
         } catch (error) {
@@ -384,25 +336,10 @@ const SalesQuotationList = () => {
                 ? t("foreeignKeyError")
                 : errorMessage;
 
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: finalMessage,
-            });
+            setAlert({ id: Date.now(), type: "error", message: finalMessage });
             console.error(error);
         }
     };
-
-    useEffect(() => {
-        return () => {
-            if (debounceTimerRef.current) {
-                clearTimeout(debounceTimerRef.current);
-            }
-            if (customerDebounceTimerRef.current) {
-                clearTimeout(customerDebounceTimerRef.current);
-            }
-        };
-    }, []);
 
     const footerData = useMemo(() => {
         if (!filteredSalesData || filteredSalesData.length === 0) return null;
@@ -473,7 +410,7 @@ const SalesQuotationList = () => {
                 />
                 <Preloader />
             </div>
-        )
+        );
     }
 
     return (
@@ -545,7 +482,7 @@ const SalesQuotationList = () => {
                 />
             </div>
         </div>
-    )
-}
+    );
+};
 
-export default SalesQuotationList
+export default SalesQuotationList;

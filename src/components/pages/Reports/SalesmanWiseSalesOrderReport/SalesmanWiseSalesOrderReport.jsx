@@ -27,8 +27,8 @@ const SalesmanWiseSalesOrderReport = () => {
     const [currencyData, setCurrencyData] = useState([]);
     const [brandData, setBrandData] = useState([]);
 
-    const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Salesman Wise Sales Order Report");
+    const { selectedBranchId ,currentCurrency} = useAuth();
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Salesman Wise Sales Order");
     const { generalSettings } = useSelector((state) => state.settings);
 
     const {
@@ -39,9 +39,9 @@ const SalesmanWiseSalesOrderReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -53,9 +53,9 @@ const SalesmanWiseSalesOrderReport = () => {
         toDate: defaultDates.toDate,
         employeeId: null,
         mode: 'Voucher Wise',
-        currencyId: 0,
-        brandId: 0,
-        isAccountsPosting: false
+        currencyId: currentCurrency?.currencyId,
+        brandId: null,
+        isAccountsPosting: generalSettings?.AccountPosting
     });
 
     useEffect(() => {
@@ -112,7 +112,7 @@ const SalesmanWiseSalesOrderReport = () => {
     const modeOptions = [
         { label: t('salesmanWiseSalesOrderReport.filters.voucherWise'), value: 'Voucher Wise' },
         { label: t('salesmanWiseSalesOrderReport.filters.productWise'), value: 'Product Wise' },
-        { label: t('salesmanWiseSalesOrderReport.filters.salesmanWise'), value: 'Salesman Wise' }
+        // { label: t('salesmanWiseSalesOrderReport.filters.salesmanWise'), value: 'Salesman Wise' }
     ];
     const formatDate = (dateString) => {
         if (!dateString) return '';
@@ -138,7 +138,7 @@ const SalesmanWiseSalesOrderReport = () => {
                 employee_id: filters.employeeId || null,
                 mode: filters.mode,
                 branch_id: Number(selectedBranchId),
-                currency_id: filters.currencyId,
+                currency_id: filters.currencyId || currentCurrency?.currencyId,
                 brand_id: filters.brandId,
                 is_accounts_posting: filters.isAccountsPosting
             };
@@ -217,9 +217,9 @@ const SalesmanWiseSalesOrderReport = () => {
             toDate: dates.toDate,
             employeeId: null,
             mode: 'Voucher Wise',
-            currencyId: 0,
+            currencyId: currentCurrency?.currencyId,
             brandId: 0,
-            isAccountsPosting: false
+            isAccountsPosting: generalSettings?.AccountPosting
         });
         setReportData(null);
         setAlert(null);

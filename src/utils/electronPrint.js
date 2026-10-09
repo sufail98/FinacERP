@@ -99,13 +99,12 @@ export const printSilent = async (html, printerName, printType = 'a4') => {
 /**
  * Print with dialog (user selects printer)
  */
-export const printWithDialog = async (html, printType = 'a4') => {
+export const printWithDialog = async (html, printType = 'a4', pageSize) => {
   if (!isElectron()) {
     return browserPrint(html);
   }
-
   try {
-    const result = await window.electronAPI.printDialog(html, printType);
+    const result = await window.electronAPI.printDialog(html, printType, pageSize);
     return result;
   } catch (error) {
     console.error('❌ [PRINT DIALOG] Error:', error);
@@ -162,7 +161,6 @@ export const simplePrint = async (html, printType = 'a4') => {
   try {
     // Get saved printer preference
     const savedPrinter = await getPrinterPreference(printType);
-    console.log('🖨️ [SIMPLE PRINT] Using printer:', savedPrinter || 'system default');
 
     const result = await printSilent(html, savedPrinter, printType);
     

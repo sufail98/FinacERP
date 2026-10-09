@@ -30,6 +30,7 @@ const PaymentReportFilters = ({
                         name="fromDate"
                         value={filters.fromDate}
                         onChange={(e, value) => onFilterChange('fromDate', value)}
+                        max={new Date().toISOString().split(('T')[0])}
                         required
                         className='w-full'
                     />
@@ -75,7 +76,7 @@ const PaymentReportFilters = ({
                     </div>
                 )}
 
-                {generalSettings?.AccountPosting && (
+                {/* {generalSettings?.AccountPosting && (
                     <div className="w-[160px]">
                         <SearchableDropdown
                             label={t("reportFilters.selectAccountPosting")}
@@ -88,7 +89,7 @@ const PaymentReportFilters = ({
                             clearable
                         />
                     </div>
-                )}
+                )} */}
 
              
                  <div className="flex items-end gap-6  border-gray-200 dark:border-gray-700">

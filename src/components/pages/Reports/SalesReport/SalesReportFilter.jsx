@@ -1,10 +1,12 @@
 // src/components/pages/Reports/SalesReport/SalesReportFilter.jsx
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import DateInput from '@/components/elements/theme/DateInput';
 import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
 import { RefreshCw, Eye } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
+import useAuth from '@/redux/hook/auth/useAuth';
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
 const SalesReportFilter = ({
     filters,
@@ -17,38 +19,64 @@ const SalesReportFilter = ({
     conditionOptions,
     paymentModeOptions,
     loading,
-    resetFilters
+    resetFilters,
+    branchOptions,       // ← new prop
+    isMainBranch         // ← new prop
 }) => {
     const { t } = useTranslation();
     const { generalSettings } = useSelector((state) => state.settings);
+    const [showTaxType, setShowTaxType] = useState(false);
+    const { hasAccess: hasTransactionBatchAccess } = usePrivileges("Transaction Batch");
 
-    const isSummaryMode = filters.reportMode === 'Summary';
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.altKey && e.key === 'F10') {
+                e.preventDefault();
+                setShowTaxType(prev => !prev);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
 
     return (
-        <div className="bg-white dark:bg-[#1e1e1e]  mb-3 transition-colors">
+        <div className="bg-white dark:bg-[#1e1e1e] mb-3 transition-colors">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-1 mb-1`}>
+                <div className='grid grid-cols-2 gap-1'>
+                    <DateInput
+                        label={t('salesReport.filters.fromDate')}
+                        name="fromDate"
+                        value={filters.fromDate}
+                        onChange={(e, value) => onFilterChange('fromDate', value)}
+                        max={new Date().toISOString().split(('T')[0])}
+                        required
+                        className='w-full'
+                    />
+                    <DateInput
+                        label={t('salesReport.filters.toDate')}
+                        name="toDate"
+                        value={filters.toDate}
+                        onChange={(e, value) => onFilterChange('toDate', value)}
+                        required
+                        min={filters.fromDate}
+                        className='w-full'
+                    />
+                </div>
 
-           
-
-            {/* Primary Filters */}
-            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-1 mb-1`}>
-                <DateInput
-                    label={t('salesReport.filters.fromDate')}
-                    name="fromDate"
-                    value={filters.fromDate}
-                    onChange={(e, value) => onFilterChange('fromDate', value)}
-                    required
-                    className='w-full'
-                />
-
-                <DateInput
-                    label={t('salesReport.filters.toDate')}
-                    name="toDate"
-                    value={filters.toDate}
-                    onChange={(e, value) => onFilterChange('toDate', value)}
-                    required
-                    min={filters.fromDate}
-                    className='w-full'
-                />
+                {/* ── Branch Dropdown (main branch only) ── */}
+                {isMainBranch && (
+                    <SearchableDropdown
+                        label={t('salesReport.filters.branch') || 'Branch'}
+                        name="branchId"
+                        value={filters.selectedBranchId ?? null}
+                        onChange={(value) => onFilterChange('selectedBranchId', value ?? null)}
+                        options={branchOptions}
+                        placeholder={t('salesReport.filters.allBranches') || 'All Branches'}
+                        searchPlaceholder={t('salesReport.filters.searchBranch') || 'Search branch...'}
+                        clearable
+                    />
+                )}
 
                 <SearchableDropdown
                     label={t('salesReport.filters.customer')}
@@ -61,103 +89,108 @@ const SalesReportFilter = ({
                     clearable
                 />
 
-                <SearchableDropdown
-                    label={t('salesReport.filters.condition')}
-                    name="condition"
-                    value={filters.condition}
-                    onChange={(value) => onFilterChange('condition', value)}
-                    options={conditionOptions}
-                    placeholder={t('salesReport.filters.selectCondition')}
-                />
+                {/* ── The following filters only apply to Detailed report ── */}
+                {filters.reportMode === 'Detailed' && (
+                    <>
+                        <SearchableDropdown
+                            label={t('salesReport.filters.condition')}
+                            name="condition"
+                            value={filters.condition}
+                            onChange={(value) => onFilterChange('condition', value)}
+                            options={conditionOptions}
+                            placeholder={t('salesReport.filters.selectCondition')}
+                        />
 
+                        {generalSettings?.costCentre && (
+                            <SearchableDropdown
+                                label={t('salesReport.filters.costCentre')}
+                                name="costCentreId"
+                                value={filters.costCentreId || null}
+                                onChange={(value) => onFilterChange('costCentreId', value || null)}
+                                options={costCentreOptions}
+                                placeholder={t('salesReport.filters.allCostCentres')}
+                                searchPlaceholder={t('salesReport.filters.search')}
+                                clearable
+                            />
+                        )}
 
-                {generalSettings?.costCentre && (
-                    <SearchableDropdown
-                        label={t('salesReport.filters.costCentre')}
-                        name="costCentreId"
-                        value={filters.costCentreId || null}
-                        onChange={(value) => onFilterChange('costCentreId', value || null)}
-                        options={costCentreOptions}
-                        placeholder={t('salesReport.filters.allCostCentres')}
-                        searchPlaceholder={t('salesReport.filters.search')}
-                        clearable
-                    />
+                        {showTaxType && (
+                            <SearchableDropdown
+                                label={t('salesReport.filters.taxType')}
+                                name="taxType"
+                                value={filters.taxType}
+                                onChange={(value) => onFilterChange('taxType', value)}
+                                options={taxTypeOptions}
+                                placeholder={t('salesReport.filters.selectTaxType')}
+                            />
+                        )}
+
+                        {hasTransactionBatchAccess && (
+                            <SearchableDropdown
+                                label={t('salesReport.filters.batch')}
+                                name="batchId"
+                                value={filters.batchId || null}
+                                onChange={(value) => onFilterChange('batchId', value || null)}
+                                options={batchOptions}
+                                placeholder={t('salesReport.filters.allBatches')}
+                                searchPlaceholder={t('salesReport.filters.search')}
+                                clearable
+                            />
+
+                        )}
+                        <SearchableDropdown
+                            label={t('salesReport.filters.paymentMode')}
+                            name="paymentMode"
+                            value={filters.paymentMode}
+                            onChange={(value) => onFilterChange('paymentMode', value)}
+                            options={paymentModeOptions}
+                            placeholder={t('salesReport.filters.allPaymentModes')}
+                            clearable
+                        />
+
+                        <DateInput
+                            label={t('salesReport.filters.dueOn')}
+                            name="dueOn"
+                            value={filters.dueOn || ''}
+                            onChange={(e, value) => onFilterChange('dueOn', value || null)}
+                            className='w-full'
+                        />
+                    </>
                 )}
-                  <SearchableDropdown
-                    label={t('salesReport.filters.taxType')}
-                    name="taxType"
-                    value={filters.taxType}
-                    onChange={(value) => onFilterChange('taxType', value)}
-                    options={taxTypeOptions}
-                    placeholder={t('salesReport.filters.selectTaxType')}
-                />
 
-                <SearchableDropdown
-                    label={t('salesReport.filters.batch')}
-                    name="batchId"
-                    value={filters.batchId || null}
-                    onChange={(value) => onFilterChange('batchId', value || null)}
-                    options={batchOptions}
-                    placeholder={t('salesReport.filters.allBatches')}
-                    searchPlaceholder={t('salesReport.filters.search')}
-                    clearable
-                />
-
-                <SearchableDropdown
-                    label={t('salesReport.filters.paymentMode')}
-                    name="paymentMode"
-                    value={filters.paymentMode}
-                    onChange={(value) => onFilterChange('paymentMode', value)}
-                    options={paymentModeOptions}
-                    placeholder={t('salesReport.filters.allPaymentModes')}
-                    clearable
-                />
-
-                <DateInput
-                    label={t('salesReport.filters.dueOn')}
-                    name="dueOn"
-                    value={filters.dueOn || ''}
-                    onChange={(e, value) => onFilterChange('dueOn', value || null)}
-                    className='w-full'
-                />
-                 {/* Report Mode Toggle */}
-            <div className="flex items-end gap-6  border-gray-200 dark:border-gray-700">
-                <label className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                        type="radio"
-                        name="reportMode"
-                        value="Summary"
-                        checked={filters.reportMode === 'Summary'}
-                        onChange={(e) => onFilterChange('reportMode', e.target.value)}
-                        className="w-4 h-4"
-                    />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                        {t('salesReport.filters.summary') || 'Summary'}
-                    </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                        type="radio"
-                        name="reportMode"
-                        value="Detailed"
-                        checked={filters.reportMode === 'Detailed'}
-                        onChange={(e) => onFilterChange('reportMode', e.target.value)}
-                        className="w-4 h-4 "
-                    />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                        {t('salesReport.filters.detailed') || 'Detailed'}
-                    </span>
-                </label>
+                {/* Report Mode Toggle */}
+                <div className="flex items-end gap-6 border-gray-200 dark:border-gray-700">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                            type="radio"
+                            name="reportMode"
+                            value="Summary"
+                            checked={filters.reportMode === 'Summary'}
+                            onChange={(e) => onFilterChange('reportMode', e.target.value)}
+                            className="w-4 h-4"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {t('salesReport.filters.summary') || 'Summary'}
+                        </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                            type="radio"
+                            name="reportMode"
+                            value="Detailed"
+                            checked={filters.reportMode === 'Detailed'}
+                            onChange={(e) => onFilterChange('reportMode', e.target.value)}
+                            className="w-4 h-4"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {t('salesReport.filters.detailed') || 'Detailed'}
+                        </span>
+                    </label>
+                </div>
             </div>
 
-            </div>
-
-          
             {/* Checkboxes and Buttons */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-
-
-                {/* Action Buttons */}
                 <div className="flex items-center gap-2">
                     <button
                         onClick={onGenerateReport}

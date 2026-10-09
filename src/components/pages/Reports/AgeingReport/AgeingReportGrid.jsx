@@ -35,15 +35,8 @@ const AgeingReportGrid = ({
     };
 
     // Calculate row total
-    const getRowTotal = (row) => {
-        return (
-            parseFloat(row['1to30'] || 0) +
-            parseFloat(row['31to60'] || 0) +
-            parseFloat(row['61to90'] || 0) +
-            parseFloat(row['91to120'] || 0) +
-            parseFloat(row['120above'] || 0)
-        );
-    };
+       const getRowTotal = (row) =>
+        row.days1to30 + row.days31to60 + row.days61to90 + row.days91to120 + row.above120;
 
     // Loading State
     if (loading) {
@@ -106,40 +99,24 @@ const AgeingReportGrid = ({
     const columns = reportType === 'voucher' ? voucherColumns : ledgerColumns;
 
     // Get cell value based on column key
-    const getCellValue = (row, colKey, index) => {
+        const getCellValue = (row, colKey, index) => {
         switch (colKey) {
-            case 'slNo':
-                return row['SlNO'] || index + 1;
-            case 'accountLedger':
-                return row['Account Ledger'] || row['AccountLedger'] || '-';
-            case 'date':
-                return formatDate(row['Date'] || row['date']);
-            case 'voucherType':
-                return row['Voucher Type'] || row['voucherType'] || '-';
-            case 'voucherNo':
-                return row['Voucher No'] || row['voucherNo'] || '-';
-            case 'refNo':
-                return row['Ref No'] || row['refNo'] || '-';
-            case 'billAmount':
-                return formatAmount(row['Bill Amount'] || row['BillAmount'] || 0);
-            case '1to30':
-                return formatAmount(row['1to30'] || 0);
-            case '31to60':
-                return formatAmount(row['31to60'] || 0);
-            case '61to90':
-                return formatAmount(row['61to90'] || 0);
-            case '91to120':
-                return formatAmount(row['91to120'] || 0);
-            case '120above':
-                return formatAmount(row['120above'] || 0);
-            case 'lastPaymentDate':
-                return formatDate(row['LastRcptPaymentDate'] || row['LastPaymentDate'] || row['lastPaymentDate']);
-            case 'totalAmt':
-                return formatAmount(row['TotalAmt'] || row['totalAmt'] || getRowTotal(row));
-            case 'narration':
-                return row['Narration'] || row['narration'] || '-';
-            default:
-                return '-';
+            case 'slNo':           return row.slNo ?? index + 1;
+            case 'accountLedger':  return row.accountLedger || '-';
+            case 'date':           return formatDate(row.date);
+            case 'voucherType':    return row.voucherType || '-';
+            case 'voucherNo':      return row.voucherNo || '-';
+            case 'refNo':          return row.refNo || '-';
+            case 'billAmount':     return formatAmount(row.billAmount);
+            case '1to30':          return formatAmount(row.days1to30);
+            case '31to60':         return formatAmount(row.days31to60);
+            case '61to90':         return formatAmount(row.days61to90);
+            case '91to120':        return formatAmount(row.days91to120);
+            case '120above':       return formatAmount(row.above120);
+            case 'lastPaymentDate':return formatDate(row.lastPaymentDate);
+            case 'totalAmt':       return formatAmount(row.totalAmt ?? getRowTotal(row));
+            case 'narration':      return row.narration || '-';
+            default:                return '-';
         }
     };
 

@@ -44,9 +44,9 @@ const SalesOrderReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      
         return {
-            fromDate: firstDayOfMonth.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -172,7 +172,7 @@ const SalesOrderReport = () => {
         try {
             const [partyRes, salesmanRes, areaRes, userRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Customer", "Supplier"],
+                    ledgerTypes: ["Customer", "Supplier","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("employees").catch(() => ({ data: { data: [] } })),

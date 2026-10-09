@@ -226,8 +226,11 @@ const generateQRCodeDataURL = async (data, size = 400) => {
 };
 
 const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCurrency) => {
+    
+    
     const state = store.getState().settings;
     const generalSettings = state.generalSettings;
+        const activateRoundoff = Boolean(generalSettings.RoundOff)
     const showCurrencyPrefix = generalSettings.showCurrencyprefix;
     const currencySymbol = currentCurrency ? currentCurrency.currencySymbol : '';
     
@@ -241,6 +244,7 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
             ? `${currencySymbol} ${Number(num).toFixed(generalSettings.decimalPart)}`
             : Number(num).toFixed(generalSettings.decimalPart);
     const saleSettings = state.saleSettings;
+
     const companyData = state.generalSettings;
     
     const headerImage = companyData.branchHeader;
@@ -277,7 +281,7 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
         date,
         customerName,
         customerVATNo,
-        CustomerAddress,
+        CustomerPhone,
         paymentMode,
         salesDetails = [],
         subTotal = 0,
@@ -291,7 +295,10 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
         customerCode,
         dueDate,
         supplyDate,
-        ledgerBalance = 0,  // ✅ Added ledgerBalance
+        ledgerBalance = 0,
+        othercharge = 0,
+        roundOff = 0,
+         bankDetails = {},
     } = invoiceData;
 
     // ✅ Check if customer name contains 'cash' (case-insensitive)
@@ -322,7 +329,7 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
         qrCodeDataURL = await generateQRCodeDataURL(qrData, 400);
     }
 
-    const dp = generalSettings.decimalPart || 2;
+    const dp = 2;
 
     const FIRST_PAGE_ROWS = 25;
     const MIDDLE_PAGE_ROWS = 35;
@@ -394,7 +401,18 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                 </div>
                 `}
             </div>
-
+    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', { 
+                day: '2-digit', 
+                month: 'short', 
+                year: 'numeric' 
+            })} ${new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            })}</div>
+        </div>
             ${isFirstPage ? `
             <div class="info-wrapper">
                 <div class="company-title-bar">${companyName}</div>
@@ -449,7 +467,7 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                         <tr>
                             <td class="info-label">Contact Number / رقم الاتصال</td>
                             <td class="info-colon">:</td>
-                            <td class="info-value">${customerData.ContactNumber || ''}</td>
+                            <td class="info-value">${CustomerPhone || ''}</td>
                         </tr>
                     </table>
 
@@ -546,7 +564,7 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                             <div>Item Price</div>
                             <div class="th-ar">سعر السلعة</div>
                         </th>
-                        ${saleSettings?.lineDiscount ? `
+                        $${saleSettings?.showLineDiscount ? `
                         <th class="col-disc">
                             <div>Disc %</div>
                             <div class="th-ar">خصم %</div>
@@ -592,7 +610,7 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                                 <td class="td-center">${item.unitName || item.unit || 'ctn'}</td>
                                 <td class="td-right">${Number(item.rate || 0).toFixed(dp)}</td>
                                 <td class="td-right">${itemPrice.toFixed(dp)}</td>
-                                ${saleSettings?.lineDiscount ? `
+                                ${saleSettings?.showLineDiscount ? `
                                 <td class="td-center">${discountPercentage.toFixed(2)}%</td>
                                 <td class="td-right">${discountAmount.toFixed(dp)}</td>
                                 ` : ''}
@@ -606,7 +624,7 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                     }).join('')}
 
                     ${emptyRows.map(() => {
-                        const discCols = saleSettings?.lineDiscount ? '<td></td><td></td>' : '';
+                        const discCols = saleSettings?.showLineDiscount ? '<td></td><td></td>' : '';
                         const taxCols = showTax ? '<td></td><td></td>' : '';
                         return `
                             <tr class="product-row empty-row">
@@ -639,15 +657,23 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                         <div class="totals-ar">الإجمالي ( غير شاملة ضريبة القيمة المضافة )</div>
                         <div class="totals-value">${fmt(subTotal)}</div>
                     </div>
-                    <div class="totals-row-item">
+                     ${Number(othercharge) !== 0 ? `<div class="totals-row-item">
+                        <div class="totals-en">OTHER CHARGE</div>
+                        <div class="totals-ar"> رسوم اخرى</div>
+                        <div class="totals-value">${fmt(othercharge)}</div>
+                    </div>` : ""}
+                     
+                    ${((saleSettings?.showBillDiscountAmount || saleSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0)?`
+                                 <div class="totals-row-item">
                         <div class="totals-en">DISCOUNT</div>
                         <div class="totals-ar">مجموع الخصومات</div>
                         <div class="totals-value">${fmt(billDiscount)}</div>
-                    </div>
+                    </div> ` : ""}
+                   
                     <div class="totals-row-item">
                         <div class="totals-en">TOTAL TAXABLE AMOUNT (EXCL. VAT)</div>
                         <div class="totals-ar">الإجمالي الخاضع للضريبة ( غير شاملة ضريبة القيمة المضافة )</div>
-                        <div class="totals-value">${fmt(Number(subTotal) - Number(billDiscount))}</div>
+                        <div class="totals-value">${fmt(Number(subTotal) - Number(invoiceData?.billDiscount) + Number(othercharge))}</div>
                     </div>
                     ${showTax ? `
                     <div class="totals-row-item">
@@ -656,6 +682,13 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                         <div class="totals-value">${fmt(totalTax)}</div>
                     </div>
                     ` : ''}
+                     ${(activateRoundoff && Number(roundOff) !== 0) ? `
+                                    <div class="totals-row-item">
+                                    <div class="totals-en">ROUND OFF</div>
+                                    <div class="totals-ar">مبلغ الضريبة </div>
+                                    <div class="totals-value">${fmt( roundOff )}</div>
+                                </div>` : ""}
+                    
                     <div class="totals-row-item grand">
                         <div class="totals-en">TOTAL AMOUNT DUE</div>
                         <div class="totals-ar">إجمالي المبلغ المستحق</div>
@@ -677,15 +710,15 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                     <span>${amountToWords(totalAmount).english}</span>
                 </div>
 
-                <div class="bank-details-box">
-                    <div class="bank-title">Bank Details:</div>
-                    <div class="bank-line">
-                        <span style="font-weight:bold;">${branchData?.bankName || '-'}:</span> ${branchData?.bankAccountNo || '-'}
-                        <span class="bank-sep">|</span>
-                        <span style="font-weight:bold;">IBAN:</span> ${branchData?.iban || '-'}
-                        ${invoiceData?.narration ? `<span class="bank-sep">|</span><span style="font-weight:bold;">Remark:</span> ${invoiceData.narration}` : ''}
-                    </div>
-                </div>
+            <div class="bank-details-box">
+    <div class="bank-title">Bank Details:</div>
+    <div class="bank-line">
+        <span style="font-weight:bold;">${bankDetails?.bankname || bankDetails?.bankaccname || '-'}:</span> ${bankDetails?.accountNo || '-'}
+        <span class="bank-sep">|</span>
+        <span style="font-weight:bold;">IBAN:</span> ${bankDetails?.ibanno || '-'}
+        ${invoiceData?.narration ? `<span class="bank-sep">|</span><span style="font-weight:bold;">Remark:</span> ${invoiceData.narration}` : ''}
+    </div>
+</div>
 
                 <div class="prepared-receiver-row">
                     <div class="sig-block" style="align-items:flex-start;">
@@ -736,13 +769,63 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                 flex-direction: column;
                 page-break-after: always;
                 overflow: hidden;
+                padding-right:25px;
+                padding-left:25px;
             }
+                /* ✅ Vertical Print Timestamp in Right Corner */
+.print-timestamp {
+    position: absolute;
+    bottom: 15mm;
+    right: 10mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
+
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
             .page:last-child { page-break-after: auto; }
 
-            .page-header {
-                width: 100%;
-            }
-            .header-img { width: 100%; display: block; }
+           .page-header {
+    width: 100%;
+    height: 100px;
+    overflow: hidden;
+}
+         .header-img { 
+    width: 100%; 
+    height: 100%;
+    display: block; 
+    object-fit: fill;
+}
             .header-inner {
                 display: flex;
                 align-items: flex-start;
@@ -863,7 +946,7 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
 
             /* ✅ Dynamic column widths based on settings */
             ${(() => {
-                const hasDiscount = saleSettings?.lineDiscount;
+                const hasDiscount = saleSettings?.showLineDiscount;
                 const hasTax = showTax;
                 
                 if (hasDiscount && hasTax) {
@@ -1072,8 +1155,18 @@ const generateInvoiceFourHTML = async (invoiceData, branchData, time, currentCur
                 margin-top: 20px;
             }
 
-            .page-footer { width: 100%; margin-top: auto; }
-            .footer-img { width: 100%; display: block; }
+         .page-footer { 
+    width: 100%; 
+    height: 100px;
+    margin-top: auto; 
+    overflow: hidden;
+}
+.footer-img { 
+    width: 100%; 
+    height: 100%;
+    display: block; 
+    object-fit: fill;
+}
 
             @media print {
                 body { background: white; padding: 0; }

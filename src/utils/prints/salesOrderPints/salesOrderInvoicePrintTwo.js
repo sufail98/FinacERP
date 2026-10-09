@@ -86,7 +86,18 @@ const generateSalesOrderHTML = (orderData, currentCurrency) => {
     <span class="heading-ar">طلب المبيعات</span>
 </div>
 <div class="hr-line" style="height:0.5px;"></div>
-
+    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', { 
+                day: '2-digit', 
+                month: 'short', 
+                year: 'numeric' 
+            })} ${new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            })}</div>
+        </div>
 
                     ${isFirstPage ? `
                     <!-- Details Section - Split in 2 -->
@@ -231,6 +242,46 @@ const generateSalesOrderHTML = (orderData, currentCurrency) => {
                     font-family: Arial, sans-serif;
                     font-size: 10px;
                 }
+                    .print-timestamp {
+    position: absolute;
+    bottom: 15mm;
+    right: 3mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
+
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
                 .page {
                     width: 210mm;
                     height: 148mm;

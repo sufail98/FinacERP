@@ -152,14 +152,22 @@ export const exportReportToCsv = (config) => {
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     
-    if (navigator.msSaveBlob) {
+    const finalFileName = `${fileName}_${formatDate(new Date()).replace(/-/g, '_')}.csv`;
+
+    if (window.electronAPI && window.electronAPI.saveFileBase64) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            window.electronAPI.saveFileBase64(reader.result, finalFileName);
+        };
+        reader.readAsDataURL(blob);
+    } else if (navigator.msSaveBlob) {
         // IE 10+
-        navigator.msSaveBlob(blob, `${fileName}_${formatDate(new Date()).replace(/-/g, '_')}.csv`);
+        navigator.msSaveBlob(blob, finalFileName);
     } else {
         // Other browsers
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
-        link.setAttribute('download', `${fileName}_${formatDate(new Date()).replace(/-/g, '_')}.csv`);
+        link.setAttribute('download', finalFileName);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();

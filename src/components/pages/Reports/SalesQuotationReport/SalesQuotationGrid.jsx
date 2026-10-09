@@ -61,6 +61,8 @@ const SalesQuotationReportGrid = ({
         { key: 'qty', label: t('salesQuotationReport.grid.columns.qty'), align: 'right' },
         { key: 'rate', label: t('salesQuotationReport.grid.columns.rate'), align: 'right' },
         { key: 'grossAmount', label: t('salesQuotationReport.grid.columns.grossAmount'), align: 'right' },
+        // { key: 'BillDiscount', label: t('salesQuotationReport.grid.columns.discount'), align: 'right' },
+        // { key: '', label: t('salesQuotationReport.grid.columns.discount'), align: 'right' },
         { key: 'BillDiscount', label: t('salesQuotationReport.grid.columns.discount'), align: 'right' },
         { key: 'taxableAmt', label: t('salesQuotationReport.grid.columns.taxableAmount'), align: 'right' },
         { key: 'taxAmount', label: t('salesQuotationReport.grid.columns.taxAmount'), align: 'right' },

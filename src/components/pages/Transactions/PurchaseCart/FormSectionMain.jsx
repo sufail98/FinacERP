@@ -11,6 +11,7 @@ import useAuth from '@/redux/hook/auth/useAuth'
 import SalesInvoiceTable from './PurchaseCartTable'
 import DateInput from '@/components/elements/theme/DateInput'
 import TextArea from '@/components/elements/theme/TextArea'
+import { sanitize } from '@/lib/inputSanitizer'
 
 const FormSectionMain = ({
   existingInvoiceNo,
@@ -31,9 +32,16 @@ const FormSectionMain = ({
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    let updatedValue = value
+    if(["CustomerName"].includes(name)){
+      updatedValue = sanitize.lettersSpace(value)
+    }
+    if(["CustomerPhone"].includes(name)){
+      updatedValue = sanitize.numbers(value).slice(0,10)
+    }
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: updatedValue
     }));
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));

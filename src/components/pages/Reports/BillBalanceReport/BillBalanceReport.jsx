@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import BillBalanceReportFilter from './BillBalanceReportFilter';
 import useReportExport from '@/hooks/useReportExport';
+import { showToast } from '@/utils/toast';
 
 const BillBalanceReport = () => {
     const { t } = useTranslation();
@@ -31,12 +32,12 @@ const BillBalanceReport = () => {
     } = useReportExport();
 
     const [filters, setFilters] = useState({
-        fromDate: '2024-04-01',
+        fromDate: new Date().toISOString().split('T')[0],
         toDate: new Date().toISOString().split('T')[0],
-        groupId: 1,
+        groupId: null,
         ledgerId: null,
         costCentreId: null,
-        currencyId: currentCurrency?.currencyId || 1,
+        currencyId: currentCurrency?.currencyId || null,
         isMainGroup: true,
         isShowOpeningBalance: true,
         mode: "Summary"
@@ -50,7 +51,7 @@ const BillBalanceReport = () => {
 
     const fetchGroupData = async () => {
         try {
-            const res = await axiosInstance.get("account-groups");
+            const res = await axiosInstance.get("accountgroups");
             setGroupData(res.data.data || []);
         } catch (err) {
             console.error("Error fetching groups:", err);
@@ -59,11 +60,11 @@ const BillBalanceReport = () => {
 
     const fetchLedgerData = async () => {
         try {
-            const response = await axiosInstance.post("account-ledgers", {
-                group_ids: filters.groupId ? [filters.groupId] : [],
-                branchId: selectedBranchId
-            });
-            setLedgerData(response.data.data || []);
+            const res = await axiosInstance.post("customer-supplier-account-ledgers", {
+        ledgerTypes: ["Customer","Customer&Supplier","Supplier"],
+        branchId: selectedBranchId
+      });
+            setLedgerData(res.data.data || []);
         } catch (error) {
             console.error("Error fetching ledgers:", error);
         }
@@ -85,14 +86,19 @@ const BillBalanceReport = () => {
     }, [filters.groupId]);
 
     const fetchReport = async () => {
+        if (!filters.groupId) {
+        showToast.error(t('Please select a group'));
+        return;
+    }
+
         setLoading(true);
 
         const requestBody = {
             fromDate: filters.fromDate,
             toDate: filters.toDate,
-            branchId: selectedBranchId?.toString() || "1",
-            groupId: filters.groupId ? filters.groupId.toString() : "1",
-            currencyId: filters.currencyId?.toString() || currentCurrency?.currencyId?.toString() || "1",
+            branchId: selectedBranchId?.toString() ||null,
+            groupId: filters.groupId ? filters.groupId.toString() : null,
+            currencyId: filters.currencyId?.toString() || currentCurrency?.currencyId?.toString() || null,
             ledgerId: filters.ledgerId ? filters.ledgerId.toString() : null,
             costCentreId: filters.costCentreId ? filters.costCentreId.toString() : null,
             isMainGroup: filters.isMainGroup || false,
@@ -287,10 +293,10 @@ const BillBalanceReport = () => {
         setFilters({
             fromDate: '2024-04-01',
             toDate: new Date().toISOString().split('T')[0],
-            groupId: 1,
+            groupId: null,
             ledgerId: null,
             costCentreId: null,
-            currencyId: currentCurrency?.currencyId || 1,
+            currencyId: currentCurrency?.currencyId || null,
             isMainGroup: true,
             isShowOpeningBalance: true,
             mode: 'Summary'
@@ -299,7 +305,7 @@ const BillBalanceReport = () => {
     };
 
     const groupOptions = groupData.map(g => ({
-        label: g.groupName,
+        label: g.accountGroupName,
         value: g.groupId
     }));
 
@@ -379,7 +385,7 @@ const BillBalanceReport = () => {
         return row[key] ?? "-";
     };
 
-    if (loading || privilegeLoading) {
+    if ( privilegeLoading) {
         return (
             <div>
                 <BreadCrumb

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
+import { useParams } from 'react-router-dom';
 
 /**
  * useAgainstModal
@@ -25,11 +26,16 @@ const useAgainstModal = ({
     rows,
     setRows,
     updateFormData,
+    partyDetails
 }) => {
     const { selectedBranchId } = useAuth();
+    const { reciptVoucherId } = useParams();
+
 
     // Persists the user's confirmed checked state per ledgerId across reopens
     const checkedStateRef = useRef({});
+     const partyDetailsRef = useRef(partyDetails || []);
+    partyDetailsRef.current = partyDetails || [];
 
     const [againstModal, setAgainstModal] = useState({
         isOpen: false,
@@ -53,6 +59,8 @@ const useAgainstModal = ({
             ledgerId,
             crOrDr,
             branchId: selectedBranchId,
+            currentVoucherType: "Receipt Voucher",
+            currentMasterId: reciptVoucherId || null,
         });
 
         return (res?.data?.data || []).map((p) => ({
@@ -90,6 +98,8 @@ const useAgainstModal = ({
                 ledgerId,
                 branchId: selectedBranchId,
                 crOrDr,
+                currentVoucherType: "Receipt Voucher",
+                currentMasterId: reciptVoucherId || null,
             });
             againstRows = res?.data?.data || [];
         } catch (err) {
@@ -122,21 +132,8 @@ const useAgainstModal = ({
      * In edit mode: the by-id endpoint may return fully-settled invoices that
      * no longer appear in party-balance. Add those so the user can see them.
      */
-    const appendSettledInvoices = async (partyBalanceRows, ledgerId, byIdPartyDetails) => {
+       const appendSettledInvoices = async (partyBalanceRows, ledgerId, byIdPartyDetails) => {
         if (!voucherId || !byIdPartyDetails?.length) return partyBalanceRows;
-        let againstRows = [];
-        try {
-            const res = await axiosInstance.post('party-balance-against', {
-                againstVoucherType: voucherType,
-                p_againstvoucherno: voucherId,
-                ledgerId,
-                branchId: selectedBranchId,
-                crOrDr,
-            });
-            againstRows = res?.data?.data || [];
-        } catch (err) {
-            console.error('useAgainstModal: error fetching party-balance-against (settled):', err);
-        }
 
         const existingMasterIds = new Set(partyBalanceRows.map((r) => String(r.masterId)));
 
@@ -145,20 +142,18 @@ const useAgainstModal = ({
         );
 
         for (const p of byIdByLedger) {
-            if (!existingMasterIds.has(String(p.MasterId))) {
-                const alreadyPaid = parseFloat(
-                    againstRows.find((ag) => String(ag.voucherNo) === String(p.MasterId))?.amount ??
-                    p.credit ??
-                    0
-                );
+            const masterId = p.MasterId ?? p.masterId;
+            if (!existingMasterIds.has(String(masterId))) {
+                const alreadyPaid = parseFloat(p.credit ?? p.debit ?? p.amount ?? 0);
                 partyBalanceRows.push({
-                    masterId: p.MasterId,
+                    masterId: masterId,
                     type: p.referenceType || 'Against',
                     voucherType: p.voucherType || '',
                     voucherDate: p.VoucherDate || '',
-                    voucherNo: p.voucherNo || p.MastervoucherNo || '',
+                    voucherNo: p.MastervoucherNo || p.voucherNo || '',
                     billAmount: parseFloat(p.billAmount) || 0,
-                    amountToPay: alreadyPaid,
+                    // amountToPay should reflect the *pending* balance, already-paid + remaining
+                    amountToPay: alreadyPaid + (parseFloat(p.balance) || 0),
                     currencySymbol: '',
                     currencyConversionId: p.currencyConversionId || null,
                     creditPeriod: p.creditPeriod || 0,
@@ -168,6 +163,7 @@ const useAgainstModal = ({
                     checked: alreadyPaid > 0,
                     isNew: false,
                 });
+                existingMasterIds.add(String(masterId));
             }
         }
 
@@ -181,11 +177,10 @@ const useAgainstModal = ({
      * If the user has already confirmed a selection this session, reopen
      * their confirmed checked rows merged with fresh unchecked API data.
      */
-    const handleAgainstClick = async (index, byIdPartyDetails = []) => {
+     const handleAgainstClick = async (index) => {
         const row = rows[index];
         if (!row?.ledgerId || row.ledgerId === 0) return;
 
-        // Re-open with previously confirmed checked rows + fresh unchecked rows
         if (checkedStateRef.current[row.ledgerId]) {
             const savedRows = checkedStateRef.current[row.ledgerId];
             const checkedRows = savedRows.filter((r) => r.checked);
@@ -195,6 +190,7 @@ const useAgainstModal = ({
             try {
                 let freshRows = await fetchPartyBalanceRows(row.ledgerId);
                 freshRows = await mergeWithAgainstRows(freshRows, row.ledgerId);
+                freshRows = await appendSettledInvoices(freshRows, row.ledgerId, partyDetailsRef.current);
 
                 const uncheckedFreshRows = freshRows.filter(
                     (r) => !checkedMasterIds.has(String(r.masterId))
@@ -216,12 +212,11 @@ const useAgainstModal = ({
             return;
         }
 
-        // First open: fetch fresh, merge edit-mode data, append settled invoices
         setAgainstLoadingRow(index);
         try {
             let partyBalanceRows = await fetchPartyBalanceRows(row.ledgerId);
             partyBalanceRows = await mergeWithAgainstRows(partyBalanceRows, row.ledgerId);
-            partyBalanceRows = await appendSettledInvoices(partyBalanceRows, row.ledgerId, byIdPartyDetails);
+            partyBalanceRows = await appendSettledInvoices(partyBalanceRows, row.ledgerId, partyDetailsRef.current);
 
             setAgainstModal({
                 isOpen: true,
@@ -238,10 +233,6 @@ const useAgainstModal = ({
         }
     };
 
-    /**
-     * Refresh button inside the modal: always fetches fresh from API,
-     * clears cached state so the next reopen also gets fresh data.
-     */
     const handleAgainstRefresh = async () => {
         const { rowIndex, ledgerId } = againstModal;
         if (!ledgerId) return;
@@ -249,8 +240,8 @@ const useAgainstModal = ({
         try {
             let freshRows = await fetchPartyBalanceRows(ledgerId);
             freshRows = await mergeWithAgainstRows(freshRows, ledgerId);
+            freshRows = await appendSettledInvoices(freshRows, ledgerId, partyDetailsRef.current);
 
-            // Invalidate cache for this ledger
             delete checkedStateRef.current[ledgerId];
 
             setAgainstModal((prev) => ({ ...prev, data: freshRows }));
@@ -276,44 +267,44 @@ const useAgainstModal = ({
      * @param {Array} updatedData   - all rows as the modal left them
      * @param {Array} partyDetails  - mapped party detail objects ready to save
      */
-   const handleAgainstSave = (updatedData, partyDetails) => {
-    const { rowIndex, ledgerId } = againstModal;
-    if (rowIndex === null) return;
+    const handleAgainstSave = (updatedData, partyDetails) => {
+        const { rowIndex, ledgerId } = againstModal;
+        if (rowIndex === null) return;
 
-    checkedStateRef.current[ledgerId] = updatedData;
+        checkedStateRef.current[ledgerId] = updatedData;
 
-    const totalAllocated = updatedData
-        .filter((r) => r.checked)
-        .reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        const totalAllocated = updatedData
+            .filter((r) => r.checked)
+            .reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
-    // Derive crOrDr from the actual row's current values (supports Journal Voucher)
-    const currentRow = rows[rowIndex];
-    const rowCrOrDr =
-        (parseFloat(currentRow?.debit) || 0) > 0 ? 'Dr'
-        : (parseFloat(currentRow?.credit) || 0) > 0 ? 'Cr'
-        : crOrDr; // fallback to hook-level default
+        // Derive crOrDr from the actual row's current values (supports Journal Voucher)
+        const currentRow = rows[rowIndex];
+        const rowCrOrDr =
+            (parseFloat(currentRow?.debit) || 0) > 0 ? 'Dr'
+                : (parseFloat(currentRow?.credit) || 0) > 0 ? 'Cr'
+                    : crOrDr; // fallback to hook-level default
 
-    const updatedRows = [...rows];
-    updatedRows[rowIndex] = {
-        ...updatedRows[rowIndex],
-        amount: totalAllocated,
-        debit: rowCrOrDr === 'Dr' ? totalAllocated : 0,
-        credit: rowCrOrDr === 'Cr' ? totalAllocated : 0,
-        againstDetails: updatedData,
-        // Enrich each partyDetail with amount, debit, credit
-        partyDetails: (partyDetails || updatedData).map((p) => ({
-            ...p,
-            amount: parseFloat(p.amount) || 0,
-            debit: rowCrOrDr === 'Dr' ? (parseFloat(p.amount) || 0) : 0,
-            credit: rowCrOrDr === 'Cr' ? (parseFloat(p.amount) || 0) : 0,
-            crOrDr: rowCrOrDr,
-        })),
+        const updatedRows = [...rows];
+        updatedRows[rowIndex] = {
+            ...updatedRows[rowIndex],
+            amount: totalAllocated,
+            debit: rowCrOrDr === 'Dr' ? totalAllocated : 0,
+            credit: rowCrOrDr === 'Cr' ? totalAllocated : 0,
+            againstDetails: updatedData,
+            // Enrich each partyDetail with amount, debit, credit
+            partyDetails: (partyDetails || updatedData).map((p) => ({
+                ...p,
+                amount: parseFloat(p.amount) || 0,
+                debit: rowCrOrDr === 'Dr' ? (parseFloat(p.amount) || 0) : 0,
+                credit: rowCrOrDr === 'Cr' ? (parseFloat(p.amount) || 0) : 0,
+                crOrDr: rowCrOrDr,
+            })),
+        };
+
+        setRows(updatedRows);
+        updateFormData(updatedRows);
+        setAgainstModal((prev) => ({ ...prev, isOpen: false }));
     };
-
-    setRows(updatedRows);
-    updateFormData(updatedRows);
-    setAgainstModal((prev) => ({ ...prev, isOpen: false }));
-};
     const closeAgainstModal = () =>
         setAgainstModal((prev) => ({ ...prev, isOpen: false }));
 

@@ -30,6 +30,7 @@ const ProductVsSalesManReportFilter = ({
                     name="fromDate"
                     value={filters.fromDate}
                     onChange={(e, value) => onFilterChange('fromDate', value)}
+                    max={new Date().toISOString().split(('T')[0])}
                     required
                     className='w-full'
                 />
@@ -83,7 +84,7 @@ const ProductVsSalesManReportFilter = ({
             {/* Row 2: Checkboxes and Buttons */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-gray-100 dark:border-gray-700">
                 {/* Checkboxes */}
-                <div className="flex flex-wrap items-center gap-4">
+                {/* <div className="flex flex-wrap items-center gap-4">
                     {generalSettings?.AccountPosting && (
     <label className="flex items-center cursor-pointer">
         <input
@@ -97,7 +98,7 @@ const ProductVsSalesManReportFilter = ({
         </span>
     </label>
 )}
-                </div>
+                </div> */}
 
                 {/* Buttons */}
                 <div className="flex items-center gap-2">

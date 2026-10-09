@@ -6,12 +6,13 @@ import axiosInstance from '@/lib/axiosConfig';
 import usePrivileges from '@/lib/hooks/usePrivileges';
 import useAuth from '@/redux/hook/auth/useAuth';
 import { BookOpen } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import AccountLedgerFilters from './AccountLedgerFilters';
 import { useSelector } from 'react-redux';
 import useReportExport from '@/hooks/useReportExport';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { showToast } from '@/utils/toast';
 
 const AccountLedgerReport = () => {
     const { t } = useTranslation();
@@ -21,11 +22,51 @@ const AccountLedgerReport = () => {
     const [acGroupData, setAcGroupData] = useState([]);
 
     const { selectedBranchId, currentCurrency, selectedBranchDetails } = useAuth();
+
     const { loading: privilegeLoading, hasAccess, message } = usePrivileges('Ledger Report');
     const { generalSettings } = useSelector((state) => state.settings);
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    const {
+        exportAccountLedgerToExcel,
+        exportAccountLedgerToPdf,
+        exportAccountLedgerToCsv
+    } = useReportExport();
+
+    // ---- Read initial filters from URL (fallback to defaults) ----
+    const getInitialFilters = () => ({
+        fromDate: searchParams.get('fromDate') || new Date().toISOString().split('T')[0],
+        toDate: searchParams.get('toDate') || new Date().toISOString().split('T')[0],
+        groupId: searchParams.get('groupId') || '',
+        costCentreId: searchParams.get('costCentreId') || '',
+        isShowOpeningBalance: searchParams.get('isShowOpeningBalance') !== null
+            ? searchParams.get('isShowOpeningBalance') === 'true'
+            : true
+    });
+
+    const [filters, setFilters] = useState(getInitialFilters);
+
+    // Avoid re-fetch loop when we programmatically update the URL
+    const isInitialMount = useRef(true);
+
+    // ---- Sync filters -> URL whenever they change ----
+    const syncFiltersToUrl = useCallback((newFilters) => {
+        const params = {};
+        if (newFilters.fromDate) params.fromDate = newFilters.fromDate;
+        if (newFilters.toDate) params.toDate = newFilters.toDate;
+        if (newFilters.groupId) params.groupId = newFilters.groupId;
+        if (newFilters.costCentreId) params.costCentreId = newFilters.costCentreId;
+        params.isShowOpeningBalance = String(newFilters.isShowOpeningBalance);
+        setSearchParams(params, { replace: true });
+    }, [setSearchParams]);
+
     const handleRowClick = (row) => {
         if (!row.MasterId) return;
+
+        // Persist current filters in URL before leaving, so they're there
+        // when the browser Back button brings the user back to this page.
+        syncFiltersToUrl(filters);
 
         const routes = {
             'Sales Invoice': `/transaction/sales-invoice/invoice-list/edit-sales-invoice/${row.MasterId}`,
@@ -38,8 +79,8 @@ const AccountLedgerReport = () => {
             'Contra Voucher': `/transaction/contra-voucher/edit-contra-voucher/${row.MasterId}`,
             'Material Receipt': `/transaction/material-receipt/edit/${row.MasterId}`,
             'Delivery Note': `/transaction/delivery-note/edit-delivery-note/${row.MasterId}`,
-            'Payable': `/transaction/payable-voucher/edit/${row.MasterId}`,
-            'Receivable': `/transaction/receivable-voucher/edit/${row.MasterId}`,
+            'Payable Voucher': `/transaction/payable-voucher/edit/${row.MasterId}`,
+            'Receivable Voucher': `/transaction/receivable-voucher/edit/${row.MasterId}`,
             'Physical Stock': `/transaction/physical-stock/edit/${row.MasterId}`,
             'Damage Stock': `/transaction/damage-stock/edit/${row.MasterId}`,
         };
@@ -47,20 +88,6 @@ const AccountLedgerReport = () => {
         const path = routes[row.voucherType];
         if (path) navigate(path);
     };
-    // Use the unified export hook
-    const { 
-        exportAccountLedgerToExcel, 
-        exportAccountLedgerToPdf, 
-        exportAccountLedgerToCsv 
-    } = useReportExport();
-
-    const [filters, setFilters] = useState({
-        fromDate: new Date().toISOString().split('T')[0],
-        toDate: new Date().toISOString().split('T')[0],
-        groupId: '',
-        costCentreId: '',
-        isShowOpeningBalance: true
-    });
 
     useEffect(() => {
         fetchCostCenterData();
@@ -146,26 +173,29 @@ const AccountLedgerReport = () => {
         return processed;
     };
 
-    const fetchReport = async () => {
-        if (!filters.groupId) {
-            alert(t('Please select an account group'));
+    // fetchReport now takes filters as an argument so we can call it
+    // right after restoring from the URL on mount, without waiting
+    // on state updates to flush.
+    const fetchReport = async (filtersToUse = filters) => {
+        if (!filtersToUse.groupId) {
+            showToast.error(t('Please select an account group'));
             return;
         }
 
         setLoading(true);
         try {
             const res = await axiosInstance.post('accountledger-detailed-report', {
-                fromDate: filters.fromDate,
-                toDate: filters.toDate,
-                branchId: selectedBranchId,
-                ledgerId: filters.groupId,
+                fromDate: filtersToUse.fromDate,
+                toDate: filtersToUse.toDate,
+                branchId: selectedBranchDetails?.mainBranch ? null : selectedBranchId,
+                ledgerId: filtersToUse.groupId,
                 currencyId: currentCurrency.currencyId,
-                isShowOpeningBalance: filters.isShowOpeningBalance,
-                costCentreId: filters.costCentreId || null
+                isShowOpeningBalance: filtersToUse.isShowOpeningBalance,
+                costCentreId: filtersToUse.costCentreId || null
             });
 
             setReportData(processReportData(res.data.data));
-            
+
         } catch (err) {
             console.error('Error fetching report:', err);
             setReportData(null);
@@ -173,6 +203,19 @@ const AccountLedgerReport = () => {
             setLoading(false);
         }
     };
+
+    // ---- On mount: if URL already has a groupId (i.e. we came back
+    // from a voucher edit page), auto-run the report with those filters ----
+    useEffect(() => {
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            const initial = getInitialFilters();
+            if (initial.groupId) {
+                fetchReport(initial);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const { totalDebit, totalCredit, closingBalance } = useMemo(() => {
         if (!reportData || !Array.isArray(reportData)) {
@@ -203,10 +246,8 @@ const AccountLedgerReport = () => {
         };
     }, [reportData, totalDebit, totalCredit, closingBalance, generalSettings?.decimalPart, t]);
 
-    // Get selected ledger for export
     const selectedLedger = acGroupData.find(g => g.ledgerId === filters.groupId);
 
-    // Export configuration
     const getExportOptions = () => ({
         fileName: `Account_Ledger_${selectedLedger?.ledgerName?.replace(/\s+/g, '_') || 'Report'}`,
         title: t('acLedgerReport.breadcrumb.title') || 'Account Ledger Report',
@@ -262,18 +303,31 @@ const AccountLedgerReport = () => {
     };
 
     const handleFilterChange = (field, value) => {
-        setFilters((prev) => ({ ...prev, [field]: value }));
+        setFilters((prev) => {
+            const updated = { ...prev, [field]: value };
+            syncFiltersToUrl(updated);
+            return updated;
+        });
     };
 
     const resetFilters = () => {
-        setFilters({
+        const defaults = {
             fromDate: new Date().toISOString().split('T')[0],
             toDate: new Date().toISOString().split('T')[0],
             groupId: '',
             costCentreId: '',
             isShowOpeningBalance: true
-        });
+        };
+        setFilters(defaults);
         setReportData(null);
+        setSearchParams({}, { replace: true });
+    };
+
+    // Wrap generate so it also syncs the URL (covers case where user
+    // clicks "Generate" without changing any individual filter field)
+    const handleGenerateReport = () => {
+        syncFiltersToUrl(filters);
+        fetchReport(filters);
     };
 
     const costCenterOptions = costCenterData.map((c) => ({
@@ -290,6 +344,7 @@ const AccountLedgerReport = () => {
         { key: 'SNo', label: t('#') },
         { key: 'Date', label: t('acLedgerReport.grid.columns.Date') },
         { key: 'voucherType', label: t('acLedgerReport.grid.columns.voucherType') },
+        { key: 'ledgerCode', label: t('acLedgerReport.grid.columns.ledgerCode') },
         { key: 'InvoiceNo', label: t('acLedgerReport.grid.columns.voucherNo') },
         { key: 'CostCentre', label: t('acLedgerReport.grid.columns.CostCentre') },
         { key: 'Narration', label: t('acLedgerReport.grid.columns.Narration') },
@@ -324,7 +379,7 @@ const AccountLedgerReport = () => {
         return row[key] ?? '-';
     };
 
-    if ( privilegeLoading) {
+    if (privilegeLoading) {
         return (
             <>
                 <BreadCrumb
@@ -373,7 +428,7 @@ const AccountLedgerReport = () => {
             <AccountLedgerFilters
                 filters={filters}
                 onFilterChange={handleFilterChange}
-                onGenerateReport={fetchReport}
+                onGenerateReport={handleGenerateReport}
                 costCenterOptions={costCenterOptions}
                 acGroupOptions={acGroupOptions}
                 loading={loading}
@@ -389,8 +444,9 @@ const AccountLedgerReport = () => {
                     loading={loading}
                     footerData={footerData}
                     renderCell={renderCell}
-                     onRowClick={handleRowClick}
-                     maxHeight="calc(100vh - 200px)"
+                    onRowClick={handleRowClick}
+                    maxHeight="calc(100vh - 200px)"
+                    staticSearchable
                 />
             </div>
         </div>

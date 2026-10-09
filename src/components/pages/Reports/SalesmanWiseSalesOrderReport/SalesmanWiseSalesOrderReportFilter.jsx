@@ -18,7 +18,7 @@ const SalesmanWiseSalesOrderReportFilter = ({
     resetFilters
 }) => {
     const { t } = useTranslation();
-    const { generalSettings } = useSelector((state) => state.settings);
+    
 
     return (
         <div className="bg-white dark:bg-[#1e1e1e] rounded-lg p-4 mb-4 border border-gray-200 dark:border-gray-700 transition-colors">
@@ -29,6 +29,7 @@ const SalesmanWiseSalesOrderReportFilter = ({
                     name="fromDate"
                     value={filters.fromDate}
                     onChange={(e, value) => onFilterChange('fromDate', value)}
+                    max={new Date().toISOString().split(('T')[0])}
                     required
                     className='w-full'
                 />
@@ -62,13 +63,13 @@ const SalesmanWiseSalesOrderReportFilter = ({
                     options={modeOptions}
                 />
 
-                <SearchableDropdown
+                {/* <SearchableDropdown
                     label={t('salesmanWiseSalesOrderReport.filters.currency')}
                     name="currencyId"
                     value={filters.currencyId}
                     onChange={(value) => onFilterChange('currencyId', value)}
                     options={currencyOptions}
-                />
+                /> */}
 
                 <SearchableDropdown
                     label={t('salesmanWiseSalesOrderReport.filters.brand')}
@@ -80,7 +81,7 @@ const SalesmanWiseSalesOrderReportFilter = ({
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-gray-100 dark:border-gray-700">
-                {generalSettings?.AccountPosting && (
+                {/* {generalSettings?.AccountPosting && (
     <label className="flex items-center cursor-pointer">
         <input
             type="checkbox"
@@ -92,7 +93,7 @@ const SalesmanWiseSalesOrderReportFilter = ({
             {t('salesmanWiseSalesOrderReport.filters.accountsPosting')}
         </span>
     </label>
-)}
+)} */}
 
                 <div className="flex items-center gap-2">
                     <button

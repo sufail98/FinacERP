@@ -62,10 +62,11 @@ const FormSectionMain = ({
   const [loadingCustomer, setLoadingCustomer] = useState(false);
   const [sectionPrivileges, setSectionPrivileges] = useState([]); // Add state for section privileges
   const [isStatusDisabled, setIsStatusDisabled] = useState(false); // Add state for status dropdown
+  const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
 
 
   const { t } = useTranslation();
-  const { generalSettings, financeSettings } = useSelector((state) => state.settings);
+  const { generalSettings, financeSettings, saleSettings } = useSelector((state) => state.settings);
   const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
   const [salesModeModalOpen, setSalesModeModalOpen] = useState(false);
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
@@ -78,7 +79,7 @@ const FormSectionMain = ({
 
 
 
-  const { currentCurrency: currentCurrencyFromStore, setCurrency, currentFinancialYear } = useAuth();
+  const { currentCurrency: currentCurrencyFromStore, currentFinancialYear } = useAuth();
   const { selectedBranchId, currentCurrency } = useAuth()
   const [showTaxType, setShowTaxType] = useState(false);
   useEffect(() => {
@@ -98,7 +99,45 @@ const FormSectionMain = ({
   ];
 
   const [customerLedgerId, setCustomerLedgerId] = useState(null);
+  useEffect(() => {
+    fetchCurrencyConvertion()
+  }, [selectedBranchId])
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
 
+    const date = new Date(dateString);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const MM = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+
+    const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+    return format
+      .replace('dd', dd)
+      .replace('MM', MM)
+      .replace('yyyy', yyyy);
+  };
+  const formatDecimal = (value) =>
+    Number(value || 0).toFixed(generalSettings.decimalPart);
+  const fetchCurrencyConvertion = async () => {
+    try {
+      const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+
+      const formattedData = response.data.data.map((item, index) => ({
+        ...item,
+        SNo: index + 1,
+        date: formatDate(item.date),
+        rate: item.rate !== null && item.rate !== undefined
+          ? formatDecimal(item.rate)
+          : formatDecimal(0),
+      }));
+
+      setCurrencyConvertionData(formattedData);
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
   useEffect(() => {
     if (formData.ledgerId) {
       fetchCustomerData()
@@ -242,12 +281,12 @@ const FormSectionMain = ({
       fetchProformaData(value);
       fetchCustomerData(value)
     }
-    if (name === 'quotationMasterId') {
-      loadQuotationDetailsByQtnId(value)
-    }
-    if (name === 'proformaMasterId') {
-      loadProformaByProformaId(value)
-    }
+    // if (name === 'quotationMasterId') {
+    //   loadQuotationDetailsByQtnId(value)
+    // }
+    // if (name === 'proformaMasterId') {
+    //   loadProformaByProformaId(value)
+    // }
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -327,7 +366,7 @@ const FormSectionMain = ({
               <TextInput
                 name="partyRefNo"
                 label={t('salesInvoice.form.label.formHeaderSection.RefNo')}
-                type="number"
+                type="text"
                 value={formData.partyRefNo}
                 onChange={handleInputChange}
                 error={errors.partyRefNo}
@@ -470,6 +509,7 @@ const FormSectionMain = ({
                 searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.AgainstNo')}
                 error={errors.AgainstNo}
                 clearable={true}
+                readOnly={!formData.ledgerId || editMode} // Disable if ledgerId is not selected or in edit mode
                 className='w-full'
               />
             )}
@@ -483,9 +523,13 @@ const FormSectionMain = ({
                 }))}
                 value={formData.quotationMasterId}
                 onChange={(value) => handleDropdownChange('quotationMasterId', value)}
+                onEnter={(selectedValues) => {
+                  loadQuotationDetailsByQtnId(selectedValues); // passes array of IDs
+                }}
                 placeholder={t("salesInvoice.form.label.formHeaderSection.selecteQuotation")}
                 searchPlaceholder={t("salesInvoice.form.label.formHeaderSection.selecteQuotation")}
                 clearable={true}
+                multiple
                 className="w-full"
               />
             )}
@@ -499,6 +543,10 @@ const FormSectionMain = ({
                 }))}
                 value={formData.proformaMasterId}
                 onChange={(value) => handleDropdownChange('proformaMasterId', value)}
+                onEnter={(selectedValues) => {
+                  loadProformaByProformaId(selectedValues); // passes array of IDs
+                }}
+                multiple
                 placeholder={t("salesInvoice.form.label.formHeaderSection.selecteProforma")}
                 searchPlaceholder={t("salesInvoice.form.label.formHeaderSection.selecteProforma")}
                 clearable={true}
@@ -626,12 +674,14 @@ const FormSectionMain = ({
 
       {/* Sales Account & Currency Links */}
       <div className='flex flex-wrap gap-2 lg:gap-3 text-xs'>
-        <p
-          className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
-          onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
-        >
-          {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {currentCurrencyFromStore?.currencyName || "Select Currency"}
-        </p>
+        {financeSettings?.multiCurrency && (
+          <p
+            className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+            onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
+          >
+            {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {formData?.currencyName || currentCurrencyFromStore?.currencyName || "Select Currency"}
+          </p>
+        )}
       </div>
 
       {/* Sales Invoice Table */}
@@ -659,6 +709,7 @@ const FormSectionMain = ({
         handleChange={(field, value) => {
           handleDropdownChange(field, value);
         }}
+        currencyConvertionData={currencyConvertionData}
 
       />
       <SalesModeModal

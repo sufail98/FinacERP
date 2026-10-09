@@ -33,9 +33,9 @@ const PurchaseQuotationReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+       
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -108,7 +108,7 @@ const PurchaseQuotationReport = () => {
         try {
             const [partyRes, costCenterRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Supplier"],
+                    ledgerTypes: ["Supplier","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("cost-centers").catch(() => ({ data: { data: [] } }))

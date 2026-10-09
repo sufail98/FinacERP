@@ -120,30 +120,7 @@ const GodownTransferFooterSection = ({ totals, formData, setFormData }) => {
               rows={3}
             />
           </div>
-          <div className="grid grid-cols-4 mb-3 pl-2">
-            {/* ✅ New Checkbox */}
-            <div className="flex items-center space-x-2 mt-2">
-              <Checkbox
-                id="printAfterSave"
-                checked={formData.printAfterSave || false}
-                onCheckedChange={(value) => handleChange("printAfterSave", value)}
-              />
-              <label
-                htmlFor="printAfterSave"
-                className="text-sm font-medium leading-none"
-              >
-                {t("salesInvoice.form.footerSection.otherDetails.label.printAfterSave")}
-              </label>
-            </div>
-
-            <div>
-              <label htmlFor="printType" className="mr-1 text-sm font-medium leading-none">{t('salesInvoice.form.footerSection.otherDetails.label.printType')}</label>
-              <select name="printType" id="printType" className='border' value={formData.printType} onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}>
-                <option value="a4">A4</option>
-                <option value="thermal">Thermal Print</option>
-              </select>
-            </div>
-          </div>
+        
         </div>
       </div>
 

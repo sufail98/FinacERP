@@ -22,7 +22,7 @@ const JournalReport = () => {
     const [ledgerData, setLedgerData] = useState([]);
     const [userData, setUserData] = useState([]);
     const { selectedBranchId, currentCurrency } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Journal");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Journal Report");
     const { generalSettings } = useSelector((state) => state.settings);
 
     // Use the unified export hook
@@ -59,10 +59,7 @@ const JournalReport = () => {
 
     const fetchLedgerData = async () => {
         try {
-            const response = await axiosInstance.post("account-ledgers", {
-                group_ids: [5, 6, 28, 29],
-                branchId: selectedBranchId
-            });
+            const response = await axiosInstance.get(`all-account-ledgers/${selectedBranchId}`);
             setLedgerData(response.data.data || []);
         } catch (error) {
             console.error("Error fetching ledgers:", error);
@@ -88,11 +85,11 @@ const JournalReport = () => {
             const payload = {
                 from_date: filters.fromDate,
                 to_date: filters.toDate,
-                posted_status: 'Yes',
-                ledger_id: filters.ledgerId || 0,
+                posted_status: null,
+                ledger_id: filters.ledgerId || null,
                 branch_id: Number(selectedBranchId),
                 currency_id: currentCurrency?.currencyId || 30,
-                costcentre_id: filters.costCentreId || 0,
+                costcentre_id: filters.costCentreId || null,
                 all_costcentre: filters.allCostCentre,
                 mode: filters.mode || 'Summary',
             };
@@ -215,11 +212,11 @@ const JournalReport = () => {
             fromDate: filters.fromDate,
             toDate: filters.toDate,
             data: exportData,
-            footer: totals ? {
+            footer: {
                 label: t('Total'),
                 CrAmount: totalCrAmount.toFixed(dp),
                 DrAmount: totalDrAmount.toFixed(dp)
-            } : null,
+            },
             theme: 'professional',
             decimalPlaces: dp,
             columns: isDetailed ? detailedColumns : summaryColumns
@@ -336,7 +333,20 @@ const JournalReport = () => {
         return row[key] ?? "-";
     };
 
-
+    if (privilegeLoading ) {
+        return (
+            <div>
+                <BreadCrumb
+                    routes={[
+                        { title: t("journalReport.breadcrumb.group"), url: "#" },
+                        { title: t("journalReport.breadcrumb.title"), url: "#" },
+                    ]}
+                    heading={{ icon: Wallet, title: t("journalReport.breadcrumb.title") }}
+                />
+                <Preloader />
+            </div>
+        );
+    }
 
     if (!hasAccess) {
         return (

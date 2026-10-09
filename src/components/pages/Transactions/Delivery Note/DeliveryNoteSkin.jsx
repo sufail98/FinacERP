@@ -10,13 +10,19 @@ import { useSelector } from 'react-redux';
 import AlertBox from '@/components/common/AlertBox';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
+import ConvertMenu from '@/components/common/ConvertMenu';
 import useFormValidation from '@/lib/hooks/useFormValidation';
-import deliveryNotePrintOne from '@/utils/prints/deliveryNotePrints/deliveryNotePrintOne';
+import deliveryNotePrintOne, { saveDeliveryNotAsPDF } from '@/utils/prints/deliveryNotePrints/deliveryNotePrintOne';
 import PrintDropdown from '@/components/common/PrintDropdown';
 import { Checkbox } from '@/components/ui/checkbox';
 import PopupPreloader from '@/components/common/PopupPreloader';
+import HelpShortcuts from '@/components/common/HelpShortcuts';
 import { formatDateWithTime } from '@/lib/dateFormat';
 import { showToast } from '@/utils/toast';
+import { isElectron } from '@/utils/electronPrint';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+
 
 
 const toLocalDateString = (dateValue) => {
@@ -59,6 +65,10 @@ const toLocalDateString = (dateValue) => {
 };
 
 const DeliveryNoteSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Sales Quotation");
+    // Add this near the top with other useSelector calls
+    const { salesProducts: allProducts } = useSelector((state) => state.products);
+    const [isPrinting, setIsPrinting] = useState(false);
     const { dlvryNoteId } = useParams();
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
     const editMode = Boolean(dlvryNoteId);
@@ -84,6 +94,8 @@ const DeliveryNoteSkin = () => {
     const [resetTableKey, setResetTableKey] = useState(0);
     const [batches, setBatches] = useState([]);
     const [currency, setCurrencies] = useState([]);
+    const [updateCustomerId, setUpdateCustomerId] = useState(null);
+
 
     const [currentledgerBalance, setCurrentLedgerBalance] = useState('')
     const [shippingAdderess, setShippingAddress] = useState(null);
@@ -94,6 +106,15 @@ const DeliveryNoteSkin = () => {
     const [proformaData, setProformaData] = useState([])
     const [salesOrderData, setSalesOrderData] = useState([])
     const [taxData, setTaxData] = useState([])
+    const handleConvert = useCallback((type) => {
+        switch (type) {
+            case 'sale':
+                navigate(`/transaction/sales-invoice?fromDeliveryNote=${dlvryNoteId}`, { state: { againstDeliveryNote: true, masterId: dlvryNoteId } });
+                break;
+            default:
+                break;
+        }
+    }, [navigate, dlvryNoteId]);
     // ✅ Add this useEffect to handle clear from navigation
     useEffect(() => {
         if (location.state?.shouldClear && !editMode) {
@@ -300,124 +321,140 @@ const DeliveryNoteSkin = () => {
     });
 
     const [heldInvoices, setHeldInvoices] = useState([]);
-const [showHeldInvoices, setShowHeldInvoices] = useState(false);
-const [restoredHeldInvoiceId, setRestoredHeldInvoiceId] = useState(null);
-const decimalPart = generalSettings?.decimalPart ?? 2;
-// Load held invoices from localStorage on mount
-useEffect(() => {
-    const savedHeldInvoices = localStorage.getItem('heldDeliveryNotes');
-    if (savedHeldInvoices) {
-        const all = JSON.parse(savedHeldInvoices);
-        setHeldInvoices(all.filter(inv => inv.branchId === selectedBranchId));
-    }
-}, [selectedBranchId]);
+    const [showHeldInvoices, setShowHeldInvoices] = useState(false);
+    const [restoredHeldInvoiceId, setRestoredHeldInvoiceId] = useState(null);
+    const decimalPart = generalSettings?.decimalPart ?? 2;
+    // Load held invoices from localStorage on mount
+    useEffect(() => {
+        const savedHeldInvoices = localStorage.getItem('heldDeliveryNotes');
+        if (savedHeldInvoices) {
+            const all = JSON.parse(savedHeldInvoices);
+            const branchInvoices = all.filter(inv => inv.branchId === selectedBranchId);
+            const deduped = Array.from(
+                new Map(branchInvoices.map(inv => [inv.id, inv])).values()
+            );
+            setHeldInvoices(deduped);
+        }
+    }, [selectedBranchId]);
+    // Sync held invoices to localStorage
+    useEffect(() => {
+        const saved = localStorage.getItem('heldDeliveryNotes');
+        const all = saved ? JSON.parse(saved) : [];
+        const otherBranch = all.filter(inv => inv.branchId !== selectedBranchId);
 
-// Sync held invoices to localStorage
-useEffect(() => {
-    const saved = localStorage.getItem('heldDeliveryNotes');
-    const all = saved ? JSON.parse(saved) : [];
-    const otherBranch = all.filter(inv => inv.branchId !== selectedBranchId);
-    const updated = [...otherBranch, ...heldInvoices];
-    if (updated.length > 0) {
-        localStorage.setItem('heldDeliveryNotes', JSON.stringify(updated));
-    } else {
-        localStorage.removeItem('heldDeliveryNotes');
-    }
-}, [heldInvoices, selectedBranchId]);
-const holdCurrentInvoice = useCallback(() => {
-    const hasData = formData.deliveryDetails.some(d => d.productCode && d.qty > 0);
-    if (!hasData) {
-        showToast.warning("No data to hold. Please add products with quantity first.");
-        return;
-    }
-    const held = {
-        id: Date.now(),
-        timestamp: new Date().toISOString(),
-        invoiceId,
-        customerName: formData.customerName || 'Unknown Customer',
-        customerAddress: formData.CustomerAddress || '',
-        totalAmount: formData.totalAmount || 0,
-        itemCount: formData.deliveryDetails.filter(d => d.productCode).length,
-        branchId: selectedBranchId,
-        formData: { ...formData }
-    };
-    setHeldInvoices(prev => [...prev, held]);
-    showToast.success(`Delivery note held. Total held: ${heldInvoices.length + 1}`);
-    clearForm(true);
-}, [formData, invoiceId, heldInvoices.length, selectedBranchId]);
+        const dedupedHeldInvoices = Array.from(
+            new Map(heldInvoices.map(inv => [inv.id, inv])).values()
+        );
 
-const restoreHeldInvoice = (held) => {
-    const hasValid = formData.deliveryDetails.some(d => d.productCode && d.qty > 0);
-    if (hasValid) {
-        const current = {
-            id: Date.now(), timestamp: new Date().toISOString(),
-            invoiceId, customerName: formData.customerName || 'Current',
+        const updated = [...otherBranch, ...dedupedHeldInvoices];
+        if (updated.length > 0) {
+            localStorage.setItem('heldDeliveryNotes', JSON.stringify(updated));
+        } else {
+            localStorage.removeItem('heldDeliveryNotes');
+        }
+    }, [heldInvoices, selectedBranchId]);
+
+    const holdCurrentInvoice = useCallback(() => {
+        const hasData = formData.deliveryDetails.some(d => d.productCode && d.qty > 0);
+        if (!hasData) {
+            showToast.warning("No data to hold. Please add products with quantity first.");
+            return;
+        }
+        const held = {
+            id: Date.now(),
+            timestamp: new Date().toISOString(),
+            invoiceId,
+            customerName: formData.customerName || 'Unknown Customer',
             customerAddress: formData.CustomerAddress || '',
             totalAmount: formData.totalAmount || 0,
-            itemCount: formData.deliveryDetails.filter(d => d.productCode && d.qty > 0).length,
-            branchId: selectedBranchId, formData: { ...formData }
+            itemCount: formData.deliveryDetails.filter(d => d.productCode).length,
+            branchId: selectedBranchId,
+            formData: { ...formData }
         };
-        setHeldInvoices(prev => [...prev.filter(i => i.id !== held.id), current]);
-    } else {
-        setHeldInvoices(prev => prev.filter(i => i.id !== held.id));
-    }
-    setFormData(held.formData);
-    setInvoiceId(held.invoiceId);
-    setResetTableKey(prev => prev + 1);
-    setShowHeldInvoices(false);
-    setRestoredHeldInvoiceId(held.id);
-    showToast.success("Delivery note restored successfully");
-};
+        setHeldInvoices(prev => {
+            if (prev.some(inv => inv.id === held.id)) return prev;
+            return [...prev, held];
+        });
+        showToast.success(`Delivery note held. Total held: ${heldInvoices.length + 1}`);
+        clearForm(true);
+    }, [formData, invoiceId, heldInvoices.length, selectedBranchId]);
 
-const deleteHeldInvoice = (id) => {
-    setHeldInvoices(prev => prev.filter(inv => inv.id !== id));
-    showToast.success("Held delivery note deleted");
-};
-useEffect(() => {
-    const handleKeyDown = (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') {
-            e.preventDefault();
-            holdCurrentInvoice();
+    const restoreHeldInvoice = (held) => {
+        const hasValid = formData.deliveryDetails.some(d => d.productCode && d.qty > 0);
+        if (hasValid) {
+            const current = {
+                id: Date.now(), timestamp: new Date().toISOString(),
+                invoiceId, customerName: formData.customerName || 'Current',
+                customerAddress: formData.CustomerAddress || '',
+                totalAmount: formData.totalAmount || 0,
+                itemCount: formData.deliveryDetails.filter(d => d.productCode && d.qty > 0).length,
+                branchId: selectedBranchId, formData: { ...formData }
+            };
+            setHeldInvoices(prev => [...prev.filter(i => i.id !== held.id), current]);
+        } else {
+            setHeldInvoices(prev => prev.filter(i => i.id !== held.id));
         }
+        setFormData({
+            ...held.formData,       // ✅ was heldInvoices.formData (bug)
+            date: new Date(),
+            billTime: time,
+        });
+        setInvoiceId(held.invoiceId);
+        setResetTableKey(prev => prev + 1);
+        setShowHeldInvoices(false);
+        setRestoredHeldInvoiceId(held.id);
+        showToast.success("Delivery note restored successfully");
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-}, [holdCurrentInvoice]);
-const HeldInvoicesPanel = () => {
-    if (!showHeldInvoices || heldInvoices.length === 0) return null;
-    return (
-        <div className="fixed top-20 right-4 z-50 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[70vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
-                <h3 className="font-semibold text-lg text-gray-800 dark:text-gray-200">
-                    Held Delivery Notes ({heldInvoices.length})
-                </h3>
-                <button onClick={() => setShowHeldInvoices(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">✕</button>
-            </div>
-            <div className="overflow-y-auto p-4 space-y-3">
-                {heldInvoices.map((inv) => (
-                    <div key={inv.id} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-start mb-2">
-                            <div className="flex-1">
-                                <p className="font-semibold text-gray-800 dark:text-gray-200">{inv.customerName}</p>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">Note: {inv.invoiceId}</p>
-                                {inv.customerAddress && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{inv.customerAddress}</p>}
+
+    const deleteHeldInvoice = (id) => {
+        setHeldInvoices(prev => prev.filter(inv => inv.id !== id));
+        showToast.success("Held delivery note deleted");
+    };
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') {
+                e.preventDefault();
+                holdCurrentInvoice();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [holdCurrentInvoice]);
+    const HeldInvoicesPanel = () => {
+        if (!showHeldInvoices || heldInvoices.length === 0) return null;
+        return (
+            <div className="fixed top-20 right-4 z-50 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[70vh] overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
+                    <h3 className="font-semibold text-lg text-gray-800 dark:text-gray-200">
+                        Held Delivery Notes ({heldInvoices.length})
+                    </h3>
+                    <button onClick={() => setShowHeldInvoices(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">✕</button>
+                </div>
+                <div className="overflow-y-auto p-4 space-y-3">
+                    {heldInvoices.map((inv) => (
+                        <div key={inv.id} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1">
+                                    <p className="font-semibold text-gray-800 dark:text-gray-200">{inv.customerName}</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Note: {inv.invoiceId}</p>
+                                    {inv.customerAddress && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{inv.customerAddress}</p>}
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-bold text-blue-600 dark:text-blue-400">{parseFloat(inv.totalAmount || 0).toFixed(decimalPart)}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{inv.itemCount} items</p>
+                                </div>
                             </div>
-                            <div className="text-right">
-                                <p className="font-bold text-blue-600 dark:text-blue-400">{parseFloat(inv.totalAmount || 0).toFixed(decimalPart)}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{inv.itemCount} items</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{new Date(inv.timestamp).toLocaleString()}</p>
+                            <div className="flex gap-2">
+                                <button onClick={() => restoreHeldInvoice(inv)} className="flex-1 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium transition-colors">Restore</button>
+                                <button onClick={() => deleteHeldInvoice(inv.id)} className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm font-medium transition-colors">Delete</button>
                             </div>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{new Date(inv.timestamp).toLocaleString()}</p>
-                        <div className="flex gap-2">
-                            <button onClick={() => restoreHeldInvoice(inv)} className="flex-1 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium transition-colors">Restore</button>
-                            <button onClick={() => deleteHeldInvoice(inv.id)} className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm font-medium transition-colors">Delete</button>
-                        </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
-        </div>
-    );
-};
+        );
+    };
 
     useEffect(() => {
         setFormData(prev => ({
@@ -437,13 +474,14 @@ const HeldInvoicesPanel = () => {
                     voucherType: "Delivery Note",
                     branchId: selectedBranchId,
                     yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Customer"],
+                    ledgerTypes: ["Customer", "Customer&Supplier"],
                     ledgerId: financeSettings.defaultSalesAccount,
                     currencyId: currentCurrency.currencyId,
                     in_ledgerId: financeSettings.defaultSalesAccount,
                     in_branchId: selectedBranchId
                 })
                 const data = res?.data?.data
+                setUpdateCustomerId(financeSettings.defaultSalesAccount || null)
 
                 setInvoiceId(data?.voucherdata?.voucherCode)
                 setEmployees(data?.employees)
@@ -495,7 +533,7 @@ const HeldInvoicesPanel = () => {
                     customerName: data?.customeraddress?.ledgerName || '',
                     CustomerAddress: data?.customeraddress?.address || '',
                     CustomerPhone: data?.customeraddress?.phoneNo || '',
-                    customerVATNo: data?.customeraddress?.tinNumber || '',
+                    CustomerVATNo: data?.customeraddress?.tinNumber || '',
                     customercreditLimit: data?.customeraddress?.creditLimit || '',
                     customerCreditlimitStatus: data?.customeraddress?.creditLimitStatus || 'Ignore',
                 }));
@@ -660,11 +698,23 @@ const HeldInvoicesPanel = () => {
             return prev;
         });
     }, [time]); // runs every second when time updates
+    useEffect(() => {
+        if (location.state && location.state.againstQuotation && location.state.masterId && taxData.length > 0) {
+            loadQuotationDetailsByQtnId(location.state.masterId, taxData);
+        } else if (location.state && location.state.againstProforma && location.state.masterId && taxData.length > 0) {
+            loadProformaDetailsByProformaId(location.state.masterId, taxData);
+        } else if (location.state && location.state.againstOrder && location.state.masterId && taxData.length > 0) {
+            loadOrderDetailsByOrderMasterIdId(location.state.masterId, taxData);
+        }
+    }, [location.state, taxData]);
 
-    const loadQuotationDetailsByQtnId = async (QtnId) => {
+    const loadQuotationDetailsByQtnId = async (QtnId, taxMaster) => {
+        const idsArray = Array.isArray(QtnId)
+            ? QtnId
+            : [Number(QtnId)];
         setFetchLoading(true)
         try {
-            const response = await axiosInstance.post(`get-delivery-note-sales-quotation-details`, { p_quotation_master_id: QtnId, p_branchid: selectedBranchId, p_delivery_note_master_id: null });
+            const response = await axiosInstance.post(`get-delivery-note-sales-quotation-details`, { p_quotation_master_id: idsArray, p_branchid: selectedBranchId, p_delivery_note_master_id: null });
             const data = response.data.data;
 
             setExistingInvoiceNo(data.deliveryNoteNo)
@@ -685,7 +735,8 @@ const HeldInvoicesPanel = () => {
                         UnitName: ''
                     };
 
-                    const taxInfo = taxData.find(t => t.taxId === item.taxId);
+                    const freshtaxdata = taxMaster || taxData;
+                    const taxInfo = freshtaxdata.find(t => t.taxId === item.taxId);
                     const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
 
                     if (item.productCode) {
@@ -704,12 +755,20 @@ const HeldInvoicesPanel = () => {
                                 mrp: item.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
                         }
                     }
+                    // Calculate discount amount if not available
+                    const descAmt = parseFloat(item.descAmt) || (() => {
+                        const gross = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+                        const discPerc = parseFloat(item.discountPercentage) || 0;
+                        return parseFloat(
+                            ((gross * discPerc) / 100).toFixed(generalSettings?.decimalPart || 2)
+                        ) || 0;
+                    })();
 
                     return {
                         salesDetails1Id: item.salesDetails1Id,
@@ -728,6 +787,7 @@ const HeldInvoicesPanel = () => {
                         lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
                         inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -752,7 +812,8 @@ const HeldInvoicesPanel = () => {
                         ModifiedDate: item.ModifiedDate,
                         ModifiedUser: item.ModifiedUser,
                         availableUnits: availableUnits,
-                        productDetails: productDetails
+                        productDetails: productDetails,
+                        descAmt
                     };
                 })
             );
@@ -778,9 +839,9 @@ const HeldInvoicesPanel = () => {
                 exchangeRate: data.exchangeRate,
                 exchangeDate: toLocalDateString(data.exchangeDate),
                 orderMasterId: data.orderMasterId,
-                quotationMasterId: data.quotationMasterId,
+                quotationMasterId: idsArray,
                 proformaMasterId: data.proformaMasterId,
-                AgainstNo: data.AgainstNo,
+                AgainstNo: data.voucherNo,
                 transportCompany: data.transportCompany,
                 vehicleNo: data.vehicleNo,
                 deliveryLocation: data.deliveryLocation,
@@ -818,9 +879,12 @@ const HeldInvoicesPanel = () => {
     };
 
     const loadProformaDetailsByProformaId = async (PrId) => {
+        const idsArray = Array.isArray(PrId)
+            ? PrId
+            : [Number(PrId)];
         setFetchLoading(true)
         try {
-            const response = await axiosInstance.post(`get-delivery-note-proforma-details`, { p_proformamasterid: PrId, p_branchid: selectedBranchId, p_deliverynotemasterid: null });
+            const response = await axiosInstance.post(`get-delivery-note-proforma-details`, { p_proformamasterid: idsArray, p_branchid: selectedBranchId, p_deliverynotemasterid: null });
             const data = response.data.data;
 
             setExistingInvoiceNo(data.deliveryNoteNo)
@@ -861,12 +925,20 @@ const HeldInvoicesPanel = () => {
                                 mrp: item.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
                         }
                     }
+                    // Calculate discount amount if not available
+                    const descAmt = parseFloat(item.descAmt) || (() => {
+                        const gross = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+                        const discPerc = parseFloat(item.discountPercentage) || 0;
+                        return parseFloat(
+                            ((gross * discPerc) / 100).toFixed(generalSettings?.decimalPart || 2)
+                        ) || 0;
+                    })();
 
                     return {
                         salesDetails1Id: item.salesDetails1Id,
@@ -885,6 +957,7 @@ const HeldInvoicesPanel = () => {
                         lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
                         inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -909,7 +982,8 @@ const HeldInvoicesPanel = () => {
                         ModifiedDate: item.ModifiedDate,
                         ModifiedUser: item.ModifiedUser,
                         availableUnits: availableUnits,
-                        productDetails: productDetails
+                        productDetails: productDetails,
+                        descAmt,
                     };
                 })
             );
@@ -936,8 +1010,8 @@ const HeldInvoicesPanel = () => {
                 exchangeDate: toLocalDateString(data.exchangeDate),
                 orderMasterId: data.orderMasterId,
                 quotationMasterId: data.quotationMasterId,
-                proformaMasterId: data.proformaMasterId,
-                AgainstNo: data.AgainstNo,
+                proformaMasterId: idsArray,
+                AgainstNo: data.voucherNo,
                 transportCompany: data.transportCompany,
                 vehicleNo: data.vehicleNo,
                 deliveryLocation: data.deliveryLocation,
@@ -973,10 +1047,13 @@ const HeldInvoicesPanel = () => {
             setFetchLoading(false)
         }
     };
-    const loadOrderDetailsByOrderMasterIdId = async (OrderMasterId) => {
+    const loadOrderDetailsByOrderMasterIdId = async (OrderMasterIds) => {
+        const idsArray = Array.isArray(OrderMasterIds)
+            ? OrderMasterIds
+            : [Number(OrderMasterIds)];
         setFetchLoading(true)
         try {
-            const response = await axiosInstance.post(`get-delivery-note-sales-order-details`, { p_ordermasterid: OrderMasterId, p_deliverynotemasterid: null });
+            const response = await axiosInstance.post(`get-delivery-note-sales-order-details`, { p_ordermasterid: idsArray, p_deliverynotemasterid: null });
             const data = response.data.data;
 
             setExistingInvoiceNo(data.deliveryNoteNo)
@@ -1017,12 +1094,20 @@ const HeldInvoicesPanel = () => {
                                 mrp: item.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
                         }
                     }
+                    // Calculate discount amount if not available
+                    const descAmt = parseFloat(item.descAmt) || (() => {
+                        const gross = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+                        const discPerc = parseFloat(item.discountPercentage) || 0;
+                        return parseFloat(
+                            ((gross * discPerc) / 100).toFixed(generalSettings?.decimalPart || 2)
+                        ) || 0;
+                    })();
 
                     return {
                         salesDetails1Id: item.salesDetails1Id,
@@ -1041,6 +1126,7 @@ const HeldInvoicesPanel = () => {
                         lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
                         inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -1065,13 +1151,15 @@ const HeldInvoicesPanel = () => {
                         ModifiedDate: item.ModifiedDate,
                         ModifiedUser: item.ModifiedUser,
                         availableUnits: availableUnits,
-                        productDetails: productDetails
+                        productDetails: productDetails,
+                        descAmt
                     };
                 })
             );
 
             setFormData((prev) => ({
                 ...prev,
+                orderMasterId: idsArray,
                 voucherType: "Delivery Note",
                 yearId: currentFinancialYear?.yearId,
                 date: new Date(),
@@ -1090,10 +1178,9 @@ const HeldInvoicesPanel = () => {
                 RefDate: toLocalDateString(data.RefDate),
                 exchangeRate: data.exchangeRate,
                 exchangeDate: toLocalDateString(data.exchangeDate),
-                orderMasterId: data.orderMasterId,
                 quotationMasterId: data.quotationMasterId,
                 proformaMasterId: data.proformaMasterId,
-                AgainstNo: data.AgainstNo,
+                AgainstNo: data.voucherNo,
                 transportCompany: data.transportCompany,
                 vehicleNo: data.vehicleNo,
                 deliveryLocation: data.deliveryLocation,
@@ -1135,17 +1222,17 @@ const HeldInvoicesPanel = () => {
         try {
             const response = await axiosInstance.get(`get-delivery-note-byId/${dlvryNoteId}`);
             const data = response.data.data;
-             // ← Fetch tax data fresh instead of relying on stale state
-        let freshTaxData = taxData;
-        if (!freshTaxData || freshTaxData.length === 0) {
-            try {
-                const taxRes = await axiosInstance.get("tax-masters");
-                freshTaxData = taxRes.data.data || [];
-                setTaxData(freshTaxData); // update state too
-            } catch (e) {
-                console.error('Error fetching tax data', e);
+            // ← Fetch tax data fresh instead of relying on stale state
+            let freshTaxData = taxData;
+            if (!freshTaxData || freshTaxData.length === 0) {
+                try {
+                    const taxRes = await axiosInstance.get("tax-masters");
+                    freshTaxData = taxRes.data.data || [];
+                    setTaxData(freshTaxData); // update state too
+                } catch (e) {
+                    console.error('Error fetching tax data', e);
+                }
             }
-        }
             setExistingInvoiceNo(data.deliveryNoteNo)
 
 
@@ -1166,8 +1253,8 @@ const HeldInvoicesPanel = () => {
                         UnitName: ''
                     };
 
-                   const taxInfo = freshTaxData.find(t => t.taxId === item.taxId);
-                const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
+                    const taxInfo = freshTaxData.find(t => t.taxId === item.taxId);
+                    const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
 
                     if (item.productCode) {
                         try {
@@ -1186,12 +1273,19 @@ const HeldInvoicesPanel = () => {
                                 mrp: item.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
                         }
                     }
+                    // Calculate discount amount if not available
+                    const descAmt = (() => {
+                        const lineDiscountWithTax = parseFloat(item.lineDiscountWithTax) || 0;
+                        return parseFloat(
+                            (lineDiscountWithTax - (lineDiscountWithTax * 15) / 100).toFixed(generalSettings?.decimalPart || 2)
+                        ) || 0;
+                    })();
 
                     return {
                         salesDetails1Id: item.salesDetails1Id,
@@ -1211,7 +1305,7 @@ const HeldInvoicesPanel = () => {
                         lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
                         inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
                         unitId: item.unitId,
-                        unitName: productDetails.UnitName,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -1236,7 +1330,8 @@ const HeldInvoicesPanel = () => {
                         ModifiedDate: item.ModifiedDate,
                         ModifiedUser: item.ModifiedUser,
                         availableUnits: availableUnits,
-                        productDetails: productDetails
+                        productDetails: productDetails,
+                        descAmt
                     };
                 })
             );
@@ -1319,7 +1414,7 @@ const HeldInvoicesPanel = () => {
     const fetchCustomer = async () => {
         setLoading(prev => ({ ...prev, customers: true }));
         try {
-            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer"], branchId: selectedBranchId });
+            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer", "Customer&Supplier"], branchId: selectedBranchId });
             setCustomers(data.data);
         } catch (err) {
             console.error("Failed to fetch customers:", err);
@@ -1364,12 +1459,33 @@ const HeldInvoicesPanel = () => {
         date: { required: true, label: t("requiredFieldsError") },
     };
 
-    const buildInvoiceDataForPrint = useCallback((invoiceNumber) => ({
-        ...formData,
-        invoiceNo: invoiceNumber,
-        date: formData.date,
-        salesDetails: formData.deliveryDetails,
-    }), [formData]);
+    const buildInvoiceDataForPrint = useCallback((invoiceNumber, overrideData) => {
+        const base = overrideData || formData;
+
+        const rawDetails = base.deliveryDetails || [];
+
+        // ✅ Enrich with productName / productNameArb from allProducts by matching productCode
+        const enrichedDetails = rawDetails.map((detail, idx) => {
+            const matchedProduct = allProducts?.find(
+                (p) => p.productCode === detail.productCode
+            );
+
+            return {
+                ...detail,
+                productName: detail.productName || matchedProduct?.productName || '',
+                productNameArb: detail.productNameArb || matchedProduct?.productNameArb || '',
+                unitName: detail.unitName || formData.deliveryDetails?.[idx]?.unitName || detail.UnitName || matchedProduct?.unitName || '',
+            };
+        });
+
+        return {
+            ...base,
+            invoiceNo: invoiceNumber,
+            date: base.date,
+            salesDetails: enrichedDetails,
+            deliveryDetails: enrichedDetails,
+        };
+    }, [formData, allProducts]);
 
     const printToPrinterFn = useCallback((invoiceDataForPrint) => {
         setTimeout(() => {
@@ -1379,12 +1495,18 @@ const HeldInvoicesPanel = () => {
 
     const printToPdfFn = useCallback((invoiceDataForPrint) => {
         setTimeout(() => {
-            deliveryNotePrintOne(invoiceDataForPrint, selectedBranchDetails, time, null, currentCurrency);
+            saveDeliveryNotAsPDF(invoiceDataForPrint, selectedBranchDetails, time, null, currentCurrency);
         }, 500);
     }, [selectedBranchDetails, time, currentCurrency]);
 
     const handleSave = useCallback(async () => {
         if (!validateForm(formData, validationRules)) return;
+
+        // if (formData.totalAmount <= 0) {
+        //     showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
+        //     return;
+        // }
+
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
             showToast.error(validationErrors.join('\n'));
@@ -1423,7 +1545,18 @@ const HeldInvoicesPanel = () => {
                 ...formData,
                 date: formatDateWithTime(formData.date),
                 grandTotal: formData.totalAmount,
-                taxTotal: formData.totalTax
+                taxTotal: formData.totalTax,
+                CreatedUser: userId,
+                vatLedgerId: generalSettings?.taxLedgerId,
+                CreatedDate: new Date(),
+                ModifiedUser: isInEditMode ? userId : null,
+                deliveryDetails: (formData.deliveryDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: isInEditMode ? userId : detail?.ModifiedUser ?? null,
+                    CreatedUser: isInEditMode ? detail?.CreatedUser ?? userId : userId,
+                })),
+
+
             };
             const api = isInEditMode ? `update-delivery-note/${dlvryNoteId}` : 'save-delivery-note'
             const response = await axiosInstance.post(api, dataToSave);
@@ -1431,14 +1564,16 @@ const HeldInvoicesPanel = () => {
             if (!response.data.error) {
                 showToast.success(t("saveSuccess"));
                 setIsSaving(false);
+                const printData = response?.data?.data?.payload?.deliveryNoteMaster;
+                const invoiceId = isEditMode ? existingInvoiceNo : printData?.deliveryNoteNo
 
-                const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceId);
+                const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceId, printData);
 
                 if (formData.printAfterSave) {
                     printToPrinterFn(invoiceDataForPrint);
                 } else {
                     const pdfResult = await Swal.fire({
-                        title: t('print As Pdf') || 'Print as PDF?',
+                        title: t('Print as PDF?') || 'Print as PDF?',
                         text: t('Do you want to download this delivery note as a PDF?') || 'Do you want to download this delivery note as a PDF?',
                         icon: 'question',
                         showCancelButton: true,
@@ -1553,9 +1688,7 @@ const HeldInvoicesPanel = () => {
                 await genarateSalesInvoiceId();
 
                 if (saleSettings.CloseAfterSave) {
-                    setTimeout(() => {
-                        navigate('/transaction/delivery-note/delivery-note-list');
-                    }, formData.printAfterSave ? 1500 : 500);
+                    navigate('/transaction/delivery-note/delivery-note-list');
                 }
             }
         } catch (error) {
@@ -1572,16 +1705,103 @@ const HeldInvoicesPanel = () => {
             setIsSaving(false);
         }
     }, [formData, time, saleSettings, generalSettings, isInEditMode, dlvryNoteId, invoiceId, buildInvoiceDataForPrint, printToPrinterFn, printToPdfFn, currentFinancialYear, financeSettings, saleSettings, currentCurrencyConversion, generalSettings, selectedBranchId, userId]);
+    const fetchDeliveryNoteDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`get-delivery-note-byId/${dlvryNoteId}`);
+        const data = response.data.data;
 
-    const handleReprintToPrinter = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo);
-        printToPrinterFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
+        let freshTaxData = taxData;
+        if (!freshTaxData || freshTaxData.length === 0) {
+            try {
+                const taxRes = await axiosInstance.get("tax-masters");
+                freshTaxData = taxRes.data.data || [];
+                setTaxData(freshTaxData);
+            } catch (e) {
+                console.error('Error fetching tax data', e);
+            }
+        }
 
-    const handleReprintToPdf = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo);
-        printToPdfFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, printToPdfFn]);
+        const salesDetailsWithProducts = (data.deliveryDetails || []).map((item) => {
+            const taxInfo = freshTaxData.find(t => t.taxId === item.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productname || item?.productName || '',
+                productNameArb: item?.productNameArb || '',
+                qty: parseFloat(item.qty) || 0,
+                freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                rate: parseFloat(item.rate) || 0,
+                lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
+                inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
+                discountPercentage: parseFloat(item.discountPercentage) || 0,
+                taxRate,
+                PurchaseRate: parseFloat(item.PurchaseRate) || 0,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
+
+        return {
+            ...data,
+            date: toLocalDateString(data.date),
+            RefDate: toLocalDateString(data.RefDate),
+            exchangeDate: toLocalDateString(data.exchangeDate),
+            LPODate: toLocalDateString(data.LPODate),
+            postedDate: toLocalDateString(data.postedDate),
+            deliveryDetails: salesDetailsWithProducts,
+        };
+    }, [dlvryNoteId, taxData]);
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this invoice?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchDeliveryNoteDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching delivery note for reprint:', error);
+            showToast.error('Failed to fetch delivery note data for printing');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, fetchDeliveryNoteDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn, isElectron]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchDeliveryNoteDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData);
+            printToPdfFn(invoiceDataForPrint);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching delivery note for PDF reprint:', error);
+            showToast.error('Failed to fetch delivery note data for PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [fetchDeliveryNoteDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPdfFn, isElectron]);
 
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -1601,20 +1821,20 @@ const HeldInvoicesPanel = () => {
             type: "secondary",
             onClick: () => navigate("/transaction/delivery-note/delivery-note-list"),
         },
-          !isEditMode && {
-        label: `Hold${heldInvoices.length > 0 ? ` (${heldInvoices.length})` : ''}`,
-        icon: Archive,
-        type: "secondary",
-        onClick: holdCurrentInvoice,
-        title: "Hold current delivery note (CTRL + H)",
-    },
-    heldInvoices.length > 0 && !isEditMode && {
-        label: "Restore",
-        icon: ArchiveRestore,
-        type: "tertiary",
-        title: "View and restore held delivery notes",
-        onClick: () => setShowHeldInvoices(!showHeldInvoices),
-    },
+        !isEditMode && {
+            label: `Hold${heldInvoices.length > 0 ? ` (${heldInvoices.length})` : ''}`,
+            icon: Archive,
+            type: "secondary",
+            onClick: holdCurrentInvoice,
+            title: "Hold current delivery note (CTRL + H)",
+        },
+        heldInvoices.length > 0 && !isEditMode && {
+            label: "Restore",
+            icon: ArchiveRestore,
+            type: "tertiary",
+            title: "View and restore held delivery notes",
+            onClick: () => setShowHeldInvoices(!showHeldInvoices),
+        },
         {
             label: t("clearBtn"),
             icon: Eraser,
@@ -1636,7 +1856,45 @@ const HeldInvoicesPanel = () => {
         },
     ].filter(Boolean);
 
-    if (fetchLoading || baseDataloading) {
+    const deliveryNoteShortcuts = [
+        {
+            heading: 'General',
+            items: [
+                { keys: ['Ctrl', 'S'], description: 'Save / update delivery note' },
+                { keys: ['Alt', '/'], description: 'Open help and shortcuts panel' },
+            ],
+        },
+        {
+            heading: 'Product Grid',
+            items: [
+                { keys: ['Enter'], description: 'Move to next field or add a new row' },
+                { keys: ['←', '→'], description: 'Move between editable columns' },
+                { keys: ['↑', '↓'], description: 'Move between rows' },
+            ],
+        },
+    ];
+
+    const deliveryNoteManual = [
+        {
+            heading: 'Creating a New Delivery Note',
+            steps: [
+                'Select the customer and review the delivery details before adding products.',
+                'Add items from the grid by entering the product name or scanning a barcode.',
+                'Set quantity and rate, then review the totals before saving the note.',
+                'Press Ctrl+S to save or update the delivery note.',
+            ],
+        },
+        {
+            heading: 'Printing & Conversion',
+            steps: [
+                'Choose a print layout from the Print Type dropdown before printing or saving as PDF.',
+                'Use the Print dropdown in edit mode to reprint or download a PDF for the delivery note.',
+                'Convert the delivery note into a sales invoice when needed using the Convert menu.',
+            ],
+        },
+    ];
+
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
@@ -1651,14 +1909,15 @@ const HeldInvoicesPanel = () => {
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className='bg-primary dark:bg-primary'>
             <PopupPreloader
-                isOpen={isSaving}
+                isOpen={isSaving || isPrinting}
                 state="loading"
-                title={t("loadingText")}
-                subtitle={t("loadingDesc")}
+                title={isPrinting ? t("Printing") || "Preparing Print..." : t("loadingText")}
+                subtitle={isPrinting ? t("printingDesc") || "Please wait while we prepare your invoice for printing..." : t("loadingDesc")}
             />
             <HeldInvoicesPanel />
             <BreadCrumb
@@ -1670,7 +1929,7 @@ const HeldInvoicesPanel = () => {
                 actions={breadcrumbActions}
                 customActions={
                     <div className="flex items-center gap-3">
-                        {!isEditMode && (
+                        {(
                             <div className="flex items-center space-x-2">
                                 <Checkbox
                                     id="printAfterSaveTopDeliveryNote"
@@ -1691,8 +1950,10 @@ const HeldInvoicesPanel = () => {
                             <PrintDropdown
                                 onPrintToPrinter={handleReprintToPrinter}
                                 onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
                             />
                         )}
+                        {isEditMode && <ConvertMenu onConvert={handleConvert} page="deliveryNote" />}
                     </div>
                 }
             />
@@ -1741,6 +2002,14 @@ const HeldInvoicesPanel = () => {
 
                 salesOrderData={salesOrderData}
                 setSalesOrderData={setSalesOrderData}
+                updateCustomerId={updateCustomerId}
+                setUpdateCustomerId={setUpdateCustomerId}
+            />
+            <HelpShortcuts
+                title="Delivery Note Help"
+                groups={deliveryNoteShortcuts}
+                manual={deliveryNoteManual}
+                buttonPosition="bottom-6 right-22"
             />
         </div>
     )

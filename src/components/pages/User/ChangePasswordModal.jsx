@@ -10,6 +10,7 @@ import { Box, Fade, Modal, Backdrop } from "@mui/material";
 import useAuth from "@/redux/hook/auth/useAuth";
 import AlertBox from "@/components/common/AlertBox";
 import { useTranslation } from "react-i18next";
+import { Eye, EyeOff } from "lucide-react";
 
 // ✅ Updated style - removed bgcolor and border (will use classes instead)
 const style = {
@@ -31,6 +32,8 @@ const ChangePasswordModal = ({ open, handleClose, passChangeId }) => {
     const [alert, setAlert] = useState(null);
     const { user } = useAuth();
     const { t } = useTranslation();
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const changePassWord = async () => {
         // 🔹 Validation: prevent spaces and mismatch
@@ -121,9 +124,10 @@ const ChangePasswordModal = ({ open, handleClose, passChangeId }) => {
                                         New Password
                                     </Label>
                                 </div>
-                                <div className="mb-6">
+
+                                <div className="mb-6 relative">
                                     <Input
-                                        type="password"
+                                        type={showNewPassword ? "text" : "password"}
                                         placeholder="New Password"
                                         value={newPassword}
                                         onChange={(e) => {
@@ -132,9 +136,17 @@ const ChangePasswordModal = ({ open, handleClose, passChangeId }) => {
                                             setError(null); // Clear error on change
                                         }}
                                         className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 
-                                            border-gray-300 dark:border-gray-600
-                                            placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            border-gray-300 dark:border-gray-600
+            placeholder:text-gray-400 dark:placeholder:text-gray-500 pr-10"
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNewPassword((prev) => !prev)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                                        tabIndex={-1}
+                                    >
+                                        {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
                                 </div>
 
                                 {/* Confirm Password */}
@@ -143,9 +155,10 @@ const ChangePasswordModal = ({ open, handleClose, passChangeId }) => {
                                         Confirm New Password
                                     </Label>
                                 </div>
-                                <div>
+
+                                <div className="relative">
                                     <Input
-                                        type="password"
+                                        type={showConfirmPassword ? "text" : "password"}
                                         placeholder="Confirm New Password"
                                         value={confirmPassword}
                                         onChange={(e) => {
@@ -160,9 +173,17 @@ const ChangePasswordModal = ({ open, handleClose, passChangeId }) => {
                                             }
                                         }}
                                         className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 
-                                            border-gray-300 dark:border-gray-600
-                                            placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            border-gray-300 dark:border-gray-600
+            placeholder:text-gray-400 dark:placeholder:text-gray-500 pr-10"
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowConfirmPassword((prev) => !prev)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                                        tabIndex={-1}
+                                    >
+                                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
                                     {error && (
                                         <div className="text-red-500 dark:text-red-400 text-sm mt-2 animate-shake">
                                             {error}

@@ -39,7 +39,6 @@ const DamageStockReport = () => {
 
     useEffect(() => {
         fetchUserData();
-        fetchUnitData();
     }, []);
  const navigate = useNavigate();
     const handleRowClick = (row) => {
@@ -55,20 +54,9 @@ const DamageStockReport = () => {
         }
     };
 
-    const fetchUnitData = async () => {
-        try {
-            const res = await axiosInstance.get("units");
-            setUnitData(res.data.data || []);
-        } catch (err) {
-            console.error("Error fetching units:", err);
-        }
-    };
 
-    const getUnitName = (unitId) => {
-        if (!unitId) return '-';
-        const unit = unitData.find(u => u.unitId === unitId);
-        return unit ? unit.unitName : '-';
-    };
+
+  
 
     const fetchReport = async () => {
         setLoading(true);
@@ -109,7 +97,7 @@ const DamageStockReport = () => {
                 TotalAmount: row.TotalAmount ? parseFloat(row.TotalAmount).toFixed(dp) : '',
                 Narration: row.Narration || '',
                 UnitId: row.UnitId,
-                UnitName: getUnitName(row.UnitId),
+               UnitName: row.UnitName || '-',
                 GodownId: row.GodownId,
                 RackId: row.RackId
             }));
@@ -349,7 +337,21 @@ const DamageStockReport = () => {
         return row[key] ?? "-";
     };
 
-   
+   if (privilegeLoading) {
+        return (
+            <div>
+                <BreadCrumb
+                    routes={[
+                        { title: t("damageStockReport.breadcrumb.group"), url: "#" },
+                        { title: t("damageStockReport.breadcrumb.title"), url: "#" },
+                    ]}
+                    heading={{ icon: PackageX, title: t("damageStockReport.breadcrumb.title") }}
+                />
+                <Preloader/>
+               
+            </div>
+        );
+    }
 
     if (!hasAccess) {
         return (
@@ -365,6 +367,8 @@ const DamageStockReport = () => {
             </div>
         );
     }
+
+    
 
     return (
         <div>

@@ -12,6 +12,7 @@ import { useSelector } from "react-redux";
 import Swal from "sweetalert2";
 import PropTypes from "prop-types";
 import SearchableDropdown from "@/components/elements/theme/SearchableDropdown";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const MarketForm = ({ open, handleClose, mode = "add", id = null, onSaved }) => {
   const { selectedBranchId, user } = useAuth();
@@ -130,7 +131,12 @@ const MarketForm = ({ open, handleClose, mode = "add", id = null, onSaved }) => 
 
   const handleInputChange = (e) => {
     setFinalError("");
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const {name,value}= e.target
+    let updatedValue = value
+    if(["name"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+    }
+    setFormData((prev) => ({ ...prev, [name]: updatedValue}));
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────

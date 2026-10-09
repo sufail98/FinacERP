@@ -19,6 +19,7 @@ import DateInput from '@/components/elements/theme/DateInput'
 import AdditionalFieldsModal from './AdditionalFieldsModal'
 import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal'
 import NormalSelectInput from '@/components/elements/theme/NormalSelectInput'
+import { sanitize } from '@/lib/inputSanitizer'
 
 const FormSectionMain = ({
   fetchInvoiceDataForReturn,
@@ -57,7 +58,9 @@ const FormSectionMain = ({
   otherChargeLedgers,
   setCurrentLedgerBalance,
   currency,
-  genarateSalesInvoiceId
+  genarateSalesInvoiceId,
+  updateCustomerId,
+  setUpdateCustomerId
 }) => {
   const { t } = useTranslation();
   const [loadingCustomer, setLoadingCustomer] = useState(false);
@@ -77,7 +80,7 @@ const FormSectionMain = ({
   const [fetchSalesAccountLoading, setSalesAcLoading] = useState(false);
   const [selectedSalesMatsterId, setSelectedSalesmasterId] = useState(null)
 
-  const [updateCustomerId, setUpdateCustomerId] = useState(null);
+  const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
 
   const { currentCurrency: currentCurrencyFromStore, currentFinancialYear } = useAuth();
   const { selectedBranchId, currentCurrency } = useAuth()
@@ -127,7 +130,45 @@ const FormSectionMain = ({
     { value: 1, label: 'N/A' },
 
   ];
+  useEffect(() => {
+    fetchCurrencyConvertion()
+  }, [selectedBranchId])
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
 
+    const date = new Date(dateString);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const MM = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+
+    const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+    return format
+      .replace('dd', dd)
+      .replace('MM', MM)
+      .replace('yyyy', yyyy);
+  };
+  const formatDecimal = (value) =>
+    Number(value || 0).toFixed(generalSettings.decimalPart);
+  const fetchCurrencyConvertion = async () => {
+    try {
+      const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+
+      const formattedData = response.data.data.map((item, index) => ({
+        ...item,
+        SNo: index + 1,
+        date: formatDate(item.date),
+        rate: item.rate !== null && item.rate !== undefined
+          ? formatDecimal(item.rate)
+          : formatDecimal(0),
+      }));
+
+      setCurrencyConvertionData(formattedData);
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
 
   const fetchLedgerBalance = async (ledgerId) => {
@@ -156,7 +197,7 @@ const FormSectionMain = ({
   const fetchCustomerData = async (ledgerId) => {
     setLoadingCustomer(true);
     try {
-      const response = await axiosInstance.get(`get-account-ledger-byId/${ledgerId}`);
+      const response = await axiosInstance.get(`get-account-ledger-byId/${ledgerId || formData.ledgerId}`);
 
       if (response.data) {
         const data = response.data.data;
@@ -210,10 +251,14 @@ const FormSectionMain = ({
       setSalesMasterIdForGetReturnData(value)
       // fetchInvoiceData(value)
     }
+    let updatedValue = value
+    if (["salesMasterIdForGetReturnData"].includes(name)) {
+      updatedValue = sanitize.alphaNumeric(value)
+    }
 
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: updatedValue
     }));
     // Clear error when user starts typing
     if (errors[name]) {
@@ -242,6 +287,7 @@ const FormSectionMain = ({
   }
   const currentLedgerIdRef = useRef(null);
   const handleDropdownChange = (name, value) => {
+
     if (name === 'taxType') {
       genarateSalesInvoiceId(value)
     }
@@ -291,9 +337,11 @@ const FormSectionMain = ({
             className="w-full"
             required
             error={errors.date}
-            timeText={time}
+            timeText={editMode ? formData?.billTime : time}
             min={currentFinancialYear?.fromDate}
             max={currentFinancialYear?.toDate}
+            readOnly={!saleSettings?.CanChangeDate}
+
           />
           {!editMode && formData.ledgerId && (
             <SearchableDropdown
@@ -548,12 +596,14 @@ const FormSectionMain = ({
         >
           {t('salesInvoice.form.label.formHeaderSection.salesAcLabel')}: {formData.salesAccountName}
         </p>
-        <p
-          className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
-          onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
-        >
-          {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {currentCurrencyFromStore?.currencyName || "Select Currency"}
-        </p>
+        {financeSettings?.multiCurrency && (
+          <p
+            className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+            onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
+          >
+            {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {formData?.currencyName || currentCurrencyFromStore?.currencyName || "Select Currency"}
+          </p>
+        )}
       </div>
 
       {/* Sales Invoice Table */}
@@ -609,6 +659,8 @@ const FormSectionMain = ({
         handleChange={(field, value) => {
           handleDropdownChange(field, value);
         }}
+        currencyConvertionData={currencyConvertionData}
+
       />
       <SalesModeModal
         open={salesModeModalOpen}

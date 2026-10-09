@@ -65,7 +65,7 @@ const MegaMenuItemCompact = memo(({
       : 'text-black';
 
   const chevronCls = darkBg ? 'text-gray-500' : 'text-gray-500';
-  const borderCls  = darkBg ? 'border-gray-600/50' : 'border-gray-300/50';
+  const borderCls = darkBg ? 'border-gray-600/50' : 'border-gray-300/50';
 
   return (
     <div>
@@ -487,7 +487,7 @@ const Sidebar = () => {
   const isMouseOverPanelRef = useRef(false);
 
   const { generalSettings } = useSelector(state => state.settings);
-  const { saleSettings } = useSelector(state => state.settings);
+  const { saleSettings, financeSettings } = useSelector(state => state.settings);
 
   const [addFinancialYearOpen, setAddFinancialYearOpen] = useState(false);
   const [editFinancialYearOpen, setEditFinancialYearOpen] = useState(false);
@@ -695,6 +695,9 @@ const Sidebar = () => {
             if (child.requiresSetting === 'ActiveGodown') {
               return saleSettings?.[child.requiresSetting] === true;
             }
+            if (child.requiresSetting === 'multiCurrency') {
+              return financeSettings?.[child.requiresSetting] === true;
+            }
             return generalSettings?.[child.requiresSetting] === true;
           }
           return true;
@@ -725,6 +728,7 @@ const Sidebar = () => {
       setIsLoadingMenu(true);
       try {
         const filteredMenuData = await getFilteredMenuData();
+
         const settingsFilteredMenu = filterMenuBySetting(filteredMenuData);
         setMenuData(settingsFilteredMenu);
       } catch (error) {
@@ -1080,7 +1084,7 @@ const Sidebar = () => {
           to {
             opacity: 1;
             transform: translateY(0);
-            max-height: 500px;
+            max-height: 1500px;
           }
         }
 
@@ -1244,9 +1248,8 @@ const Sidebar = () => {
       {/* Mobile Overlay Backdrop */}
       {isMobileOpen && (
         <div
-          className={`md:hidden fixed inset-0 bg-black z-[9998] ${
-            isMobileOpen ? 'backdrop-transition' : 'backdrop-transition-out'
-          }`}
+          className={`md:hidden fixed inset-0 bg-black z-[9998] ${isMobileOpen ? 'backdrop-transition' : 'backdrop-transition-out'
+            }`}
           onClick={toggleMobileMenu}
         />
       )}

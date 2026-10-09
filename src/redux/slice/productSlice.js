@@ -2,16 +2,31 @@ import axiosInstance from '@/lib/axiosConfig';
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
 // ============================
-// Fetch All Products
+// Helper: resolve API name
+// ============================
+const getApiName = (settings) => {
+  const showStock =
+    settings?.saleSettings?.showStockInproductLookUp || false;
+  return showStock
+    ? 'products-grid-fill'
+    : 'products-grid-fill';
+};
+
+// ============================
+// Fetch All Products (by type)
 // ============================
 export const fetchAllProducts = createAsyncThunk(
   'products/fetchAllProducts',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, getState }) => {
+    const apiName = getApiName(getState().settings);
+
     try {
+      const branchId = localStorage.getItem('selectedBranchId');
+
       const [salesRes, purchaseRes, inventoryRes] = await Promise.all([
-        axiosInstance.get(`products-grid-fill?type=sales&branchId=${localStorage.getItem('selectedBranchId')}`),
-        axiosInstance.get(`products-grid-fill?type=purchase&branchId=${localStorage.getItem('selectedBranchId')}`),
-        axiosInstance.get(`products-grid-fill?type=inventory&branchId=${localStorage.getItem('selectedBranchId')}`),
+        axiosInstance.get(`${apiName}?type=sales&branchId=${branchId}`),
+        axiosInstance.get(`${apiName}?type=purchase&branchId=${branchId}`),
+        axiosInstance.get(`${apiName}?type=inventory&branchId=${branchId}`),
       ]);
 
       return {
@@ -26,16 +41,38 @@ export const fetchAllProducts = createAsyncThunk(
 );
 
 // ============================
+// Fetch All Products (no type)
+// ============================
+export const fetchAllProductsNoType = createAsyncThunk(
+  'products/fetchAllProductsNoType',
+  async (_, { rejectWithValue, getState }) => {
+    const apiName = getApiName(getState().settings);
+
+    try {
+      const branchId = localStorage.getItem('selectedBranchId');
+      const res = await axiosInstance.get(
+        `${apiName}?branchId=${branchId}`
+      );
+      return res.data || {};
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+// ============================
 // Refresh Single Type
 // ============================
 export const refreshProductsByType = createAsyncThunk(
   'products/refreshProductsByType',
-  async (type, { rejectWithValue }) => {
-    try {
-      const res = await axiosInstance.get(
-        `products-grid-fill?type=${type}&branchId=${localStorage.getItem('selectedBranchId')}`
-      );
+  async (type, { rejectWithValue, getState }) => {
+    const apiName = getApiName(getState().settings);
 
+    try {
+      const branchId = localStorage.getItem('selectedBranchId');
+      const res = await axiosInstance.get(
+        `${apiName}?type=${type}&branchId=${branchId}`
+      );
       return {
         type,
         data: res.data || {},
@@ -56,6 +93,7 @@ const productSlice = createSlice({
     salesProducts: [],
     purchaseProducts: [],
     inventoryProducts: [],
+    allProducts: [],       // populated by fetchAllProductsNoType
     loading: false,
     error: null,
     lastUpdated: null,
@@ -66,6 +104,7 @@ const productSlice = createSlice({
       state.salesProducts = [];
       state.purchaseProducts = [];
       state.inventoryProducts = [];
+      state.allProducts = [];
       state.lastUpdated = null;
     },
   },
@@ -88,6 +127,23 @@ const productSlice = createSlice({
         state.lastUpdated = Date.now();
       })
       .addCase(fetchAllProducts.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+      // ======================
+      // FETCH ALL (NO TYPE)
+      // ======================
+      .addCase(fetchAllProductsNoType.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchAllProductsNoType.fulfilled, (state, action) => {
+        state.loading = false;
+        state.allProducts = action.payload?.data || [];
+        state.lastUpdated = Date.now();
+      })
+      .addCase(fetchAllProductsNoType.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })

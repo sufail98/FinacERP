@@ -133,9 +133,21 @@ const PurchaseOrderFooterSection = ({ totals, formData, setFormData, otherCharge
       setOtherChargRemark(formData.OtherChargeRemark || '');
       setOtherChargAmt(formData.OtherCharge || '');
 
+
       setIsInitialized(true);
     }
   }, [isEditMode, formData, isInitialized]);
+  
+  useEffect(() => {
+    if (isEditMode && formData?.otherChargeLedgerId && otherChargeLedgers?.length > 0 && !selectedLedger) {
+      const matchedLedger = otherChargeLedgers.find(
+        (ledger) => Number(ledger.ledgerId) === Number(formData.otherChargeLedgerId)
+      );
+      if (matchedLedger) {
+        setSelectedLedger(matchedLedger);
+      }
+    }
+  }, [isEditMode, formData?.otherChargeLedgerId, otherChargeLedgers, selectedLedger]);
 
   const safeFloat = (val) => {
     const n = parseFloat(val);
@@ -199,9 +211,38 @@ const PurchaseOrderFooterSection = ({ totals, formData, setFormData, otherCharge
     });
   };
 
+  const distributeOtherCharge = (otherCharge, purchaseDetails) => {
+    if (!purchaseDetails || purchaseDetails.length === 0) return purchaseDetails;
+
+    const validRows = purchaseDetails.filter(d => d.productCode && d.qty > 0);
+    if (validRows.length === 0) return purchaseDetails;
+
+    const totalNetAmount = validRows.reduce((sum, d) => sum + parseFloat(d.netAmount || 0), 0);
+
+    if (totalNetAmount === 0 || !otherCharge || parseFloat(otherCharge) === 0) {
+      return purchaseDetails.map(d => ({ ...d, OtherChargeOnProduct: 0 }));
+    }
+
+    const chargePercentage = (parseFloat(otherCharge) * 100) / totalNetAmount;
+
+    return purchaseDetails.map(detail => {
+      if (detail.productCode && detail.qty > 0) {
+        const netValue = parseFloat(detail.netAmount || 0);
+        const chargeForRow = (netValue * chargePercentage) / 100;
+        return {
+          ...detail,
+          OtherChargeOnProduct: parseFloat(chargeForRow.toFixed(generalSettings.decimalPart))
+        };
+      }
+      return { ...detail, OtherChargeOnProduct: 0 };
+    });
+  };
+
   useEffect(() => {
     if (formData.purchaseDetails && formData.purchaseDetails.length > 0) {
-      const updatedPurchaseDetails = distributeBillDiscount(billDiscount, formData.purchaseDetails);
+      let updatedPurchaseDetails = distributeBillDiscount(billDiscount, formData.purchaseDetails);
+      updatedPurchaseDetails = distributeOtherCharge(otherChargeAmt, updatedPurchaseDetails);
+
       setFormData(prev => ({
         ...prev,
         additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
@@ -402,7 +443,7 @@ const PurchaseOrderFooterSection = ({ totals, formData, setFormData, otherCharge
           </div>
 
           {/* ✅ Additional Cost */}
-          <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
+          {/* <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
             <label className="px-2 py-1 font-medium text-secondary dark:text-secondary sm:min-w-[100px] lg:min-w-0">
               {t("salesInvoice.form.footerSection.paymentSummery.additionalCost")}
             </label>
@@ -417,14 +458,19 @@ const PurchaseOrderFooterSection = ({ totals, formData, setFormData, otherCharge
               </select>
               <input
                 type="number"
+                max={0}
+                onKeyDown={(e) => {
+                  if (e.key === "-" || e.key === "+") e.preventDefault()
+                }}
                 value={additionalCost}
+                disabled={totals?.grandTotal <= 0}
                 onChange={(e) => setAdditionalCost(e.target.value)}
                 onBlur={(e) => setAdditionalCost(parseFloat(e.target.value || 0).toFixed(generalSettings.decimalPart))}
                 onFocus={handleSelectAll}
                 className="flex-1 px-2 py-1 bg-primary dark:bg-primary text-primary dark:text-primary focus:outline-none text-right"
               />
             </div>
-          </div>
+          </div> */}
 
           {/* ✅ Bill Discount */}
           <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
@@ -432,16 +478,21 @@ const PurchaseOrderFooterSection = ({ totals, formData, setFormData, otherCharge
               {t("salesInvoice.form.footerSection.paymentSummery.billDescount")}
             </label>
             <input
-              type="number"
+              type="text"
+              max={0}
+              onKeyDown={(e) => {
+                if (e.key === "-") e.preventDefault()
+              }}
               value={billDiscount}
               onChange={(e) => setBillDiscount(e.target.value)}
               onBlur={(e) => setBillDiscount(parseFloat(e.target.value || 0).toFixed(generalSettings.decimalPart))}
               onFocus={handleSelectAll}
+              disabled={totals?.grandTotal <= 0}
               className="flex-1 px-2 py-1 sm:border-l border-themed dark:border-themed bg-primary dark:bg-primary text-primary dark:text-primary focus:outline-none text-right"
             />
           </div>
 
-          {generalSettings.ActivateTax && (
+          {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
             <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
               <label className="px-2 py-1 font-medium text-secondary dark:text-secondary sm:min-w-[100px] lg:w-28">
                 {t("salesInvoice.form.footerSection.paymentSummery.totalTax")}
@@ -478,7 +529,12 @@ const PurchaseOrderFooterSection = ({ totals, formData, setFormData, otherCharge
                 />
                 <input
                   type="number"
+                  max={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "-" || e.key === "+") e.preventDefault()
+                  }}
                   value={otherChargeAmt}
+                  disabled={totals?.grandTotal <= 0 || !selectedLedger}
                   className="flex-1 px-2 py-1 sm:border-l border-themed dark:border-themed bg-primary dark:bg-primary text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none text-right sm:w-20"
                   onChange={(e) => setOtherChargAmt(e.target.value)}
                   onBlur={(e) => setOtherChargAmt(parseFloat(e.target.value || 0).toFixed(generalSettings.decimalPart))}
@@ -516,6 +572,7 @@ const PurchaseOrderFooterSection = ({ totals, formData, setFormData, otherCharge
                     }
                   }}
                   onFocus={handleSelectAll}
+                  disabled={totals?.grandTotal <= 0}
                   step={Math.pow(10, -(generalSettings?.RoundOffDigit ?? 2))}
                   className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right pr-2"
                 />

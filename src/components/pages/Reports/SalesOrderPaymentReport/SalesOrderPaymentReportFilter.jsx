@@ -29,6 +29,7 @@ const SalesOrderPaymentReportFilters = ({
                     name="fromDate"
                     value={filters.fromDate}
                     onChange={(e, value) => onFilterChange('fromDate', value)}
+                    max ={new Date().toISOString().split(('T')[0])}
                     required
                     className='w-full'
                 />
@@ -39,6 +40,7 @@ const SalesOrderPaymentReportFilters = ({
                     name="toDate"
                     value={filters.toDate}
                     onChange={(e, value) => onFilterChange('toDate', value)}
+                    min={filters.fromDate}
                     required
                     className='w-full'
                 />
@@ -88,6 +90,7 @@ const SalesOrderPaymentReportFilters = ({
                     options={statusOptions}
                     placeholder={t('All')}
                     searchPlaceholder={t('Search...')}
+                    clearable
                 />
                   <SearchableDropdown
                     label={t('Pay Status')}
@@ -97,6 +100,7 @@ const SalesOrderPaymentReportFilters = ({
                     options={payStatusOptions}
                     placeholder={t('All')}
                     searchPlaceholder={t('Search...')}
+                    clearable
                 />
    <div className=" flex justify-end gap-2">
                     <button

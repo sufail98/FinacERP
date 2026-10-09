@@ -44,8 +44,8 @@ const PurchaseReturnFooterSection = ({ totals, formData, setFormData, otherCharg
     e.target.select();
   };
 
-  useEffect(() => {
-    if (isEditMode && formData && !isInitialized) {
+ useEffect(() => {
+  if ((isEditMode || formData.purchaseMasterId) && formData && !isInitialized) {
       const addCost = parseFloat(formData.additionalCost) || 0;
       setAdditionalCost(Math.abs(addCost));
       setAdditionalCostType(addCost >= 0 ? "Cr" : "Dr");
@@ -118,10 +118,38 @@ const PurchaseReturnFooterSection = ({ totals, formData, setFormData, otherCharg
       return { ...detail, billDiscOnProduct: 0 };
     });
   };
+const distributeOtherCharge = (otherCharge, purchaseDetails) => {
+  if (!purchaseDetails || purchaseDetails.length === 0) return purchaseDetails;
+
+  const validRows = purchaseDetails.filter(d => d.productCode && d.qty > 0);
+  if (validRows.length === 0) return purchaseDetails;
+
+  const totalNetAmount = validRows.reduce((sum, d) => sum + parseFloat(d.netAmount || 0), 0);
+
+  if (totalNetAmount === 0 || !otherCharge || parseFloat(otherCharge) === 0) {
+    return purchaseDetails.map(d => ({ ...d, otherchargeOnProduct: 0 })); // ✅ lowercase c
+  }
+
+  const chargePercentage = (parseFloat(otherCharge) * 100) / totalNetAmount;
+
+  return purchaseDetails.map(detail => {
+    if (detail.productCode && detail.qty > 0) {
+      const netValue = parseFloat(detail.netAmount || 0);
+      const chargeForRow = (netValue * chargePercentage) / 100;
+      return {
+        ...detail,
+        otherchargeOnProduct: parseFloat(chargeForRow.toFixed(generalSettings?.decimalPart ?? 2)) // ✅ lowercase c
+      };
+    }
+    return { ...detail, otherchargeOnProduct: 0 }; // ✅ lowercase c
+  });
+};
 
   useEffect(() => {
     if (formData.purchaseDetails && formData.purchaseDetails.length > 0) {
-      const updatedPurchaseDetails = distributeBillDiscount(billDiscount, formData.purchaseDetails);
+      let updatedPurchaseDetails = distributeBillDiscount(billDiscount, formData.purchaseDetails);
+      updatedPurchaseDetails = distributeOtherCharge(otherChargeAmt, updatedPurchaseDetails);
+
       setFormData(prev => ({
         ...prev,
         additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
@@ -234,13 +262,13 @@ const PurchaseReturnFooterSection = ({ totals, formData, setFormData, otherCharg
             <input
               type="number"
               value={totals?.grandTotal}
-              className="flex-1 px-2 py-1 sm:border-l border-themed dark:border-themed bg-secondary dark:bg-secondary text-primary dark:text-primary focus:outline-none text-right"
+              className="flex-1 px-2 py-1 font-bold sm:border-l border-themed dark:border-themed bg-secondary dark:bg-secondary text-primary dark:text-primary focus:outline-none text-right"
               readOnly
             />
           </div>
 
           {/* ✅ Additional Cost */}
-          <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
+          {/* <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
             <label className="px-2 py-1 font-medium text-secondary dark:text-secondary sm:min-w-[100px] lg:min-w-0">
               {t("salesInvoice.form.footerSection.paymentSummery.additionalCost")}
             </label>
@@ -255,13 +283,15 @@ const PurchaseReturnFooterSection = ({ totals, formData, setFormData, otherCharg
               </select>
               <input
                 type="number"
-                value={Number(additionalCost || 0).toFixed(generalSettings?.decimalPart ?? 2)}
+                // value={Number(additionalCost || 0).toFixed(generalSettings?.decimalPart ?? 2)}
+                value={additionalCost}
                 onChange={(e) => setAdditionalCost(parseFloat(e.target.value) || 0)}
                 onFocus={handleSelectAll}
+                disabled={totals?.grandTotal <= 0}
                 className="flex-1 px-2 py-1 bg-primary dark:bg-primary text-primary dark:text-primary focus:outline-none text-right"
               />
             </div>
-          </div>
+          </div> */}
 
           {/* ✅ Bill Discount */}
           <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
@@ -273,12 +303,13 @@ const PurchaseReturnFooterSection = ({ totals, formData, setFormData, otherCharg
               value={billDiscount}
               onChange={(e) => setBillDiscount(parseFloat(e.target.value) || 0)}
               onFocus={handleSelectAll}
+              disabled={totals?.grandTotal <= 0}
               className="flex-1 px-2 py-1 sm:border-l border-themed dark:border-themed bg-primary dark:bg-primary text-primary dark:text-primary focus:outline-none text-right"
             />
           </div>
 
           {/* Total Tax */}
-          {generalSettings.ActivateTax && (
+          {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
             <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
               <label className="px-2 py-1 font-medium text-secondary dark:text-secondary sm:min-w-[100px] lg:w-28">
                 {t("salesInvoice.form.footerSection.paymentSummery.totalTax")}
@@ -315,11 +346,18 @@ const PurchaseReturnFooterSection = ({ totals, formData, setFormData, otherCharg
                 />
                 <input
                   type="number"
-                  value={
-                    otherChargeAmt === '' || Number(otherChargeAmt) === 0
-                      ? ''
-                      : Number(otherChargeAmt).toFixed(generalSettings?.decimalPart ?? 2)
-                  }
+                  // value={
+                  //   otherChargeAmt === '' || Number(otherChargeAmt) === 0
+                  //     ? ''
+                  //     : Number(otherChargeAmt).toFixed(generalSettings?.decimalPart ?? 2)
+                  // }
+                  value={otherChargeAmt}
+                  max={0}
+                  disabled={Number(totals?.grandTotal) <= 0 || !selectedLedger}
+
+                  onKeyDown={(e) => {
+                    if (e.key === "-" || e.key === "+") e.preventDefault()
+                  }}
                   className="flex-1 px-2 py-1 sm:border-l border-themed dark:border-themed bg-primary dark:bg-primary text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none text-right sm:w-20"
                   onChange={(e) => setOtherChargAmt(e.target.value)}
                   onFocus={handleSelectAll}

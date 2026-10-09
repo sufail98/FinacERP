@@ -7,13 +7,46 @@ import AlertBox from '@/components/common/AlertBox';
 import axiosInstance from '@/lib/axiosConfig';
 import usePrivileges from '@/lib/hooks/usePrivileges';
 import useAuth from '@/redux/hook/auth/useAuth';
-import { ArrowLeftRight } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import FundFlowFilters from './FundFlowFilters';
 import FundFlowDetailedFilters from './FundFlowDetailedFilters';
 import useReportExport from '@/hooks/useReportExport';
+
+// Mirrors STOCK_CALCULATION_CONFIG from ProfitAndLossAnalysis.jsx
+const STOCK_CALCULATION_CONFIG = {
+    'FIFO': {
+        endpoint: 'calculation-method/profit-and-loss-opening-stock-fifo',
+        valueKey: 'totalCost'
+    },
+    'Low Cost': {
+        endpoint: 'calculation-method/opening-stock-low-cost',
+        valueKey: 'actualvalue'
+    },
+    'High Cost': {
+        endpoint: 'calculation-method/stock-opening-high-cost',
+        valueKey: 'actualvalue'
+    },
+    'Last Purchase Rate': {
+        endpoint: 'calculation-method/stock-opening-value-last-purchase-rate',
+        valueKey: 'actualvalue'
+    },
+    'Average Cost': {
+        endpoint: 'calculation-method/stock-opening-value-avco',
+        valueKey: 'actualvalue'
+    }
+};
+
+const getStockCalculationConfig = (method) => {
+    const config = STOCK_CALCULATION_CONFIG[method];
+    if (!config) {
+        console.warn(`No config mapped for stockValueCalculation: "${method}", falling back to FIFO`);
+        return STOCK_CALCULATION_CONFIG['FIFO'];
+    }
+    return config;
+};
 
 const FundFlow = () => {
     const { t } = useTranslation();
@@ -22,10 +55,11 @@ const FundFlow = () => {
     const [alert, setAlert] = useState(null);
     const [groupData, setGroupData] = useState([]);
     const [currencyData, setCurrencyData] = useState([]);
+    const [expandedGroups, setExpandedGroups] = useState({});
 
-    const { selectedBranchId, currentCurrency } = useAuth();
+    const { selectedBranchId, currentCurrency, selectedBranchDetails } = useAuth();
     const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Fund Flow");
-    const { generalSettings } = useSelector((state) => state.settings);
+    const { generalSettings, inventorySettings } = useSelector((state) => state.settings);
     const decimalPart = generalSettings?.decimalPart || 2;
 
     const {
@@ -36,10 +70,9 @@ const FundFlow = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const currentYear = today.getFullYear();
         return {
-            fromDate: `${currentYear}-01-01`,
-            toDate: `${currentYear}-12-31`
+            fromDate: today.toISOString().split('T')[0],
+            toDate: today.toISOString().split('T')[0]
         };
     };
 
@@ -51,8 +84,6 @@ const FundFlow = () => {
         fromDate: defaultDates.fromDate,
         toDate: defaultDates.toDate,
         currencyId: (currentCurrency.currencyId).toString(),
-        groupId: null,
-        isAsset: false
     });
 
     const isDetailed = reportType === 'detailed';
@@ -60,6 +91,23 @@ const FundFlow = () => {
     useEffect(() => {
         fetchDropdownData();
     }, [selectedBranchId]);
+
+    // Default: expand all groups automatically when new detailed data loads.
+    // User can still click a group's chevron to collapse/expand individually.
+    useEffect(() => {
+        if (isDetailed && reportData?.fundFlowRows) {
+            const defaultExpanded = {};
+            reportData.fundFlowRows.forEach((group) => {
+                if (group.ledgers && group.ledgers.length > 0) {
+                    // set for both sides since we don't know upfront which side
+                    // the group landed on (sign of its balance) — harmless either way
+                    defaultExpanded[`sources-${group.groupId}`] = true;
+                    defaultExpanded[`applications-${group.groupId}`] = true;
+                }
+            });
+            setExpandedGroups(defaultExpanded);
+        }
+    }, [reportData, isDetailed]);
 
     const fetchDropdownData = async () => {
         try {
@@ -83,31 +131,86 @@ const FundFlow = () => {
 
     const activeCurrencySymbol = selectedCurrency?.currencySymbol || selectedCurrency?.symbol || '';
 
+    /* ────────────────── Fetch: Fund Flow + Stock + P&L (matches FillGrid() in .NET) ────────────────── */
+
     const fetchReport = async () => {
         setLoading(true);
         setAlert(null);
+        setExpandedGroups({});
 
         const endpoint = isDetailed ? "fund-flow-detailed" : "fund-flow";
 
+        const branchId = selectedBranchDetails?.mainBranch ? null : (parseInt(selectedBranchId) || 1);
+        const currencyId = isDetailed
+            ? (parseInt(filters.currencyId) || 1)
+            : (currentCurrency?.currencyId || 1);
+
         const requestBody = {
-            branch_id: parseInt(selectedBranchId) || 1,
-            currency_id: isDetailed
-                ? (parseInt(filters.currencyId) || 1)
-                : (currentCurrency?.currencyId || 1),
+            branch_id: branchId,
+            currency_id: currencyId,
             from_date: filters.fromDate,
             to_date: filters.toDate
         };
 
-        if (isDetailed) {
-            requestBody.group_id = filters.groupId ? parseInt(filters.groupId) : null;
-            requestBody.is_asset = filters.isAsset;
-        }
-
         try {
+            // 1) Fund flow ledger balances (Asset/Liability tables from SpFinance.FundFlow)
             const res = await axiosInstance.post(endpoint, requestBody);
             const extractedData = res.data?.data || res.data || [];
 
-            setReportData(extractedData);
+            // 2) Stock values on from_date (opening) and to_date (closing)
+            //    Mirrors SpFinance.StockValueGetOnDate(...) calls in FillGrid()
+            const stockConfig = getStockCalculationConfig(inventorySettings?.stockValueCalculation);
+
+            const [openingStockRes, closingStockRes] = await Promise.all([
+                axiosInstance.post(stockConfig.endpoint, {
+                    date: filters.fromDate,
+                    from_date: filters.fromDate,
+                    branch_id: branchId ?? 1,
+                    currency_id: currencyId
+                }),
+                axiosInstance.post(stockConfig.endpoint, {
+                    date: filters.toDate,
+                    from_date: filters.fromDate,
+                    branch_id: branchId ?? 1,
+                    currency_id: currencyId
+                })
+            ]);
+
+            const openingStock = parseFloat(openingStockRes.data?.data?.[0]?.[stockConfig.valueKey] || 0);
+            const closingStock = parseFloat(closingStockRes.data?.data?.[0]?.[stockConfig.valueKey] || 0);
+
+            // 3) Profit & Loss analysis (Debit/Credit tables) — mirrors SpFinance.ProfitAndLossAnalysis(...)
+            const plRes = await axiosInstance.post('profit-and-loss/analysis', {
+                from_date: filters.fromDate,
+                to_date: filters.toDate,
+                branch_id: branchId ?? 1,
+                currency_id: currencyId
+            });
+            const plData = plRes.data?.data || {};
+
+            // Replicates the C# loop:
+            // even table index (incl. 0) -> subtract Sum(Debit)
+            // odd table index -> add Sum(Credit)
+            const sumField = (arr, field) =>
+                (arr || []).reduce((sum, item) => sum + parseFloat(item[field] || item.balance || 0), 0);
+
+            let dcProfit = 0;
+            dcProfit -= sumField(plData['Purchase'], 'debit');
+            dcProfit += sumField(plData['Sales'], 'credit');
+            dcProfit -= sumField(plData['Direct Expense'], 'debit');
+            dcProfit += sumField(plData['Direct Income'], 'credit');
+            dcProfit -= sumField(plData['Indirect Expense'], 'debit');
+            dcProfit += sumField(plData['Indirect Income'], 'credit');
+
+            // dcProfit = dcProfit + dcClosingStock - dcOpeninggStock;
+            dcProfit = dcProfit + closingStock - openingStock;
+
+            setReportData({
+                fundFlowRows: extractedData,
+                netProfitOrLoss: dcProfit,
+                openingStock,
+                closingStock
+            });
 
             if (Array.isArray(extractedData) && extractedData.length === 0) {
                 setAlert({
@@ -133,92 +236,79 @@ const FundFlow = () => {
         return Number(num || 0).toFixed(decimalPart);
     };
 
-    // ── Process data ──
+    /* ────────────────── Process data (Normal: group+amount | Detailed: group -> ledgers) ────────────────── */
+
     const processedData = useMemo(() => {
-        if (!reportData || !Array.isArray(reportData) || reportData.length === 0) {
+        if (!reportData || !reportData.fundFlowRows) {
             return { sourcesData: [], applicationsData: [], totals: null };
         }
 
-        // ✅ FIX: Always treat Balance as a number — null becomes 0
-        // This handles the case where the SQL returns null Balance
-        // (e.g., no transactions and no opening balance for a ledger)
-        const parseBalance = (item) => {
-            const val = item.Balance ?? item.balance ?? item.Amount ?? item.amount ?? item.balance ?? 0;
-            return parseFloat(val) || 0;
-        };
+        const rawRows = reportData.fundFlowRows;
+        const netProfitOrLoss = reportData.netProfitOrLoss || 0;
 
-        const getName = (item) =>
-            item.Name || item.name || item.ledger_name || item.particulars || '';
+        let sources = [];
+        let applications = [];
 
-        // Check if this is the detailed API response format (has Balance field)
-        const isDetailedFormat = reportData[0] !== undefined && 'Balance' in reportData[0];
+        if (isDetailed) {
+            // Detailed shape: [{ groupId, groupName, ledgers: [{ ledgerId, ledgerName, balance }] }]
+            rawRows.forEach((group) => {
+                const ledgers = Array.isArray(group.ledgers) ? group.ledgers : [];
+                const groupBalance = ledgers.reduce((sum, l) => sum + (parseFloat(l.balance) || 0), 0);
 
-        if (isDetailedFormat) {
-            // ✅ For detailed mode: show ALL ledgers with non-zero balance
-            // positive Balance → Source of Funds
-            // negative Balance → Application of Funds
-            // null/zero        → filtered out (no movement)
-            const nonZero = reportData.filter(item => parseBalance(item) !== 0);
+                if (groupBalance === 0 && ledgers.length === 0) return;
 
-            const sources = nonZero
-                .filter(item => parseBalance(item) > 0)
-                .map((item, i) => ({
-                    SNo: i + 1,
-                    name: getName(item),
-                    amount: Math.abs(parseBalance(item))
-                }));
-
-            const applications = nonZero
-                .filter(item => parseBalance(item) < 0)
-                .map((item, i) => ({
-                    SNo: i + 1,
-                    name: getName(item),
-                    amount: Math.abs(parseBalance(item))
-                }));
-
-            // ✅ If ALL balances are null/zero (SQL issue), show everything as sources
-            // so the user at least sees ledger names and can debug
-            if (sources.length === 0 && applications.length === 0) {
-                const allItems = reportData.map((item, i) => ({
-                    SNo: i + 1,
-                    name: getName(item),
-                    amount: 0
-                }));
-                return {
-                    sourcesData: allItems,
-                    applicationsData: [],
-                    totals: { totalSources: 0, totalApplications: 0 }
+                const groupRow = {
+                    isGroup: true,
+                    groupId: group.groupId,
+                    name: group.groupName,
+                    amount: Math.abs(groupBalance),
+                    ledgers: ledgers.map((l) => ({
+                        isGroup: false,
+                        groupId: group.groupId,
+                        ledgerId: l.ledgerId,
+                        name: l.ledgerName,
+                        amount: Math.abs(parseFloat(l.balance) || 0)
+                    }))
                 };
-            }
 
-            const totalSources = sources.reduce((sum, item) => sum + item.amount, 0);
-            const totalApplications = applications.reduce((sum, item) => sum + item.amount, 0);
-
-            return {
-                sourcesData: sources,
-                applicationsData: applications,
-                totals: { totalSources, totalApplications }
-            };
+                if (groupBalance > 0) {
+                    sources.push(groupRow);
+                } else if (groupBalance < 0) {
+                    applications.push(groupRow);
+                } else {
+                    // zero-balance group: keep on sources side by default so it's visible
+                    sources.push(groupRow);
+                }
+            });
+        } else {
+            // Normal shape: [{ id, name, balance }]
+            rawRows.forEach((item) => {
+                const balance = parseFloat(item.balance) || 0;
+                const row = {
+                    isGroup: true,
+                    groupId: item.id,
+                    name: item.name,
+                    amount: Math.abs(balance),
+                    ledgers: []
+                };
+                if (balance >= 0) {
+                    sources.push(row);
+                } else {
+                    applications.push(row);
+                }
+            });
         }
 
-        // Normal / other API format
-        const sources = reportData.filter(item => {
-            const amount = parseFloat(item.amount || item.Amount || item.balance || 0);
-            return item.type === 'Source' || item.is_source === true || amount > 0;
-        }).map((item, i) => ({
-            SNo: i + 1,
-            name: getName(item),
-            amount: Math.abs(parseFloat(item.amount || item.Amount || item.balance || 0))
-        }));
+        // ── Net Profit / Net Loss row, exactly like FillGrid():
+        if (netProfitOrLoss > 0) {
+            sources.push({ isGroup: true, groupId: 'net-profit', name: t('Net Profit'), amount: netProfitOrLoss, isProfitLossRow: true, ledgers: [] });
+        } else if (netProfitOrLoss < 0) {
+            applications.push({ isGroup: true, groupId: 'net-loss', name: t('Net Loss'), amount: Math.abs(netProfitOrLoss), isProfitLossRow: true, ledgers: [] });
+        }
 
-        const applications = reportData.filter(item => {
-            const amount = parseFloat(item.amount || item.Amount || item.balance || 0);
-            return item.type === 'Application' || item.is_source === false || amount < 0;
-        }).map((item, i) => ({
-            SNo: i + 1,
-            name: getName(item),
-            amount: Math.abs(parseFloat(item.amount || item.Amount || item.balance || 0))
-        }));
+        // Assign SNo to top-level group rows only
+        sources = sources.map((item, i) => ({ SNo: i + 1, ...item }));
+        applications = applications.map((item, i) => ({ SNo: i + 1, ...item }));
 
         const totalSources = sources.reduce((sum, item) => sum + item.amount, 0);
         const totalApplications = applications.reduce((sum, item) => sum + item.amount, 0);
@@ -228,7 +318,40 @@ const FundFlow = () => {
             applicationsData: applications,
             totals: { totalSources, totalApplications }
         };
-    }, [reportData]);
+    }, [reportData, t, isDetailed]);
+
+    /* ────────────────── Row expansion (detailed mode) ────────────────── */
+
+    const toggleGroup = (side, groupId) => {
+        const key = `${side}-${groupId}`;
+        setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    // Build the flattened row list actually passed to ContentTable, inserting
+    // ledger rows immediately after their expanded group row.
+    const buildDisplayRows = (groupRows, side) => {
+        const displayRows = [];
+        groupRows.forEach((group) => {
+            displayRows.push(group);
+            const key = `${side}-${group.groupId}`;
+            if (isDetailed && expandedGroups[key] && group.ledgers && group.ledgers.length > 0) {
+                group.ledgers.forEach((ledger) => {
+                    displayRows.push({ ...ledger, parentSNo: group.SNo });
+                });
+            }
+        });
+        return displayRows;
+    };
+
+    const sourcesDisplayRows = useMemo(
+        () => buildDisplayRows(processedData.sourcesData, 'sources'),
+        [processedData.sourcesData, expandedGroups, isDetailed]
+    );
+
+    const applicationsDisplayRows = useMemo(
+        () => buildDisplayRows(processedData.applicationsData, 'applications'),
+        [processedData.applicationsData, expandedGroups, isDetailed]
+    );
 
     /* ────────────────── Export ────────────────── */
 
@@ -238,30 +361,31 @@ const FundFlow = () => {
 
         const exportData = [];
 
+        const pushGroupWithLedgers = (groupRows) => {
+            groupRows.forEach((group, index) => {
+                exportData.push({ SNo: index + 1, Particulars: group.name, Amount: formatNum(group.amount) });
+                if (isDetailed && group.ledgers && group.ledgers.length > 0) {
+                    group.ledgers.forEach((ledger) => {
+                        exportData.push({ SNo: '', Particulars: `    ${ledger.name}`, Amount: formatNum(ledger.amount) });
+                    });
+                }
+            });
+        };
+
         exportData.push({ Particulars: t('SOURCES OF FUNDS'), Amount: '', isHeader: true });
-        sourcesData.forEach((item, index) => {
-            exportData.push({ SNo: index + 1, Particulars: item.name, Amount: formatNum(item.amount) });
-        });
+        pushGroupWithLedgers(sourcesData);
         exportData.push({ SNo: '', Particulars: t('Total Sources'), Amount: formatNum(totals?.totalSources || 0), isTotal: true });
         exportData.push({ SNo: '', Particulars: '', Amount: '' });
 
         exportData.push({ Particulars: t('APPLICATION OF FUNDS'), Amount: '', isHeader: true });
-        applicationsData.forEach((item, index) => {
-            exportData.push({ SNo: index + 1, Particulars: item.name, Amount: formatNum(item.amount) });
-        });
+        pushGroupWithLedgers(applicationsData);
         exportData.push({ SNo: '', Particulars: t('Total Applications'), Amount: formatNum(totals?.totalApplications || 0), isTotal: true });
         exportData.push({ SNo: '', Particulars: '', Amount: '' });
 
         const difference = (totals?.totalSources || 0) - (totals?.totalApplications || 0);
         exportData.push({ SNo: '', Particulars: t('Net Difference'), Amount: formatNum(difference), isTotal: true });
 
-        let subtitle = t('Normal Report');
-        if (isDetailed) {
-            const selectedGroup = groupData.find(g =>
-                String(g.accountGroupId || g.AccountGroupId || g.id) === String(filters.groupId)
-            );
-            subtitle = selectedGroup?.accountGroupName || selectedGroup?.AccountGroupName || t('All Groups');
-        }
+        let subtitle = isDetailed ? t('Detailed Report') : t('Normal Report');
 
         return {
             fileName: isDetailed ? 'Fund_Flow_Detailed' : 'Fund_Flow_Normal',
@@ -288,17 +412,17 @@ const FundFlow = () => {
     };
 
     const handleExportExcel = () => {
-        if (!reportData || reportData.length === 0 || !processedData.totals) return;
+        if (!processedData.totals) return;
         exportGenericToExcel(getExportOptions());
     };
 
     const handleExportPdf = () => {
-        if (!reportData || reportData.length === 0 || !processedData.totals) return;
+        if (!processedData.totals) return;
         exportGenericToPdf({ ...getExportOptions(), orientation: 'portrait' });
     };
 
     const handleExportCsv = () => {
-        if (!reportData || reportData.length === 0 || !processedData.totals) return;
+        if (!processedData.totals) return;
         exportGenericToCsv(getExportOptions());
     };
 
@@ -320,8 +444,39 @@ const FundFlow = () => {
         return { SNo: '', name: t('Total'), amount: formatNumber(processedData.totals.totalApplications) };
     }, [processedData, t]);
 
-    const renderCell = (key, row) => {
-        if (key === 'amount') return formatNumber(row[key]);
+    const renderCell = (key, row, side) => {
+        if (key === 'SNo') {
+            return row.isGroup ? row.SNo : '';
+        }
+        if (key === 'name') {
+            if (row.isGroup) {
+                const hasLedgers = isDetailed && row.ledgers && row.ledgers.length > 0;
+                const key2 = `${side}-${row.groupId}`;
+                const isOpen = !!expandedGroups[key2];
+                return (
+                    <span
+                        className={`flex items-center gap-1 ${hasLedgers ? 'cursor-pointer select-none' : ''} ${row.isProfitLossRow ? 'font-semibold' : 'font-medium'}`}
+                        onClick={hasLedgers ? () => toggleGroup(side, row.groupId) : undefined}
+                    >
+                        {hasLedgers ? (
+                            isOpen ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                            <span className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        {row.name}
+                    </span>
+                );
+            }
+            // ledger row (indented, no toggle)
+            return <span className="pl-6 text-gray-600 dark:text-gray-400">{row.name}</span>;
+        }
+        if (key === 'amount') {
+            return (
+                <span className={row.isGroup ? '' : 'text-gray-600 dark:text-gray-400'}>
+                    {formatNumber(row[key])}
+                </span>
+            );
+        }
         return row[key] ?? '-';
     };
 
@@ -335,6 +490,7 @@ const FundFlow = () => {
         setReportType(type);
         setReportData(null);
         setAlert(null);
+        setExpandedGroups({});
     };
 
     const resetFilters = () => {
@@ -342,11 +498,10 @@ const FundFlow = () => {
             fromDate: defaultDates.fromDate,
             toDate: defaultDates.toDate,
             currencyId: 1,
-            groupId: null,
-            isAsset: false
         });
         setReportData(null);
         setAlert(null);
+        setExpandedGroups({});
     };
 
     const currencyOptions = currencyData.map(currency => ({
@@ -354,13 +509,7 @@ const FundFlow = () => {
         value: String(currency.currencyId || currency.CurrencyId || currency.id)
     }));
 
-    const groupOptions = [
-        { label: t('All'), value: '' },
-        ...groupData.map(group => ({
-            label: group.accountGroupName || group.AccountGroupName || group.groupName || group.Name,
-            value: String(group.accountGroupId || group.AccountGroupId || group.id || group.ID)
-        }))
-    ];
+    const groupOptions = [];
 
     /* ────────────────── Loading / No Access ────────────────── */
 
@@ -396,7 +545,6 @@ const FundFlow = () => {
 
     /* ────────────────── Main Render ────────────────── */
 
-    // ✅ Show tables whenever we have processedData with items (even if totals are 0)
     const hasDisplayData =
         processedData.sourcesData.length > 0 ||
         processedData.applicationsData.length > 0;
@@ -507,7 +655,7 @@ const FundFlow = () => {
                 {/* ══════════ Split Tables ══════════ */}
                 {hasDisplayData && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* Sources */}
+                        {/* Sources / Asset side */}
                         <div>
                             <div className="px-3 py-2 bg-white dark:bg-[#1e1e1e] border border-b-0 border-gray-200 dark:border-gray-700 rounded-t">
                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -516,17 +664,18 @@ const FundFlow = () => {
                             </div>
                             <ContentTable
                                 columns={columns}
-                                data={processedData.sourcesData}
+                                data={sourcesDisplayRows}
                                 loading={loading}
-                                renderCell={renderCell}
+                                renderCell={(key, row) => renderCell(key, row, 'sources')}
                                 footerData={sourcesFooterData}
                                 staticSearchable={true}
                                 tableId={`fund-flow-${reportType}-sources`}
-                                 maxHeight='calc(100vh - 370px)'
+                                maxHeight='calc(100vh - 370px)'
+                                rowClassName={(row) => row.isProfitLossRow ? 'text-green-600 dark:text-green-400 font-medium' : (!row.isGroup ? 'bg-gray-50 dark:bg-[#161616]' : '')}
                             />
                         </div>
 
-                        {/* Applications */}
+                        {/* Applications / Liability side */}
                         <div>
                             <div className="px-3 py-2 bg-white dark:bg-[#1e1e1e] border border-b-0 border-gray-200 dark:border-gray-700 rounded-t">
                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -535,13 +684,14 @@ const FundFlow = () => {
                             </div>
                             <ContentTable
                                 columns={columns}
-                                data={processedData.applicationsData}
+                                data={applicationsDisplayRows}
                                 loading={loading}
-                                renderCell={renderCell}
+                                renderCell={(key, row) => renderCell(key, row, 'applications')}
                                 footerData={applicationsFooterData}
                                 staticSearchable={true}
                                 tableId={`fund-flow-${reportType}-applications`}
-                                 maxHeight='calc(100vh - 370px)'
+                                maxHeight='calc(100vh - 370px)'
+                                rowClassName={(row) => row.isProfitLossRow ? 'text-red-600 dark:text-red-400 font-medium' : (!row.isGroup ? 'bg-gray-50 dark:bg-[#161616]' : '')}
                             />
                         </div>
                     </div>

@@ -48,7 +48,17 @@ const RecievableVoucherList = () => {
         fetchAllPayableVouchers();
     }, [page, limit]);
     const { selectedBranchId } = useAuth()
-
+const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
     const fetchAllPayableVouchers = async () => {
         setFetchLoading(true);
         try {
@@ -64,7 +74,11 @@ const RecievableVoucherList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((page - 1) * limit) + index + 1,
-                date: formatDate(item.date),
+               date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setPayableVoucherData(formattedData);
@@ -217,7 +231,7 @@ const RecievableVoucherList = () => {
     const columns = [
         { key: "SNo", label: t("payableVoucher.list.columns.sno"), sortable: true, align: "right" },
         { key: "ReceivableNo", label: t("payableVoucher.list.columns.voucherNo"), sortable: true, align: "left" },
-        { key: "date", label: t("payableVoucher.list.columns.date"), sortable: true, align: "center" },
+        { key: "date", label: t("payableVoucher.list.columns.date"), sortable: true, align: "left" },
         { key: "partyName", label: t("payableVoucher.list.columns.supplier"), sortable: true, align: "left" },
         { key: "totalAmount", label: t("payableVoucher.list.columns.totalAmt"), sortable: true, align: "right" },
     ];
@@ -307,7 +321,7 @@ const RecievableVoucherList = () => {
 
     if (privilegeLoading) {
         return (
-            <div className="bg-primary dark:bg-primary min-h-screen">
+            <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
                     routes={[
                         { title: t("receivableVoucher.breadcrumb.master"), url: "#" },
@@ -321,7 +335,7 @@ const RecievableVoucherList = () => {
     }
 
     return (
-        <div className="bg-primary dark:bg-primary min-h-screen">
+        <div className="bg-primary dark:bg-primary">
             {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
             <BreadCrumb
                 routes={[

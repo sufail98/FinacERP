@@ -26,6 +26,7 @@ const PurchaseCartReportFilter = ({
                     name="fromDate"
                     value={filters.fromDate}
                     onChange={(e, value) => onFilterChange('fromDate', value)}
+                    max={new Date().toISOString().split(("T")[0])}
                     required
                     className='w-full'
                 />
@@ -57,14 +58,42 @@ const PurchaseCartReportFilter = ({
                     placeholder={t('purchaseCartReport.filters.customerNamePlaceholder')}
                 />
 
-                <SearchableDropdown
+                {/* <SearchableDropdown
                     label={t('purchaseCartReport.filters.mode')}
                     name="mode"
                     value={filters.mode}
                     onChange={(value) => onFilterChange('mode', value)}
                     options={modeOptions}
                     placeholder={t('purchaseCartReport.filters.selectMode')}
-                />
+                /> */}
+                 <div className=" items-end gap-6  border-gray-200 dark:border-gray-700">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                            type="radio"
+                            name="mode"
+                            value="summary"
+                            checked={filters.mode === 'summary'}
+                            onChange={(e) => onFilterChange('mode', e.target.value)}
+                            className="w-4 h-4"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {t('salesReport.filters.summary') || 'Summary'}
+                        </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                            type="radio"
+                            name="mode"
+                            value="detailed"
+                            checked={filters.mode === 'detailed'}
+                            onChange={(e) => onFilterChange('mode', e.target.value)}
+                            className="w-4 h-4 "
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {t('salesReport.filters.detailed') || 'Detailed'}
+                        </span>
+                    </label>
+                </div>
             </div>
 
             {/* Action Buttons */}

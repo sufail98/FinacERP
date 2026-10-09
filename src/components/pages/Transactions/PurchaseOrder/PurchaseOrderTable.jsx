@@ -25,7 +25,9 @@ const PurchaseOrderTable = ({ formData, setFormData, editMode, rows: propRows, s
     const suggestionRef = useRef(null);
     const inputRefs = useRef({});
     const [isInitialized] = useState(false);
-    const { purchaseProducts:allProducts, loading: productsLoading } = useSelector((state) => state.products)
+    const { purchaseProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products)
+        const [selectedRowIdForEdit, setSelectedRowIdForEdit] = useState(null);
+
 
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState({});
     const [selectingProduct, setSelectingProduct] = useState({});
@@ -33,7 +35,7 @@ const PurchaseOrderTable = ({ formData, setFormData, editMode, rows: propRows, s
     const [scrollPosition, setScrollPosition] = useState(0);
     const [focusedRowId, setFocusedRowId] = useState(null);
     const [isTableFocused, setIsTableFocused] = useState(false);
-            const dispatch = useDispatch()
+    const dispatch = useDispatch()
 
     useEffect(() => {
         if (activeSuggestionRow) {
@@ -103,7 +105,7 @@ const PurchaseOrderTable = ({ formData, setFormData, editMode, rows: propRows, s
                 desc: parseFloat(item.discountPercentage) || 0,
                 descAmt: calculateInitialDescAmt(item),
                 grossAmount: (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0),
-billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
+                billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
                 netValue: parseFloat(item.netAmount) || 0,
                 purchaseTaxes: item.purchaseTaxes || [],
                 tax: parseFloat(item.taxId) || 0,
@@ -136,13 +138,13 @@ billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
                 qty: 1,
                 freeQty: 0,
                 unit: 2,
-                salesRate:(0).toFixed(generalSettings.decimalPart),
+                salesRate: (0).toFixed(generalSettings.decimalPart),
                 purchaseTaxes: [],
                 taxRate: 0,
                 desc: 0,
                 descAmt: 0,
                 grossAmount: 0,
-billDiscOnProduct: 0,
+                billDiscOnProduct: 0,
                 ConversionFactor: 0,
                 netValue: 0,
                 tax: 0,
@@ -189,7 +191,7 @@ billDiscOnProduct: 0,
                 descAmt: 0,
                 netValue: parseFloat(item.netAmount) || 0,
                 grossAmount: (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0),
-billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
+                billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
                 ConversionFactor: item.ConversionFactor || 0,
                 tax: parseFloat(item.taxAmount) || 0,
                 taxRate: parseFloat(item.taxRate) || 0,
@@ -227,7 +229,7 @@ billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
             columns.push('desc', 'descAmt');
         }
 
-        if (generalSettings?.ActivateTax) {
+        if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
             columns.push('tax');
         }
 
@@ -344,7 +346,13 @@ billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
                     break;
             }
         }
-
+        if (currentField === 'productName' && e.key === 'Enter') {
+            const row = rows.find(r => r.id === rowId);
+            if (!row?.productCode || row.productCode.trim() === '') {
+                e.preventDefault();
+                return; // do nothing — don't create a new row, don't move focus
+            }
+        }
         const editableColumns = getEditableColumns();
         const currentRowIndex = rows.findIndex(row => row.id === rowId);
         const currentFieldIndex = editableColumns.indexOf(currentField);
@@ -439,23 +447,42 @@ billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
     }, [formData.employeeId, formData.GodownId]);
 
     useEffect(() => {
-    if (formData.purchaseDetails && formData.purchaseDetails.length > 0) {
-        let hasChanges = false;
-        const updatedRows = rows.map((row, index) => {
-            const detail = formData.purchaseDetails[index];
-            if (
-                detail &&
-                detail.billDiscOnProduct !== undefined &&
-                parseFloat(detail.billDiscOnProduct) !== parseFloat(row.billDiscOnProduct || 0)
-            ) {
-                hasChanges = true;
-                return calculateRow({ ...row, billDiscOnProduct: parseFloat(detail.billDiscOnProduct) });
-            }
-            return row;
-        });
-        if (hasChanges) setRows(updatedRows);
-    }
-}, [formData.billDiscount]);
+        if (formData.purchaseDetails && formData.purchaseDetails.length > 0) {
+            let hasChanges = false;
+            const updatedRows = rows.map((row, index) => {
+                const detail = formData.purchaseDetails[index];
+                if (
+                    detail &&
+                    detail.billDiscOnProduct !== undefined &&
+                    parseFloat(detail.billDiscOnProduct) !== parseFloat(row.billDiscOnProduct || 0)
+                ) {
+                    hasChanges = true;
+                    return calculateRow({ ...row, billDiscOnProduct: parseFloat(detail.billDiscOnProduct) });
+                }
+                return row;
+            });
+            if (hasChanges) setRows(updatedRows);
+        }
+    }, [formData.billDiscount,taxData]);
+    
+    useEffect(() => {
+        if (formData.purchaseDetails && formData.purchaseDetails.length > 0) {
+            let hasChanges = false;
+            const updatedRows = rows.map((row, index) => {
+                const detail = formData.purchaseDetails[index];
+                if (
+                    detail &&
+                    detail.OtherChargeOnProduct !== undefined &&
+                    parseFloat(detail.OtherChargeOnProduct) !== parseFloat(row.OtherChargeOnProduct || 0)
+                ) {
+                    hasChanges = true;
+                    return calculateRow({ ...row, OtherChargeOnProduct: parseFloat(detail.OtherChargeOnProduct) });
+                }
+                return row;
+            });
+            if (hasChanges) setRows(updatedRows);
+        }
+    }, [formData.OtherCharge,taxData]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -482,7 +509,8 @@ billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
             SlNo: index + 1,
             productCode: row.productCode,
             qty: row.qty || null,
-            freeQty: null,
+            // freeQty: null,
+            freeQty: row.freeQty || null,
             rate: row.salesRate || null,
             unitId: row.unit || null,
             discountPercentage: row.desc || null,
@@ -497,14 +525,15 @@ billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
             netAmount: row.netValue || null,
             amount: row.amount || null,
             productDescription: row.productDetails.productDescription || "",
-           billDiscOnProduct: row.billDiscOnProduct ?? null,
+            billDiscOnProduct: row.billDiscOnProduct ?? null,
             AddCostonProduct: null,
-            OtherChargeOnProduct: null,
+            OtherChargeOnProduct: row.OtherChargeOnProduct ?? null,
             salesManId: formData.employeeId,
             GodownId: formData.GodownId,
             RackId: null,
             branchId: selectedBranchId
         }));
+
 
         const taxableAmt = filledRows.reduce((sum, row) => sum + row.netValue, 0);
         const totalTax = filledRows.reduce((sum, row) => sum + row.taxAmt, 0);
@@ -592,46 +621,48 @@ billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
         }
     };
 
-const calculateRow = (row, updatedField = null) => {
-    let gross, descAmt, netValue, taxAmt = 0, amount, descPercentage;
+    const calculateRow = (row, updatedField = null) => {
+        let gross, descAmt, netValue, taxAmt = 0, amount, descPercentage;
 
-    const qty = parseFloat(row.qty) || 0;
-    const salesRate = parseFloat(row.salesRate) || 0;
-    const taxPercentage = parseFloat(row.taxRate) || 0;
-    const decimalPart = generalSettings?.decimalPart || 2;
+        const qty = parseFloat(row.qty) || 0;
+        const salesRate = parseFloat(row.salesRate) || 0;
+        const taxPercentage = parseFloat(row.taxRate) || 0;
+        const decimalPart = generalSettings?.decimalPart || 2;
 
-    gross = qty * salesRate;
+        gross = qty * salesRate;
 
-    if (updatedField === 'descAmt') {
-        descAmt = parseFloat(row.descAmt) || 0;
-        descPercentage = gross > 0 ? (descAmt / gross) * 100 : 0;
-    } else {
-        descPercentage = parseFloat(row.desc) || 0;
-        descAmt = (gross * descPercentage) / 100;
-    }
+        if (updatedField === 'descAmt') {
+            descAmt = parseFloat(row.descAmt) || 0;
+            descPercentage = gross > 0 ? (descAmt / gross) * 100 : 0;
+        } else {
+            descPercentage = parseFloat(row.desc) || 0;
+            descAmt = (gross * descPercentage) / 100;
+        }
 
-    netValue = gross - descAmt;
+        netValue = gross - descAmt;
 
-    const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
-    const netValueAfterBillDisc = netValue - billDiscOnProduct;
+        const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
+        const otherChargeOnProduct = parseFloat(row.OtherChargeOnProduct) || 0;
+        const netValueAfterAdjustments = netValue - billDiscOnProduct + otherChargeOnProduct;
 
-    if (generalSettings?.ActivateTax) {
-        taxAmt = (netValueAfterBillDisc * taxPercentage) / 100;
-    }
+        if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+            taxAmt = (netValueAfterAdjustments * taxPercentage) / 100;
+        }
 
-    amount = netValueAfterBillDisc + taxAmt;
+        amount = netValueAfterAdjustments + taxAmt;
 
-    return {
-        ...row,
-        grossAmount: parseFloat(gross.toFixed(decimalPart)),
-        desc: parseFloat(descPercentage.toFixed(decimalPart)),
-        netValue: parseFloat(netValue.toFixed(decimalPart)),
-        taxAmt: parseFloat(taxAmt.toFixed(decimalPart)),
-        amount: parseFloat(amount.toFixed(decimalPart)),
-        descAmt: parseFloat(descAmt.toFixed(decimalPart)),
-        billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(decimalPart))
+        return {
+            ...row,
+            grossAmount: parseFloat(gross.toFixed(decimalPart)),
+            desc: parseFloat(descPercentage.toFixed(decimalPart)),
+            netValue: parseFloat(netValue.toFixed(decimalPart)),
+            taxAmt: parseFloat(taxAmt.toFixed(decimalPart)),
+            amount: parseFloat(amount.toFixed(decimalPart)),
+            descAmt: parseFloat(descAmt.toFixed(decimalPart)),
+            billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(decimalPart)),
+            OtherChargeOnProduct: parseFloat(otherChargeOnProduct.toFixed(decimalPart))
+        };
     };
-};
 
     const scrollSuggestionIntoView = (rowId, index) => {
         setTimeout(() => {
@@ -745,10 +776,10 @@ const calculateRow = (row, updatedField = null) => {
                         taxId: defaultTax?.taxId || null,
                         tax: parseFloat(defaultTax?.rate || 0),
                         taxRate: parseFloat(defaultTax?.rate || 0),
-                        taxType:  'Excluded',
+                        taxType: 'Excluded',
                         // Store salesTaxes for this row to use in dropdown
                         purchaseTaxes: product.purchaseTaxes || [],
-                        purchaseRate:0,
+                        purchaseRate: 0,
                         productNameArb: product.productNameArb,
                         maximumSellingPrice: parseFloat(productWithUnit?.maximumSellingPrice || product.maximumSellingPrice || 0),
                         lowestSellingPrice: parseFloat(productWithUnit?.lowestSellingPrice || product.lowestSellingPrice || 0),
@@ -801,7 +832,7 @@ const calculateRow = (row, updatedField = null) => {
 
             // Get the sales price for this specific unit
             const unitSalesPrice = parseFloat(product.salesPrice || 0);
- const purchaseRate = parseFloat(
+            const purchaseRate = parseFloat(
                 productWithUnit?.purchaseRate ||
                 product.purchaseRate ||
                 productWithUnit?.PurchaseRate ||
@@ -871,43 +902,36 @@ const calculateRow = (row, updatedField = null) => {
             });
         }
     };
-useEffect(() => {
-    if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
-        const suggestionContainer = suggestionRef.current;
-        const activeItem = suggestionContainer?.querySelector(
-            `[data-suggestion-index="${selectedSuggestionIndex[activeSuggestionRow]}"]`
-        );
-        
-        if (activeItem && suggestionContainer) {
-            const containerRect = suggestionContainer.getBoundingClientRect();
-            const itemRect = activeItem.getBoundingClientRect();
-            const stickyButtonHeight = 42; // height of "Add New Product" button
-            
-            if (itemRect.bottom > containerRect.bottom - stickyButtonHeight) {
-                suggestionContainer.scrollTop += 
-                    itemRect.bottom - containerRect.bottom + stickyButtonHeight;
-            } else if (itemRect.top < containerRect.top) {
-                suggestionContainer.scrollTop -= 
-                    containerRect.top - itemRect.top;
+    useEffect(() => {
+        if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
+            const suggestionContainer = suggestionRef.current;
+            const activeItem = suggestionContainer?.querySelector(
+                `[data-suggestion-index="${selectedSuggestionIndex[activeSuggestionRow]}"]`
+            );
+
+            if (activeItem && suggestionContainer) {
+                const containerRect = suggestionContainer.getBoundingClientRect();
+                const itemRect = activeItem.getBoundingClientRect();
+                const stickyButtonHeight = 42; // height of "Add New Product" button
+
+                if (itemRect.bottom > containerRect.bottom - stickyButtonHeight) {
+                    suggestionContainer.scrollTop +=
+                        itemRect.bottom - containerRect.bottom + stickyButtonHeight;
+                } else if (itemRect.top < containerRect.top) {
+                    suggestionContainer.scrollTop -=
+                        containerRect.top - itemRect.top;
+                }
             }
         }
-    }
-}, [selectedSuggestionIndex, activeSuggestionRow]);
-    const handleProductUpdate = (productCode, updatedDescription) => {
-        setRows(prevRows =>
-            prevRows.map(row =>
-                row.productDetails.productCode === productCode
-                    ? {
-                        ...row,
-                        productDetails: {
-                            ...row.productDetails,
-                            productDescription: updatedDescription
-                        }
-                    }
-                    : row
-            )
-        );
+    }, [selectedSuggestionIndex, activeSuggestionRow]);
+  const handleProductUpdate = (rowId, updatedDescription) => {
+        setRows(prevRows => prevRows.map(row =>
+            row.id === rowId
+                ? { ...row, productDetails: { ...row.productDetails, productDescription: updatedDescription } }
+                : row
+        ));
     };
+
 
     const handleInputChange = (id, field, value, updatedField = null) => {
         const updatedRows = rows.map(row => {
@@ -1024,11 +1048,13 @@ useEffect(() => {
             ]);
         }
     };
-
+    useEffect(() => {
+        setRows(prevRows => prevRows.map(row => calculateRow(row)));
+    }, [formData.taxType]);
     const calculateTotals = () => {
         const totalDiscount = rows.reduce((sum, row) => sum + (Number(row.descAmt) || 0), 0);
         const totalNetValue = rows.reduce((sum, row) => sum + (Number(row.netValue) || 0), 0);
-        const totalTax = generalSettings?.ActivateTax
+        const totalTax = (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product')
             ? rows.reduce((sum, row) => sum + (Number(row.taxAmt) || 0), 0)
             : 0;
         const grandTotal = totalNetValue;
@@ -1104,7 +1130,7 @@ useEffect(() => {
                                     <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">
                                         {t("salesInvoice.form.gridSection.columns.netValue")}
                                     </th>
-                                    {generalSettings?.ActivateTax && (
+                                    {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                         <>
                                             <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[90px]">
                                                 {t("salesInvoice.form.gridSection.columns.tax%")}
@@ -1143,7 +1169,7 @@ useEffect(() => {
                                     </>
                                 )}
                                 <col className="w-[100px]" />
-                                {generalSettings?.ActivateTax && (
+                                {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                     <>
                                         <col className="w-[90px]" />
                                         <col className="w-[50px]" />
@@ -1280,63 +1306,44 @@ useEffect(() => {
                                                     )}
                                                 </div>
                                             )}
-                                            {shoBottomDeailsOnRow && (
-                                                row.productName && (row.productDetails.barcode || row.productDetails.partNo || row.productDetails.brand) && (
-                                                    <div className='flex justify-between'>
-                                                        <div className="mt-1 text-xs text-tertiary dark:text-tertiary space-y-0.5">
-                                                            {(row.productDetails.barcode || row.productDetails.partNo) && (
+                                             {row.productName && (
+                                                <div className='flex justify-between'>
+                                                    <div className="mt-1 text-xs text-tertiary dark:text-tertiary space-y-0.5">
+                                                        {shoBottomDeailsOnRow && (row.productDetails.barcode || row.productDetails.partNo || row.productDetails.brand) && (
+                                                            (row.productDetails.barcode || row.productDetails.partNo) && (
                                                                 <div className="flex gap-3 flex-wrap">
-                                                                    {row.productDetails.barcode && (
-                                                                        <span>
-                                                                            <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.barcodeLabels")}:</span> {row.productDetails.barcode}
-                                                                        </span>
-                                                                    )}
-                                                                    {(row.productDetails.partNo && saleSettings?.ShowPartNo) && (
-                                                                        <span>
-                                                                            <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.partNo")}:</span> {row.productDetails.partNo}
-                                                                        </span>
-                                                                    )}
-                                                                    {row.productDetails.mrp && (
-                                                                        <span>
-                                                                            <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.mrp")}:</span> {row.productDetails.mrp}
-                                                                        </span>
-                                                                    )}
+                                                                    {row.productDetails.barcode && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.barcodeLabels")}:</span> {row.productDetails.barcode}</span>}
+                                                                    {row.productDetails.partNo && saleSettings.ShowPartNo && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.partNo")}:</span> {row.productDetails.partNo}</span>}
+                                                                    {row.productDetails.mrp && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.mrp")}:</span> {row.productDetails.mrp}</span>}
                                                                     <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.unit")} :{row.productDetails.UnitName}</span>
-                                                                    {(row.productDetails.purchase && saleSettings?.showPurchaserate) && (
+                                                                    {row.productDetails.purchase && saleSettings.showPurchaserate && (
                                                                         <div className="flex gap-3">
-                                                                            <span>
-                                                                                <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.purchase")}:</span> {row.productDetails.purchase}
-                                                                            </span>
-
-                                                                            {row.productDetails.brand && (
-                                                                                <span>
-                                                                                    <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.brand")}:</span> {row.productDetails.brand}
-                                                                                </span>
-                                                                            )}
+                                                                            <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.purchase")}:</span> {row.productDetails.purchase}</span>
+                                                                            {row.productDetails.brand && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.brand")}:</span> {row.productDetails.brand}</span>}
                                                                         </div>
                                                                     )}
                                                                 </div>
-                                                            )}
-
-                                                            {(row.productDetails.productDescription && saleSettings?.showProductDescription) && (
-                                                                <p className="text-muted dark:text-muted leading-tight">
-                                                                    {t("salesInvoice.form.gridSection.prodDetailsLabels.desc")}: {row.productDetails.productDescription}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        {(saleSettings?.showProductDescription) && (
-                                                            <div className='cursor-pointer'>
-                                                                <EllipsisVertical
-                                                                    onClick={() => {
-                                                                        setSelectedProductCode(row.productDetails.productCode);
-                                                                        setEditProductModalOpen(true);
-                                                                    }}
-                                                                    className="text-secondary dark:text-secondary"
-                                                                />
-                                                            </div>
+                                                            )
+                                                        )}
+                                                        {row.productDetails.productDescription && saleSettings.showProductDescription && (
+                                                            <p className="text-muted dark:text-muted leading-tight">
+                                                                {t("salesInvoice.form.gridSection.prodDetailsLabels.desc")}: {row.productDetails.productDescription}
+                                                            </p>
                                                         )}
                                                     </div>
-                                                )
+                                                    {saleSettings.showProductDescription && (
+                                                        <div className='cursor-pointer'>
+                                                            <EllipsisVertical
+                                                                onClick={() => {
+                                                                    setSelectedProductCode(row.productDetails.productCode);
+                                                                    setSelectedRowIdForEdit(row.id);
+                                                                    setEditProductModalOpen(true);
+                                                                }}
+                                                                className="text-secondary dark:text-secondary"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
                                         </td>
                                         <td className="p-0.2 border border-themed dark:border-themed">
@@ -1386,12 +1393,12 @@ useEffect(() => {
                                                     const selectedUnitId = parseInt(e.target.value);
 
                                                     const productWithUnit = allProducts.find(
-                                                        (p) => p.productCode === row.productCode && p.unitId === selectedUnitId
+                                                        (p) => p.productCode === row.productCode && (p.unitId || p.unitid) === selectedUnitId
                                                     );
 
                                                     if (productWithUnit) {
                                                         const selectedUnit = row.availableUnits?.find(
-                                                            (u) => u.unitId === selectedUnitId
+                                                            (u) => (u.unitId || u.unitid) === selectedUnitId
                                                         );
 
                                                         let updatedRow = {
@@ -1402,7 +1409,7 @@ useEffect(() => {
                                                             productDetails: {
                                                                 ...row.productDetails,
                                                                 barcode: productWithUnit.barcode || row.productDetails.barcode,
-                                                                UnitName: selectedUnit?.unitName || productWithUnit.unitName || row.productDetails.UnitName,
+                                                                UnitName: selectedUnit?.unitName || selectedUnit?.unitname || selectedUnit?.UnitName || productWithUnit.unitName || row.productDetails.UnitName,
                                                             },
                                                         };
 
@@ -1417,8 +1424,8 @@ useEffect(() => {
                                                 className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded"
                                             >
                                                 {row.availableUnits?.map((unit) => (
-                                                    <option key={unit.unitId} value={unit.unitId}>
-                                                        {unit.unitName || unit.unitname}
+                                                    <option key={unit.unitId || unit.unitid} value={unit.unitId || unit.unitid}>
+                                                        {unit.unitName || unit.unitname || unit.UnitName}
                                                     </option>
                                                 ))}
                                             </select>
@@ -1428,7 +1435,7 @@ useEffect(() => {
                                             <input
                                                 ref={el => inputRefs.current[`${row.id}-salesRate`] = el}
                                                 type="text"
-                                                  disabled={!row.productCode || row.productCode.trim() === ''}
+                                                disabled={!row.productCode || row.productCode.trim() === ''}
                                                 onFocus={(e) => setTimeout(() => e.target.select(), 0)}
                                                 value={row.salesRate}
                                                 onChange={(e) => {
@@ -1459,7 +1466,7 @@ useEffect(() => {
                                                         ref={el => inputRefs.current[`${row.id}-desc`] = el}
                                                         type="number"
                                                         min={0}
-                                                          disabled={!row.productCode || row.productCode.trim() === ''}
+                                                        disabled={!row.productCode || row.productCode.trim() === ''}
                                                         max={99}
                                                         value={row.desc}
                                                         onFocus={(e) => e.target.select()}
@@ -1482,7 +1489,7 @@ useEffect(() => {
                                                     <input
                                                         ref={el => inputRefs.current[`${row.id}-descAmt`] = el}
                                                         type="number"
-                                                          disabled={!row.productCode || row.productCode.trim() === ''}
+                                                        disabled={!row.productCode || row.productCode.trim() === ''}
                                                         value={row.descAmt}
                                                         onFocus={(e) => e.target.select()}
                                                         onChange={(e) => {
@@ -1511,7 +1518,7 @@ useEffect(() => {
                                             </div>
                                         </td>
 
-                                        {generalSettings?.ActivateTax && (
+                                        {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                             <>
                                                 <td className="p-0.2 border border-themed dark:border-themed">
                                                     <select
@@ -1602,13 +1609,19 @@ useEffect(() => {
                     {t("salesInvoice.form.gridSection.buttons.addRow")}
                 </button>
             </div>
-            <EditProuctDetailsModal
+              <EditProuctDetailsModal
                 open={editProductModalOpen}
-                handleClose={() => setEditProductModalOpen(false)}
-                productCode={selectedProductCode}
-                onSuccess={(updatedDescription) => {
-                    handleProductUpdate(selectedProductCode, updatedDescription);
+                handleClose={() => {
+                    setEditProductModalOpen(false);
+                    setSelectedRowIdForEdit(null);
+                    if (focusedRowId) focusInput(focusedRowId, 'productName');
                 }}
+                productCode={selectedProductCode}
+                initialDescription={
+                    rows.find(r => r.id === selectedRowIdForEdit)
+                        ?.productDetails?.productDescription || ''
+                }
+                onSuccess={(updatedDescription) => handleProductUpdate(selectedRowIdForEdit, updatedDescription)}
             />
             <PurchaseOrderFooterSection
                 totals={totals}
@@ -1625,7 +1638,7 @@ useEffect(() => {
                 modalMode={true}
                 onSuccess={() => {
                     setProductModalOpen(false);
-                  dispatch(refreshProductsByType('purchase'))
+                    dispatch(refreshProductsByType('purchase'))
                 }}
             />
         </div>

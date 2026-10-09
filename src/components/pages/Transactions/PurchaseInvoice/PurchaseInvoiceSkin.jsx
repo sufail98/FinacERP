@@ -2,7 +2,7 @@ import BreadCrumb from '@/components/common/BreadCrumb';
 import { Archive, ArchiveRestore, Eraser, Loader2, Pencil, ReceiptText, SaveAll, SquarePen, Table } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import FormSectionMain from './FormSectionMain';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
@@ -12,6 +12,24 @@ import { useNavigate, useParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
 import useFormValidation from '@/lib/hooks/useFormValidation';
 import purchaseInvoicePrintOne from '@/utils/prints/purchaseInvoicePrints/purchaseInvoicePrintOne';
+import purchaseInvoicePrintTwo from '@/utils/prints/purchaseInvoicePrints/purchaseInvoicePrintTwo';
+import purchaseInvoicePrintThree from '@/utils/prints/purchaseInvoicePrints/purchaseInvoicePrintThree';
+
+const INVOICE_PRINT_HANDLERS = {
+    'Type 1': {
+        print: (d, branch, time, cur) => purchaseInvoicePrintOne(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => purchaseInvoicePrintOne(d, branch, time, null, cur),
+    },
+    'Type 2': {
+        print: (d, branch, time, cur) => purchaseInvoicePrintTwo(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => purchaseInvoicePrintTwo(d, branch, time, null, cur),
+    },
+    'Type 3': {
+        print: (d, branch, time, cur) => purchaseInvoicePrintThree(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => purchaseInvoicePrintThree(d, branch, time, null, cur),
+    },
+};
+const DEFAULT_INVOICE_PRINT_TYPE = 'Type 1';
 import { parseDateFromAPI, parseLocalDate } from '../SalesQuotation/salesQuotationDateFormat';
 import { showToast } from '@/utils/toast';
 // Add these to the existing imports
@@ -19,10 +37,16 @@ import PrintDropdown from '@/components/common/PrintDropdown';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatDateWithTime } from '@/lib/dateFormat';
 import { refreshProductsByType } from '@/redux/slice/productSlice';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
 
 const PurchaseInvoiceSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Purchase Invoice");
+
     const { purchaseInvoicemasterId } = useParams();
     const editMode = Boolean(purchaseInvoicemasterId);
+    const [isEditMode, setIsEditMode] = useState(Boolean(purchaseInvoicemasterId));
+    const [canEdit, setCanEdit] = useState(!Boolean(purchaseInvoicemasterId));
     const [fetchLoading, setFetchLoading] = useState(false)
     const navigate = useNavigate()
     const [existingInvoiceNo, setExistingInvoiceNo] = useState('')
@@ -36,66 +60,42 @@ const PurchaseInvoiceSkin = () => {
     const [invoiceId, setInvoiceId] = useState('');
     const [alert, setAlert] = useState(null);
     const { userId, selectedBranchId, currentFinancialYear, currentCurrencyConversion, selectedBranchDetails, currentCurrency } = useAuth();
+    const [isPrinting, setIsPrinting] = useState(false);
     const dispatch = useDispatch();
-
+    // add near other useState calls
+    const [documents, setDocuments] = useState([]);            // File[] — newly attached
+    const [existingDocuments, setExistingDocuments] = useState([]); // string[] — URLs from server
+    const [removedDocuments, setRemovedDocuments] = useState([]);   // string[] — URLs user removed
     const [time, setTime] = useState("");
-    const { generalSettings, saleSettings, financeSettings, purchaseSettings } = useSelector((state) => state.settings);
+    const { generalSettings, saleSettings, financeSettings, purchaseSettings, printSettings } = useSelector((state) => state.settings);
+    
+    const invoicePrintSettings = printSettings?.["Purchase Invoice"];
+    const invoicePrintTypes = Object.keys(invoicePrintSettings?.types || {});
+    const invoicePrintConfig = invoicePrintSettings?.default || Object.values(invoicePrintSettings?.types || {})[0];
+    const { purchaseProducts: allProducts } = useSelector((state) => state.products);
+    const [updateCustomerId, setUpdateCustomerId] = useState(null);
 
 
-    const [resetTableKey, setResetTableKey] = useState(0);
-    const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
-    const [batches, setBatches] = useState([]);
-
-    const [banks, setBanks] = useState([]);
-    const [cash, setCash] = useState([]);
-    const [billingAddress, setBlillingAddress] = useState(null);
-    const [currentledgerBalance, setCurrentLedgerBalance] = useState('')
-    const [otherChargeLedgers, setOtherChargLedgers] = useState([])
-    const [taxData, setTaxData] = useState([]);
-    const [purchaseAccounts, setPurchaseAccounts] = useState([])
-    const [currency, setCurrencies] = useState([]);
-
-    // ===== HOLD INVOICE STATE =====
-    const [heldInvoices, setHeldInvoices] = useState([]);
-    const [showHeldInvoices, setShowHeldInvoices] = useState(false);
-    const [restoredHeldInvoiceId, setRestoredHeldInvoiceId] = useState(null);
-
-    useEffect(() => {
-        const updateTime = () => {
-            const now = new Date();
-            const formatted = now.toLocaleTimeString("en-US", {
-                hour12: true,
-                hour: "2-digit",
-                minute: "2-digit",
-            });
-            setTime(formatted);
-        };
-
-        updateTime();
-        const interval = setInterval(updateTime, 1000);
-
-        return () => clearInterval(interval);
-    }, []);
-
-    const [formData, setFormData] = useState({
+    const getEmptyFormData = useCallback(() => ({
         voucherType: "Purchase Invoice",
         yearId: currentFinancialYear?.yearId,
         date: new Date(),
         invoiceDate: new Date(),
-        ledgerId: financeSettings.defaultPurchaseAccount || '',
+        ledgerId: financeSettings?.defaultPurchaseAccount || '',
         currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-        taxType: 'Applicable to product',
-        GodownId: 1,
+        taxType: generalSettings.taxType,
+        GodownId: null,
         costCentreId: 1,
-        BatchId: 1,
+        BatchId: null,
         partyName: '',
         partyAddress: '',
         partyPhone: '',
         partyVatNo: '',
         RefNo: "",
         partyRefDate: "",
+         supplierData: {},  
         printAfterSave: purchaseSettings?.printAfterSave !== undefined ? purchaseSettings.printAfterSave : true,
-        printType: 'a4',
+        printType: invoicePrintSettings?.default || (invoicePrintTypes.length > 0 ? invoicePrintTypes[0] : 'Type 1'),
         purchaseAccount: "",
         purchaseAccountName: "",
         orderMasterId: "",
@@ -116,7 +116,7 @@ const PurchaseInvoiceSkin = () => {
         billDiscount: "",
         roundoff: "",
         totalAmount: "",
-        paymentMode: saleSettings?.DefaultPaymentMode,
+        paymentMode: saleSettings?.DefaultPaymentMode || 'cash',
         CashLedgerId: 1,
         CashRefNo: "",
         CashAmount: "",
@@ -155,14 +155,76 @@ const PurchaseInvoiceSkin = () => {
                 productDescription: "",
                 billDiscOnProduct: null,
                 AddCostonProduct: null,
-                otherchargeonproduct: null,
+                otherchargeOnProduct: null,
                 salesManId: null,
                 GodownId: null,
+                category: null,
                 RackId: null,
                 branchId: selectedBranchId
             }
         ]
-    });
+    }), [currentCurrencyConversion?.currencyConversionId, currentCurrencyConversion?.date, currentCurrencyConversion?.rate, currentFinancialYear?.yearId, financeSettings?.defaultPurchaseAccount, generalSettings?.AccountPosting, generalSettings?.taxLedgerId, purchaseSettings?.printAfterSave, saleSettings?.DefaultPaymentMode, selectedBranchId, userId]);
+
+    const [resetTableKey, setResetTableKey] = useState(0);
+    const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
+    const [batches, setBatches] = useState([]);
+
+    const [banks, setBanks] = useState([]);
+    const [cash, setCash] = useState([]);
+    const [billingAddress, setBlillingAddress] = useState(null);
+    const [currentledgerBalance, setCurrentLedgerBalance] = useState('')
+    const [otherChargeLedgers, setOtherChargLedgers] = useState([])
+    const [taxData, setTaxData] = useState([]);
+    const [purchaseAccounts, setPurchaseAccounts] = useState([])
+    const [currency, setCurrencies] = useState([]);
+
+    // ===== HOLD INVOICE STATE =====
+    const [heldInvoices, setHeldInvoices] = useState([]);
+    const [showHeldInvoices, setShowHeldInvoices] = useState(false);
+    const [restoredHeldInvoiceId, setRestoredHeldInvoiceId] = useState(null);
+
+    useEffect(() => {
+        const updateTime = () => {
+            const now = new Date();
+            const formatted = now.toLocaleTimeString("en-US", {
+                hour12: true,
+                hour: "2-digit",
+                minute: "2-digit",
+            });
+            setTime(formatted);
+        };
+
+        updateTime();
+        const interval = setInterval(updateTime, 1000);
+
+        return () => clearInterval(interval);
+    }, []);
+
+    const [formData, setFormData] = useState(getEmptyFormData);
+
+    const [loadingSupplier, setLoadingSupplier] = useState(false);
+
+const fetchSupplierData = async (ledgerId) => {
+    if (!ledgerId) return;
+    setLoadingSupplier(true);
+    try {
+        const response = await axiosInstance.get(`get-account-ledger-byId/${ledgerId}`);
+        const data = response.data?.data;
+        if (data) {
+            setFormData((prev) => ({ ...prev, supplierData: data }));
+        }
+    } catch (error) {
+        console.error("Error fetching supplier data:", error);
+    } finally {
+        setLoadingSupplier(false);
+    }
+};
+
+// Refetch whenever the supplier changes (new, edit, against Receipt/Order)
+// resetTableKey is included so Clear refetches even if the ledgerId is unchanged
+useEffect(() => {
+    fetchSupplierData(formData.ledgerId);
+}, [formData.ledgerId, resetTableKey]);
 
     useEffect(() => {
         setFormData(prev => ({
@@ -174,49 +236,60 @@ const PurchaseInvoiceSkin = () => {
     }, [financeSettings, batches, saleSettings, purchaseSettings]);
 
     // ===== HOLD INVOICE LOGIC =====
-    useEffect(() => {
-        const savedHeldInvoices = localStorage.getItem('heldPurchaseInvoices');
-        if (savedHeldInvoices) {
-            const allHeldInvoices = JSON.parse(savedHeldInvoices);
-            const branchHeldInvoices = allHeldInvoices.filter(invoice => invoice.branchId === selectedBranchId);
-            setHeldInvoices(branchHeldInvoices);
-        }
-    }, [selectedBranchId]);
+useEffect(() => {
+    const savedHeldInvoices = localStorage.getItem('heldPurchaseInvoices');
+    if (savedHeldInvoices) {
+        const allHeldInvoices = JSON.parse(savedHeldInvoices);
+        const branchHeldInvoices = allHeldInvoices.filter(invoice => invoice.branchId === selectedBranchId);
+        const deduped = Array.from(
+            new Map(branchHeldInvoices.map(inv => [inv.id, inv])).values()
+        );
+        setHeldInvoices(deduped);
+    }
+}, [selectedBranchId]);
+useEffect(() => {
+    const savedHeldInvoices = localStorage.getItem('heldPurchaseInvoices');
+    const allHeldInvoices = savedHeldInvoices ? JSON.parse(savedHeldInvoices) : [];
+    const otherBranchInvoices = allHeldInvoices.filter(invoice => invoice.branchId !== selectedBranchId);
 
-    useEffect(() => {
-        const savedHeldInvoices = localStorage.getItem('heldPurchaseInvoices');
-        const allHeldInvoices = savedHeldInvoices ? JSON.parse(savedHeldInvoices) : [];
-        const otherBranchInvoices = allHeldInvoices.filter(invoice => invoice.branchId !== selectedBranchId);
-        const updatedAllInvoices = [...otherBranchInvoices, ...heldInvoices];
-        if (updatedAllInvoices.length > 0) {
-            localStorage.setItem('heldPurchaseInvoices', JSON.stringify(updatedAllInvoices));
-        } else {
-            localStorage.removeItem('heldPurchaseInvoices');
-        }
-    }, [heldInvoices, selectedBranchId]);
+    const dedupedHeldInvoices = Array.from(
+        new Map(heldInvoices.map(inv => [inv.id, inv])).values()
+    );
 
-    const holdCurrentInvoice = useCallback(() => {
-        const hasData = formData.purchaseDetails.some(detail => detail.productCode && detail.qty > 0);
-        if (!hasData) {
-            showToast.warning("No data to hold. Please add products with quantity first.");
-            return;
-        }
-        const heldInvoice = {
-            id: Date.now(),
-            timestamp: new Date().toISOString(),
-            invoiceId: invoiceId,
-            vendorName: formData.partyName || 'Unknown Vendor',
-            vendorAddress: formData.partyAddress || '',
-            totalAmount: formData.totalAmount || 0,
-            itemCount: formData.purchaseDetails.filter(d => d.productCode).length,
-            branchId: selectedBranchId,
-            formData: { ...formData }
-        };
-        setHeldInvoices(prev => [...prev, heldInvoice]);
-        showToast.success(`Invoice held successfully. Total held invoices: ${heldInvoices.length + 1}`);
-        clearForm();
-    }, [formData, invoiceId, heldInvoices.length, selectedBranchId]);
+    const updatedAllInvoices = [...otherBranchInvoices, ...dedupedHeldInvoices];
+    if (updatedAllInvoices.length > 0) {
+        localStorage.setItem('heldPurchaseInvoices', JSON.stringify(updatedAllInvoices));
+    } else {
+        localStorage.removeItem('heldPurchaseInvoices');
+    }
+}, [heldInvoices, selectedBranchId]);
 
+   const holdCurrentInvoice = useCallback(() => {
+    const hasData = formData.purchaseDetails.some(detail => detail.productCode && detail.qty > 0);
+    if (!hasData) {
+        showToast.warning("No data to hold. Please add products with quantity first.");
+        return;
+    }
+    const heldInvoice = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        invoiceId: invoiceId,
+        vendorName: formData.partyName || 'Unknown Vendor',
+        vendorAddress: formData.partyAddress || '',
+        totalAmount: formData.totalAmount || 0,
+        itemCount: formData.purchaseDetails.filter(d => d.productCode).length,
+        branchId: selectedBranchId,
+        formData: { ...formData }
+    };
+    setHeldInvoices(prev => {
+        if (prev.some(inv => inv.id === heldInvoice.id)) return prev;
+        return [...prev, heldInvoice];
+    });
+    showToast.success(`Invoice held successfully. Total held invoices: ${heldInvoices.length + 1}`);
+    clearForm();
+}, [formData, invoiceId, heldInvoices.length, selectedBranchId]);
+
+    const ctrlSPressed = useRef(false);
     useEffect(() => {
         if (!editMode) {
             const handleKeyDown = (e) => {
@@ -248,7 +321,11 @@ const PurchaseInvoiceSkin = () => {
         } else {
             setHeldInvoices(prev => prev.filter(inv => inv.id !== heldInvoice.id));
         }
-        setFormData(heldInvoice.formData);
+        setFormData({
+            ...heldInvoice.formData,
+            date: new Date(),
+            billTime: time,
+        });
         setInvoiceId(heldInvoice.invoiceId);
         setResetTableKey(prev => prev + 1);
         setShowHeldInvoices(false);
@@ -328,37 +405,7 @@ const PurchaseInvoiceSkin = () => {
             </div>
         );
     };
-    const fetchCustomerData = async (ledgerId) => {
-        try {
-            const response = await axiosInstance.get(`get-account-ledger-byId/${ledgerId}`);
 
-            if (response.data) {
-                const data = response.data.data;
-
-
-
-                setBlillingAddress({
-                    name: data?.ledgerName || '',
-                    email: data?.email || '',
-                    phoneNo: data?.phoneNo || '',
-                    vatNo: data?.tinNumber || '',
-                    address: data?.address || ''
-                });
-
-                setFormData((prev) => ({
-                    ...prev,
-                    partyName: data?.ledgerName || '',
-                    partyAddress: data?.address || '',
-                    partyPhone: data?.phoneNo || '',
-                    partyVatNo: data?.tinNumber || '',
-                }));
-            }
-        } catch (error) {
-            console.error("Error fetching customer data:", error);
-        } finally {
-            //   setLoadingCustomer(false);
-        }
-    };
     const [baseDataloading, setBaseDataloading] = useState(false)
 
     useEffect(() => {
@@ -369,7 +416,7 @@ const PurchaseInvoiceSkin = () => {
                     voucherType: "Purchase Invoice",
                     branchId: selectedBranchId,
                     yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Supplier"],
+                    ledgerTypes: ["Supplier", "Customer&Supplier"],
                     ledgerId: financeSettings?.defaultPurchaseAccount,
                     currencyId: currentCurrency.currencyId
                 })
@@ -421,6 +468,7 @@ const PurchaseInvoiceSkin = () => {
                     );
 
                     const defaultLedger = matchingLedger || (data?.customersupplierLedgers?.length > 0 ? data.customersupplierLedgers[0] : null);
+                    setUpdateCustomerId(defaultLedger?.ledgerId || null);
 
                     if (defaultLedger) {
                         setBlillingAddress({
@@ -434,7 +482,7 @@ const PurchaseInvoiceSkin = () => {
                             ...prev,
                             partyName: defaultLedger.ledgerName || '',
                             partyAddress: defaultLedger.address || '',
-                            partyMobile: defaultLedger.phoneNo || '',
+                            partyPhone: defaultLedger.phoneNo || '',
                             partyVatNo: defaultLedger.tinNumber || '',
                         }));
                     } else {
@@ -443,7 +491,7 @@ const PurchaseInvoiceSkin = () => {
                             ...prev,
                             partyName: '',
                             partyAddress: '',
-                            partyMobile: '',
+                            partyPhone: '',
                             partyVatNo: '',
                         }));
                     }
@@ -494,112 +542,44 @@ const PurchaseInvoiceSkin = () => {
             });
             if (!result.isConfirmed) return;
         }
-        setFormData({
-            voucherType: "Purchase Invoice",
-            yearId: currentFinancialYear?.yearId,
-            date: new Date(),
-            invoiceDate: new Date(),
-            ledgerId: financeSettings.defaultPurchaseAccount || '',
-            currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-            taxType: 'Applicable to product',
-            costCentreId: '',
-            BatchId: 1,
-            printAfterSave: purchaseSettings?.printAfterSave !== undefined ? purchaseSettings.printAfterSave : true,
-            printType: 'a4',
-            customerName: '',
-            CustomerAddress: '',
-            CustomerPhone: '',
-            customerVATNo: '',
-            RefNo: "",
-            partyRefDate: "",
-            creditPeriod: "",
-            purchaseAccount: "",
-            purchaseAccountName: "",
-            exchangeRate: currentCurrencyConversion?.rate,
-            exchangeDate: currentCurrencyConversion?.date,
-            orderMasterId: "",
-            receiptMasterId: "",
-            AgainstNo: "",
-            transportCompany: "",
-            narration: "",
-            taxableAmt: "",
-            subTotal: "",
-            totalTax: "",
-            additionalCost: "",
-            otherChargeLedgerId: "",
-            othercharge: "",
-            billDiscount: "",
-            roundOff: "",
-            totalAmount: "",
-            paymentMode: "cash",
-            CashLedgerId: "",
-            CashRefNo: "",
-            CashAmount: 0,
-            BankLedgerId: null,
-            BankRefNo: "",
-            BankAmount: 0,
-            BillBalanceAmount: 0,
-            postedStatus: generalSettings?.AccountPosting ? "No" : "Yes",
-            postedBy: generalSettings?.AccountPosting ? null : userId,
-            postedDate: generalSettings?.AccountPosting ? null : new Date(),
-            branchId: selectedBranchId,
-            CreatedUser: userId,
-            vatLedgerId: generalSettings?.taxLedgerId,
-            purchaseDetails: [
-                {
-                    receiptDetails1Id: "",
-                    orderDetails1Id: "",
-                    SalesRate: "",
-                    SlNo: "",
-                    productCode: "",
-                    productName: '',
-                    productNameArb: '',
-                    qty: null,
-                    freeQty: null,
-                    rate: null,
-                    unitId: null,
-                    discountPercentage: null,
-                    taxId: null,
-                    taxType: "",
-                    ConversionFactor: null,
-                    barcode: "",
-                    taxAmount: null,
-                    grossAmount: null,
-                    netAmount: null,
-                    amount: null,
-                    productDescription: "",
-                    billDiscOnProduct: null,
-                    AddCostonProduct: null,
-                    otherchargeonproduct: null,
-                    salesManId: null,
-                    GodownId: null,
-                    RackId: null,
-                    branchId: selectedBranchId
-                }
-            ]
-        });
-        fetchCustomerData(financeSettings.defaultPurchaseAccount);
+
+        setFormData(getEmptyFormData());
+        setBlillingAddress(null);
+        setCurrentLedgerBalance('');
+        setDocuments([]);
+        setExistingDocuments([]);
+        setRemovedDocuments([]);
+        setErrors({});
         setResetTableKey(prev => prev + 1);
+
+        // ✅ Switch page into full add mode, same as Sales Invoice
+        if (isEditMode) {
+            setCanEdit(true);
+            setIsEditMode(false);
+            setExistingInvoiceNo('');
+        }
+        navigate('/transaction/purchase-invoice')
+        genarateSalesInvoiceId(); // get a fresh voucher number like sales does
     };
 
-    useEffect(() => {
-        if (editMode) return;
+    // useEffect(() => {
+    //     if (editMode) return;
 
-        setFormData(prev => {
-            const prevDate = new Date(prev.date);
-            const today = new Date();
+    //     setFormData(prev => {
+    //         const prevDate = new Date(prev.date);
+    //         const today = new Date();
 
-            const isSameDate =
-                prevDate.getFullYear() === today.getFullYear() &&
-                prevDate.getMonth() === today.getMonth() &&
-                prevDate.getDate() === today.getDate();
+    //         const isSameDate =
+    //             prevDate.getFullYear() === today.getFullYear() &&
+    //             prevDate.getMonth() === today.getMonth() &&
+    //             prevDate.getDate() === today.getDate();
 
-            if (!isSameDate) {
-                return { ...prev, date: today };
-            }
-            return prev;
-        });
-    }, [time]);
+    //         if (!isSameDate) {
+    //             return { ...prev, date: today };
+    //         }
+    //         return prev;
+    //     });
+    // }, [time]);
 
     useEffect(() => {
         if (editMode) {
@@ -619,7 +599,7 @@ const PurchaseInvoiceSkin = () => {
                     receiptmasterId: masterId
                 });
                 data = response.data.data;
-                againstNoValue = 'Reciept';
+                againstNoValue = data?.voucherNo || data?.receieptNo || 'Reciept';
             }
             if (mode === 'Order') {
                 const response = await axiosInstance.post(`purchase-invoice-against-order-details`, {
@@ -627,7 +607,7 @@ const PurchaseInvoiceSkin = () => {
                     orderMasterId: masterId
                 });
                 data = response.data.data;
-                againstNoValue = 'Order';
+                againstNoValue = data?.voucherNo || data?.orderNo || 'Order';
             }
 
             // ✅ Fix: handle different voucherNo field names per mode
@@ -656,10 +636,10 @@ const PurchaseInvoiceSkin = () => {
                     const taxAmountRaw = parseFloat(item.taxAmount ?? item.taxamount ?? 0);
                     const amount = item.amount;
                     const conversionFactor = item.ConversionFactor ?? item.conversionfactor ?? null;
-                    const billDiscOnProduct = item.billDiscOnProduct ?? item.billdisconproduct ?? null;
-                    const addCostonProduct = item.AddCostonProduct ?? item.addcostonproduct ?? null;
-                    const otherchargeonproduct = item.otherchargeonproduct ?? null;
-                    const productDescription = item.productDescription ?? item.productdescription ?? '';
+                    const billDiscOnProduct = item.billDiscOnProduct || item.billdisconproduct || null;
+                    const addCostonProduct = item.AddCostonProduct || item.addcostonproduct || null;
+                    const otherchargeOnProduct = item.otherchargeOnProduct || item.otherchargeonproduct || null;
+                    const productDescription = item.productDescription || item.productdescription || '';
 
                     // Infer taxId from taxamount if not present in response
                     const rawTaxId = item.taxId ?? item.taxid ?? null;
@@ -706,7 +686,7 @@ const PurchaseInvoiceSkin = () => {
                                 mrp: productData.mrp || '',
                                 purchase: rate || '',
                                 productDescription,
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${productCode}:`, err);
@@ -720,15 +700,17 @@ const PurchaseInvoiceSkin = () => {
                         SlNo: item.SlNo ?? item.slno ?? '',
                         productCode,
                         productName,
+                        productNameArb: item.productNameArb,
                         qty: parseFloat(qty) || 0,
                         freeQty: freeQty ? parseFloat(freeQty) : null,
                         rate: parseFloat(rate) || 0,
                         unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(discountPercentage) || 0,
                         taxId: resolvedTaxId,
                         taxRate,
                         tax: taxRate,
-                        taxType: item.taxType || item.taxtype || 'Excluded',
+                        taxType: 'Excluded',
                         ConversionFactor: conversionFactor,
                         barcode,
                         taxAmount: taxAmountRaw,
@@ -739,12 +721,13 @@ const PurchaseInvoiceSkin = () => {
                         productDescription,
                         billDiscOnProduct,
                         AddCostonProduct: addCostonProduct,
-                        otherchargeonproduct,
+                        otherchargeOnProduct,
                         salesManId: item.salesManId ?? item.salesmanid ?? null,
                         GodownId: item.GodownId ?? item.godownid ?? null,
                         RackId: item.RackId ?? item.rackid ?? null,
                         branchId: item.branchId ?? item.branchid ?? selectedBranchId,
                         availableUnits,
+                        category: item?.category ?? null,
                         productDetails
                     };
                 })
@@ -765,7 +748,7 @@ const PurchaseInvoiceSkin = () => {
                 GodownId: data.GodownId ?? data.godownid ?? '',
                 partyName: data.partyName || '',
                 partyAddress: data.partyAddress || '',
-                partyPhone: data.partyMobile || data.partyPhone || '',
+                partyPhone: data.partyPhone || data.partyPhone || '',
                 partyVatNo: data.partyVatNo || '',
                 RefNo: data.partyRefNo || data.RefNo || '',
                 partyRefDate: data.partyRefDate ? parseLocalDate(data.partyRefDate) : '',
@@ -782,10 +765,10 @@ const PurchaseInvoiceSkin = () => {
                 subTotal: data.subTotal,
                 totalTax: data.totalTax,
                 additionalCost: data.additionalCost,
-                otherChargeLedgerId: data.otherChargeLedgerId || '',
+                otherChargeLedgerId: data.otherChargeLedgerId || data.OtherChargeLedgerId || '',
                 othercharge: data.othercharge || data.OtherCharge || '',  // ✅ order uses OtherCharge
                 billDiscount: data.billDiscount,
-                roundOff: data.roundoff ?? data.roundOff ?? '',
+                roundoff: data.roundoff ?? data.roundOff ?? '',
                 totalAmount: data.totalAmount,
                 paymentMode: data.paymentMode || prev.paymentMode,
                 CashLedgerId: data.CashLedgerId || prev.CashLedgerId,
@@ -800,14 +783,16 @@ const PurchaseInvoiceSkin = () => {
                 postedDate: data.postedDate ? parseLocalDate(data.postedDate) : '',
                 branchId: data.branchId || prev.branchId,
                 CreatedUser: data.CreatedUser || prev.CreatedUser,
-                vatLedgerId: data.vatLedgerId || prev.vatLedgerId,
+                vatLedgerId: data.vatLedgerId || prev.vatLedgerId||generalSettings?.taxLedgerId,
                 purchaseDetails: salesDetailsWithProducts,
+                RetentionLedgerId: data.RetentionLedgerId || prev.RetentionLedgerId,
+                RetentionAmount: data.RetentionAmount || prev.RetentionAmount
             }));
 
             setBlillingAddress({
                 name: data.partyName || '',
                 email: data.email || '',
-                phoneNo: data.partyMobile || data.partyPhone || '',
+                phoneNo: data.partyPhone || data.partyPhone || '',
                 vatNo: data.partyVatNo || '',
                 address: data.partyAddress || ''
             });
@@ -870,13 +855,16 @@ const PurchaseInvoiceSkin = () => {
                                 mrp: productData.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
                         }
                     }
-
+                    const localProduct = allProducts?.find(
+                        p => p.productCode === item.productCode
+                    );
+                    const productNameArb = item.productNameArb || localProduct?.productNameArb || '';
                     return {
                         receiptDetails1Id: item.receiptDetails1Id,
                         orderDetails1Id: item.orderDetails1Id,
@@ -884,10 +872,12 @@ const PurchaseInvoiceSkin = () => {
                         SlNo: item.SlNo,
                         productCode: item.productCode,
                         productName: productName,
+                        productNameArb: productNameArb,
                         qty: parseFloat(item.qty) || 0,
                         freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
                         rate: parseFloat(item.rate) || 0,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -901,10 +891,11 @@ const PurchaseInvoiceSkin = () => {
                         productDescription: item.productDescription,
                         billDiscOnProduct: item.billDiscOnProduct,
                         AddCostonProduct: item.AddCostonProduct,
-                        otherchargeonproduct: item.otherchargeonproduct,
+                        otherchargeOnProduct: item.otherchargeOnProduct,
                         salesManId: item.salesManId,
                         GodownId: item.GodownId,
                         RackId: item.RackId,
+                        category: item.category,
                         branchId: item.branchId,
                         CreatedDate: item.CreatedDate,
                         CreatedUser: item.CreatedUser,
@@ -952,7 +943,7 @@ const PurchaseInvoiceSkin = () => {
                 otherChargeLedgerId: data.otherChargeLedgerId,
                 othercharge: data.othercharge,
                 billDiscount: data.billDiscount,
-                roundOff: data.roundOff,
+                roundoff: data.roundoff,
                 totalAmount: data.totalAmount,
                 paymentMode: data.paymentMode,
                 CashLedgerId: data.CashLedgerId,
@@ -967,7 +958,7 @@ const PurchaseInvoiceSkin = () => {
                 postedDate: data.postedDate ? parseLocalDate(data.postedDate) : "",
                 branchId: data.branchId,
                 CreatedUser: data.CreatedUser,
-                vatLedgerId: data.vatLedgerId,
+                vatLedgerId: data.vatLedgerId||generalSettings?.taxLedgerId,
                 purchaseDetails: salesDetailsWithProducts,
                 RetentionAmount: data.RetentionAmount,
                 RetentionPercentage: data.RetentionPercentage,
@@ -984,7 +975,8 @@ const PurchaseInvoiceSkin = () => {
                 vatNo: data?.partyVatNo || data?.customerVATNo || '',
                 address: data?.partyAddress || data?.CustomerAddress || ''
             });
-
+            setExistingDocuments(data.Documents || []);
+            setRemovedDocuments([]);
 
             await fetchGodown(data.GodownId);
 
@@ -997,33 +989,114 @@ const PurchaseInvoiceSkin = () => {
         }
     };
 
-    const buildInvoiceDataForPrint = useCallback((invoiceNumber, qrLink) => {
+const buildInvoiceDataForPrint = useCallback((invoiceNumber, qrLink, overrideData) => {
+    const base = overrideData || formData;
+
+    const mergedCustomerData = {
+        ...(formData.customerData || {}),
+        ...(base.customerData || {}),
+    };
+
+    const rawDetails = base.purchaseDetails || [];
+
+    // ✅ Enrich with productName / productNameArb from allProducts by matching productCode
+    const enrichedDetails = rawDetails.map((detail, idx) => {
+        const matchedProduct = allProducts?.find(
+            (p) => p.productCode === detail.productCode
+        );
+        
+        return {
+            ...detail,
+            productName: detail.productName || matchedProduct?.productName || '',
+            productNameArb: detail.productNameArb || matchedProduct?.productNameArb || '',
+            unitName: detail.unitName || formData.purchaseDetails?.[idx]?.unitName || detail.UnitName || matchedProduct?.unitName || '',
+        };
+    });
+
+    return {
+        ...base,
+        invoiceNo: base?.invoiceNo || base?.voucherNo || invoiceNumber,
+        supplierData: base.supplierData || formData.supplierData,
+        taxType: formData.taxType || generalSettings?.taxType,
+        date: base.date,
+        purchaseDetails: enrichedDetails,
+        qr_link: qrLink || base.qr_link,
+        customerData: mergedCustomerData,
+    };
+}, [formData, allProducts, generalSettings?.taxType]);
+
+    const fetchInvoiceDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`get-purchase-invoice-byId/${purchaseInvoicemasterId}`);
+        const data = response.data.data;
+
+
+        const resolvedTaxData = taxData;
+
+        const purchaseDetailsWithProducts = (data.purchaseDetails || []).map((item) => {
+            const taxInfo = resolvedTaxData?.find(t => t.taxId === item?.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo?.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productname || item?.productName || '',
+                productNameArb: item?.productNameArb || '',
+                unitName: item?.unitName || item?.UnitName || '',
+                taxRate,
+                qty: parseFloat(item.qty) || 0,
+                freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                rate: parseFloat(item.rate) || 0,
+                discountPercentage: parseFloat(item.discountPercentage) || 0,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
 
         return {
-            ...formData,
-            invoiceNo: invoiceNumber,
-            date: formData.date,
-            purchaseDetails: formData.purchaseDetails,
-            qr_link: qrLink || formData.qr_link,
+            ...data,
+            date: data.date ? parseDateFromAPI(data.date) : formData.date,
+            invoiceDate: data.invoiceDate ? parseDateFromAPI(data.invoiceDate) : formData.invoiceDate,
+            purchaseDetails: purchaseDetailsWithProducts,
         };
-    }, [formData]);
-
-    const printToPrinterFn = useCallback((invoiceDataForPrint) => {
-        if (formData.printType === 'a4') {
-            purchaseInvoicePrintOne(invoiceDataForPrint, selectedBranchDetails, time, null, currentCurrency);
-        }
-        // Add more print types here as needed (e.g. Thermal, Type 2, etc.)
+    }, [purchaseInvoicemasterId, taxData, formData.date, formData.invoiceDate]);
+    const runOrderOutput = useCallback((mode, invoiceDataForPrint) => {
+        // Fallback or mapping for 'a4' / 'a4_2' from dropdown to type handler
+        const mappedType = formData.printType === 'a4' ? 'Type 1' : (formData.printType === 'a4_2' ? 'Type 2' : formData.printType);
+        const handlers = INVOICE_PRINT_HANDLERS[mappedType];
+        const fn = handlers?.[mode] ?? INVOICE_PRINT_HANDLERS[DEFAULT_INVOICE_PRINT_TYPE][mode];
+        fn(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency);
     }, [formData.printType, selectedBranchDetails, time, currentCurrency]);
 
-    const handleReprintToPrinter = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, formData.qr_link);
-        printToPrinterFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, formData.qr_link, printToPrinterFn]);
+    const printToPrinterFn = useCallback((data) => runOrderOutput('print', data), [runOrderOutput]);
 
-    const handleReprintToPdf = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, formData.qr_link);
-        printToPrinterFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, formData.qr_link, printToPrinterFn]);
+    const handleReprintToPrinter = useCallback(async () => {
+        setIsSaving(true); // or a dedicated isPrinting state if you add one, matching the invoice skin's pattern
+        try {
+            const freshData = await fetchInvoiceDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+        } catch (error) {
+            console.error('Error fetching invoice for reprint:', error);
+            showToast.error('Failed to fetch invoice data for printing');
+        } finally {
+            setIsSaving(false);
+        }
+    }, [fetchInvoiceDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsSaving(true);
+        try {
+            const freshData = await fetchInvoiceDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+        } catch (error) {
+            console.error('Error fetching invoice for PDF reprint:', error);
+            showToast.error('Failed to fetch invoice data for PDF');
+        } finally {
+            setIsSaving(false);
+        }
+    }, [fetchInvoiceDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
 
     const [loading, setLoading] = useState({
         employees: false,
@@ -1050,7 +1123,7 @@ const PurchaseInvoiceSkin = () => {
         setLoading(prev => ({ ...prev, customers: true }));
         try {
             const { data } = await axiosInstance.post("customer-supplier-account-ledgers", {
-                ledgerTypes: ["Supplier"],
+                ledgerTypes: ["Supplier", "Customer&Supplier"],
                 branchId: selectedBranchId
             });
             setCustomers(data.data);
@@ -1120,6 +1193,8 @@ const PurchaseInvoiceSkin = () => {
         try {
             const response = await axiosInstance.get(`get-generated-voucherNo?voucherType=Purchase Invoice&branchId=${selectedBranchId}&yearId=${currentFinancialYear.yearId}`);
             setInvoiceId(response.data.voucherCode)
+            if (editMode) setExistingInvoiceNo(response.data.voucherCode);
+
         } catch (error) {
             console.error(error);
         } finally {
@@ -1162,13 +1237,19 @@ const PurchaseInvoiceSkin = () => {
             label: t("requiredFieldsError")
         }
     };
-
+    const saveLock = useRef(false);
     const handleSave = useCallback(async () => {
-        if (formData.BillBalanceAmount < 0) {
 
+        if (formData.BillBalanceAmount < 0) {
             showToast.error(t("salesInvoice.alert.billBalanceAmtError"));
             return;
         }
+        
+        if (!formData.paymentMode || formData.paymentMode === 'null' || formData.paymentMode === 'NA') {
+            showToast.error("Please select a valid payment mode (Cash, Bank, or Credit).");
+            return;
+        }
+
         if (!validateForm(formData, validationRules)) return;
         if (formData.paymentMode === 'credit' && formData.BillBalanceAmount <= 0) {
             showToast.error(t("salesInvoice.alert.creditPaymentModeError"));
@@ -1178,15 +1259,16 @@ const PurchaseInvoiceSkin = () => {
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
             const errorMessage = validationErrors.join('\n');
-
             showToast.error(errorMessage);
             return;
         }
-        setIsSaving(true);
-
-        // ✅ NEW: Negative cash transaction validation
+        if (formData.totalAmount <= 0) {
+            showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
+            return;
+        }
+        // ✅ Negative cash transaction validation
         if (generalSettings?.negativeCashTransaction !== 'Allow') {
-
+            setIsSaving(true)
             const cashLedgerId = formData.CashLedgerId;
             const cashAmount = parseFloat(formData.CashAmount || 0);
 
@@ -1210,7 +1292,6 @@ const PurchaseInvoiceSkin = () => {
                                 confirmButtonColor: '#d33',
                                 confirmButtonText: t('Ok') || 'Ok',
                             });
-                            setIsSaving(false); // ✅ was missing here
                             return;
                         }
 
@@ -1227,54 +1308,101 @@ const PurchaseInvoiceSkin = () => {
                             });
 
                             if (!result.isConfirmed) {
-                                setIsSaving(false); // ✅ moved inside the cancel guard
+                                setIsSaving(false)
                                 return;
                             }
                         }
                     }
                 } catch (error) {
                     console.error('Error checking cash ledger balance:', error);
-                    setIsSaving(false); // ✅ also reset on fetch error
                     return;
                 }
             }
         }
 
-        setIsSaving(true); // ✅ move this to HERE, after all early-return guards
-
+        // Confirmation dialogs
         if (editMode && generalSettings?.askConfirmationEdit) {
             const result = await Swal.fire({
-                title: t("ConfirmUpdateTitle"), text: t("ConfirmUpdateText"),
-                icon: 'question', showCancelButton: true,
-                confirmButtonColor: '#3085d6', cancelButtonColor: '#d33',
-                confirmButtonText: t("YesUpdate"), cancelButtonText: t('Cancel'),
+                title: t("ConfirmUpdateTitle"),
+                text: t("ConfirmUpdateText"),
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t("YesUpdate"),
+                cancelButtonText: t('Cancel'),
             });
-                    setIsSaving(false);
-
             if (!result.isConfirmed) return;
         } else if (!editMode && generalSettings?.askConfirmationSave) {
             const result = await Swal.fire({
-                title: t('ConfirmSaveTitle'), text: t('ConfirmSaveText'),
-                icon: 'question', showCancelButton: true,
-                confirmButtonColor: '#3085d6', cancelButtonColor: '#d33',
-                confirmButtonText: t('YesSave'), cancelButtonText: t('Cancel'),
+                title: t('ConfirmSaveTitle'),
+                text: t('ConfirmSaveText'),
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesSave'),
+                cancelButtonText: t('Cancel'),
             });
-                    setIsSaving(false);
-
             if (!result.isConfirmed) return;
         }
-        setIsSaving(true);
-        try {
 
-            const dataToSave = {
+        setIsSaving(true);
+        const appendFormData = (fd, key, value, options = {}) => {
+            const { keepEmpty = false } = options;
+
+            if (value === null || value === undefined) {
+                if (keepEmpty) {
+                    fd.append(key, '');
+                }
+                return;
+            }
+
+            if (Array.isArray(value)) {
+                value.forEach((item, index) => {
+                    appendFormData(fd, `${key}[${index}]`, item, { keepEmpty: true });
+                });
+            } else if (value instanceof Date) {
+                fd.append(key, value.toISOString());
+            } else if (typeof value === 'object' && !(value instanceof File)) {
+                Object.entries(value).forEach(([subKey, subValue]) => {
+                    appendFormData(fd, `${key}[${subKey}]`, subValue, { keepEmpty });
+                });
+            } else {
+                fd.append(key, value);
+            }
+        };
+        try {
+            const payload = {
                 ...formData,
                 ModifiedUser: editMode ? userId : null,
                 CreatedUser: userId,
                 date: formatDateWithTime(formData.date)
             };
 
-            const api = editMode ? `update-purchase-invoice/${purchaseInvoicemasterId}` : 'save-purchase-invoice'
-            const response = await axiosInstance.post(api, dataToSave);
+            const fd = new FormData();
+
+            Object.entries(payload).forEach(([key, value]) => {
+                if (key === 'purchaseDetails') {
+                    appendFormData(fd, 'purchaseDetails', value); // becomes purchaseDetails[0][productCode] etc.
+                } else {
+                    appendFormData(fd, key, value);
+                }
+            });
+
+            documents.forEach((file) => {
+                fd.append('documents[]', file);
+            });
+            const api = isEditMode
+                ? `update-purchase-invoice/${purchaseInvoicemasterId}`
+                : 'save-purchase-invoice';
+
+            const hasDocuments = documents.length > 0;
+            const config = { headers: { "Content-Type": "multipart/form-data" } };
+
+            const response = hasDocuments
+                ? await axiosInstance.post(api, fd, config)               // multipart
+                : await axiosInstance.post(api, payload);          // plain JSON, unchanged
 
             if (!response.data.error) {
                 dispatch(refreshProductsByType('sales'))
@@ -1288,12 +1416,12 @@ const PurchaseInvoiceSkin = () => {
                     setRestoredHeldInvoiceId(null);
                 }
 
-                // const savedInvoiceData = dataToSave;
-                const invoiceNumber = editMode ? existingInvoiceNo : invoiceId;
-                // const invoiceNumber = invoiceId;
+
+                const freshInvoiceData = response?.data?.data?.payload?.purchaseMaster;
+                const invoiceNumber = editMode ? existingInvoiceNo : response?.data?.data?.invoiceNo;
 
                 if (formData.printAfterSave) {
-                    const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceNumber, null);
+                    const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceNumber, null, freshInvoiceData);
                     printToPrinterFn(invoiceDataForPrint);
                 } else {
                     const pdfResult = await Swal.fire({
@@ -1309,54 +1437,116 @@ const PurchaseInvoiceSkin = () => {
 
                     if (pdfResult.isConfirmed) {
                         setTimeout(() => {
-                            const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceNumber, null);
+                            const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceNumber, null, freshInvoiceData);
                             printToPrinterFn(invoiceDataForPrint);
                         }, 500);
                     }
                 }
+
                 if (purchaseSettings.CloseAfterSave) {
                     navigate('/transaction/purchase-invoice/purchase-invoice-list')
                 }
+
                 if (!editMode) {
                     genarateSalesInvoiceId();
                     clearForm(true);
                 }
             }
         } catch (error) {
-            console.error('Error saving sales:', error);
+            console.error('Error saving purchase invoice:', error);
+
+            // ✅ AUTO-HOLD INVOICE ON ERROR
+            const hasValidData = formData.purchaseDetails.some(detail => detail.productCode && detail.qty > 0);
+
+            if (hasValidData) {
+                const heldInvoice = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    invoiceId: invoiceId,
+                    vendorName: formData.partyName || 'Unknown Vendor',
+                    vendorAddress: formData.partyAddress || '',
+                    totalAmount: formData.totalAmount || 0,
+                    itemCount: formData.purchaseDetails.filter(d => d.productCode).length,
+                    branchId: selectedBranchId,
+                    formData: { ...formData },
+                    errorHeld: true // Mark as error-held
+                };
+
+                setHeldInvoices(prev => [...prev, heldInvoice]);
+
+                showToast.warning(
+                    `Save failed. Invoice has been automatically held. Total held invoices: ${heldInvoices.length + 1}`
+                );
+            }
+
             Swal.fire({
                 icon: 'error',
                 title: t('Error') || 'Error',
-                text:
-                    error.response?.data?.message ||
-                    t('SaveFailed') ||
-                    'Failed to save Purchase Invoice',
+                html: `
+                    <div class="text-left">
+                        <p class="mb-2">${error.response?.data?.message || t('SaveFailed') || 'Failed to save Purchase Invoice'}</p>
+                        ${hasValidData ? '<p class="text-sm text-blue-600">Your invoice data has been automatically held and can be restored later.</p>' : ''}
+                    </div>
+                `,
+                confirmButtonColor: '#3085d6',
+                confirmButtonText: 'OK'
             });
         } finally {
             setIsSaving(false);
         }
-    }, [formData, time, saleSettings, generalSettings, editMode, restoredHeldInvoiceId]);
+    }, [
+        formData,
+        time,
+        saleSettings,
+        generalSettings,
+        editMode,
+        restoredHeldInvoiceId,
+        invoiceId,
+        heldInvoices.length,
+        selectedBranchId,
+        t,
+        userId,
+        purchaseInvoicemasterId,
+        dispatch,
+        buildInvoiceDataForPrint,
+        printToPrinterFn,
+        purchaseSettings,
+        navigate
+    ]);
 
     useEffect(() => {
-        if (!editMode) {
-            const handleKeyDown = (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-                    e.preventDefault();
-                    handleSave();
-                }
-            };
+        if (editMode) return;
 
-            window.addEventListener('keydown', handleKeyDown);
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+                e.preventDefault();
 
-            return () => {
-                window.removeEventListener('keydown', handleKeyDown);
-            };
-        }
+                if (ctrlSPressed.current) return;
+
+                ctrlSPressed.current = true;
+                handleSave();
+            }
+        };
+
+        const handleKeyUp = (e) => {
+            if (e.key.toLowerCase() === "s") {
+                ctrlSPressed.current = false;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+        };
     }, [handleSave, editMode]);
+
 
     // ===== BREADCRUMB ACTIONS =====
     const breadcrumbActions = [
-        {
+        privileges?.can_view && {
             label: t("listBtn"),
             icon: Table,
             type: "secondary",
@@ -1401,7 +1591,7 @@ const PurchaseInvoiceSkin = () => {
         },
     ].filter(Boolean);
 
-    if (fetchLoading || baseDataloading) {
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary ">
                 <BreadCrumb
@@ -1423,6 +1613,7 @@ const PurchaseInvoiceSkin = () => {
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary ">
@@ -1454,16 +1645,19 @@ const PurchaseInvoiceSkin = () => {
                                 </label>
                             </div>
                         )}
-                        <select
-                            name="printType"
-                            id="printType"
-                            className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
-                            value={formData.printType}
-                            onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
-                        >
-                            <option value="a4">A4</option>
-                            {/* Add more print types here if purchase gets more templates */}
-                        </select>
+                        {invoicePrintTypes.length > 0 && (
+                            <select
+                                name="printType"
+                                id="printType"
+                                className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
+                                value={formData.printType}
+                                onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
+                            >
+                                {invoicePrintTypes.map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
+                            </select>
+                        ) }
                         {editMode && !fetchLoading && (
                             <PrintDropdown
                                 onPrintToPrinter={handleReprintToPrinter}
@@ -1507,6 +1701,14 @@ const PurchaseInvoiceSkin = () => {
                 purchaseAccounts={purchaseAccounts}
                 currency={currency}
                 getAginsteModeDetailes={getAginsteModeDetailes}
+                documents={documents}
+                setDocuments={setDocuments}
+                existingDocuments={existingDocuments}
+                setExistingDocuments={setExistingDocuments}
+                removedDocuments={removedDocuments}
+                setRemovedDocuments={setRemovedDocuments}
+                setUpdateCustomerId={setUpdateCustomerId}
+                updateCustomerId={updateCustomerId}
             />
         </div>
     )

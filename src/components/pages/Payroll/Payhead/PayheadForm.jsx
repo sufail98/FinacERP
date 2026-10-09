@@ -15,6 +15,7 @@ import useAuth from "@/redux/hook/auth/useAuth";
 import useAutoFocus from "@/lib/hooks/useAutoFocus";
 import PropTypes from "prop-types";
 import { useSelector } from "react-redux";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const style = {
   position: "absolute",
@@ -151,10 +152,13 @@ const PayheadForm = ({
     setFinalError("");
 
     const { name, value } = e.target;
-
+    let updatedValue = value
+    if(["payheadName","type"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+    }
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: updatedValue,
     }));
   };
 
@@ -302,6 +306,7 @@ const PayheadForm = ({
       ...formData,
       branchId: selectedBranchId,
       CreatedUser: user?.userId,
+      ModifiedUser: mode === "edit" ? user?.userId : null,
     };
 
     try {

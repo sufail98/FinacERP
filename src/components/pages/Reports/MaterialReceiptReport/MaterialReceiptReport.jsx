@@ -39,9 +39,9 @@ const MaterialReceiptReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        
         return {
-            fromDate: firstDayOfMonth.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -56,7 +56,7 @@ const MaterialReceiptReport = () => {
         orderId: null,
         costCentreId: null,
         userId: null,
-        isAccountsPosting: false,
+        isAccountsPosting: generalSettings.AccountPosting  || false,
         mode: 'Detailed'
     });
 
@@ -137,7 +137,7 @@ const MaterialReceiptReport = () => {
         try {
             const [partyRes, costCentreRes, userRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Supplier"],
+                    ledgerTypes: ["Supplier","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("cost-centres").catch(() => ({ data: { data: [] } })),
@@ -207,7 +207,15 @@ const MaterialReceiptReport = () => {
     // ─── Footer totals ────────────────────────────────────────────────────────────
     const footerData = useMemo(() => {
         if (!reportData || !Array.isArray(reportData) || reportData.length === 0) return null;
-
+const sumUniqueByReceipt = (key) => {
+    const seen = new Set();
+    return reportData.reduce((acc, row) => {
+        if (seen.has(row.ReceiptNo)) return acc;
+        seen.add(row.ReceiptNo);
+        const v = parseFloat(row[key]);
+        return isNaN(v) ? acc : acc + v;
+    }, 0);
+};
         const decimalPart = generalSettings?.decimalPart || 2;
 
         const sumOf = (...keys) => reportData.reduce((acc, row) => {
@@ -234,7 +242,7 @@ const MaterialReceiptReport = () => {
                 TotalAmount:  sumOf('TotalAmount').toFixed(decimalPart),
             };
         }
-
+   
         // ── Detailed footer ──
         return {
             SNo:               '',
@@ -254,7 +262,7 @@ const MaterialReceiptReport = () => {
             taxRate:           '',
             taxAmount:         sumOf('taxAmount').toFixed(decimalPart),
             netAmount:         sumOf('netAmount').toFixed(decimalPart),
-            TotalAmount:       sumOf('TotalAmount').toFixed(decimalPart),
+          TotalAmount: sumUniqueByReceipt('TotalAmount').toFixed(decimalPart),
             AgainstNo:         '',
             Narration:         ''
         };
@@ -477,7 +485,7 @@ const MaterialReceiptReport = () => {
             orderId:           null,
             costCentreId:      null,
             userId:            null,
-            isAccountsPosting: false,
+            isAccountsPosting: generalSettings.AccountPosting || false,
             mode:              'Detailed'
         });
         setReportData(null);
@@ -511,10 +519,8 @@ const MaterialReceiptReport = () => {
 
     const conditionOptions = useMemo(() => [
         { label: t('All'),       value: 'All'       },
-        { label: t('Pending'),   value: 'Pending'   },
-        { label: t('Partial'),   value: 'Partial'   },
-        { label: t('Completed'), value: 'Completed' },
-        { label: t('Cancelled'), value: 'Cancelled' }
+        { label: t('Posted'),   value: 'Posted'   },
+        { label: t('Un Posted'),   value: 'UnPosted'   },
     ], [t]);
 
     const checkedCount = Object.values(visibleColumns).filter(Boolean).length;

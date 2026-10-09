@@ -5,15 +5,18 @@ import NormalSelectInput from '@/components/elements/theme/NormalSelectInput'
 import { useTranslation } from 'react-i18next'
 import DateInput from '@/components/elements/theme/DateInput'
 
-const RetentionData = ({ totals, formData, setFormData }) => {
+const RetentionData = ({ totals, formData, setFormData, editMode = false }) => {
     const { t } = useTranslation()
     const [errors, setErrors] = useState({});
     const { generalSettings } = useSelector((state) => state.settings);
+    const isEditMode = Boolean(editMode);
 
     const handleChange = (field, value) => {
+        if (isEditMode) return;
         setFormData(prev => ({ ...prev, [field]: value }));
     };  
     const handleInputChange = (e) => {
+    if (isEditMode) return;
     const { name, value } = e.target;
   
     setFormData(prev => ({
@@ -39,6 +42,8 @@ const RetentionData = ({ totals, formData, setFormData }) => {
                     name="RetentionType"
                     value={formData.RetentionType || ''}
                     onChange={(e) => handleChange('RetentionType', e.target.value)}
+                    readOnly={isEditMode}
+                    disabled={isEditMode}
                     options={[
                         { value: "Included", label: 'Included' },
                         { value: "Exluded", label: 'Excluded' },
@@ -51,7 +56,12 @@ const RetentionData = ({ totals, formData, setFormData }) => {
                     value={formData.RetentionPercentage || ''}
                     onChange={(e) => handleChange('RetentionPercentage', parseFloat(e.target.value))}
                     placeholder={t("salesInvoice.form.footerSection.retentionSection.placeholders.retention%")}
-                    onFocus={handleSelectAll}
+                    onFocus={(e) => {
+                        if (isEditMode) return;
+                        handleSelectAll(e);
+                    }}
+                    readOnly={isEditMode}
+                    disabled={isEditMode}
                 />
                 {/* ✅ Added onFocus for select all */}
                 <TextInput
@@ -60,8 +70,16 @@ const RetentionData = ({ totals, formData, setFormData }) => {
                     value={formData.RetentionAmount}
                     onChange={(e) => handleChange('RetentionAmount', e.target.value)}
                     placeholder={t("salesInvoice.form.footerSection.retentionSection.placeholders.RetentionAmount")}
+                    onKeyDown = {(e) => {
+                        if(e.key === "-" || e.key === "+") e.preventDefault()
+                    }}
                     type='number'
-                    onFocus={handleSelectAll}
+                    onFocus={(e) => {
+                        if (isEditMode) return;
+                        handleSelectAll(e);
+                    }}
+                    readOnly={isEditMode}
+                    disabled={isEditMode}
                 />
                 <div className=''>
                     <DateInput
@@ -71,6 +89,8 @@ const RetentionData = ({ totals, formData, setFormData }) => {
                         onChange={handleInputChange}
                         className="w-full"
                         name="RetentionDueDate"
+                        readOnly={isEditMode}
+                        disabled={isEditMode}
                     />
                 </div>
             </div>

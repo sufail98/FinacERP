@@ -6,6 +6,7 @@ import useAuth from '@/redux/hook/auth/useAuth'
 import TextInput from '@/components/elements/theme/TextInput'
 import TextArea from '@/components/elements/theme/TextArea'
 import axiosInstance from '@/lib/axiosConfig'
+import { sanitize } from '@/lib/inputSanitizer'
 
 const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
     const { currentFinancialYear, currentCurrencyConversion ,userId} = useAuth()
@@ -34,6 +35,13 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
     // Input handler (for both main fields and nested ShippingAddress)
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target
+        let updatedValue = value
+        if(["customerName"].includes(name)){
+            updatedValue = sanitize.alphaNumericSpace(value)
+        }
+        if(["vatNo","phoneNo"].includes(name)){
+            updatedValue = sanitize.numbers(value)
+        }
 
         if (["address1", "address2", "address3", "address4"].includes(name)) {
             setFormData((prev) => ({
@@ -54,7 +62,7 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
         } else {
             setFormData((prev) => ({
                 ...prev,
-                [name]: value,
+                [name]: updatedValue,
             }))
         }
     }
@@ -168,6 +176,8 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
                     />
                     <TextInput
                         name="phoneNo"
+                        type = "text"
+                        maxLength = {10}
                         label="Phone Number"
                         value={formData.phoneNo}
                         onChange={handleInputChange}

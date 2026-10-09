@@ -14,65 +14,80 @@ const TaxSummaryReportFilters = ({
     formTypeOptions,
     loading,
     hasReportData,
-    resetFilters
+    resetFilters,
+    isMainBranch,
+    branchOptions
 }) => {
     const { t } = useTranslation();
 
     return (
         <div className="bg-white dark:bg-[#1e1e1e] rounded-lg p-2 mb-2 border border-gray-200 dark:border-gray-700">
-            <div className="flex flex-wrap items-end gap-2">
+            <div className="grid grid-cols-8 items-end gap-2">
                 {/* From Date */}
-                <div className="w-[130px]">
-                    <DateInput
-                        label={t('reportFilters.fromDate')}
-                        name="fromDate"
-                        value={filters.fromDate}
-                        onChange={(e, value) => onFilterChange('fromDate', value)}
-                        required
-                        className='w-full'
-                    />
-                </div>
+
+                <DateInput
+                    label={t('reportFilters.fromDate')}
+                    name="fromDate"
+                    value={filters.fromDate}
+                    onChange={(e, value) => onFilterChange('fromDate', value)}
+                    max={new Date().toISOString().split(("T")[0])}
+                    required
+                    className='w-full'
+                />
+
 
                 {/* To Date */}
-                <div className="w-[130px]">
-                    <DateInput
-                        label={t('reportFilters.toDate')}
-                        name="toDate"
-                        value={filters.toDate}
-                        onChange={(e, value) => onFilterChange('toDate', value)}
-                        required
-                        min={filters.fromDate}
-                        className='w-full'
-                    />
-                </div>
+
+                <DateInput
+                    label={t('reportFilters.toDate')}
+                    name="toDate"
+                    value={filters.toDate}
+                    onChange={(e, value) => onFilterChange('toDate', value)}
+                    required
+                    min={filters.fromDate}
+                    className='w-full'
+                />
+
 
                 {/* Tax */}
-                <div className="w-[140px]">
-                    <SearchableDropdown
-                        label={t("taxSummeryReport.filters.tax")}
-                        name="taxId"
-                        value={filters.taxId}
-                        onChange={(value) => onFilterChange('taxId', value)}
-                        options={taxOptions}
-                        placeholder={t("All")}
-                        searchPlaceholder={t("taxSummeryReport.filters.tax")}
-                        clearable
-                    />
-                </div>
+
+                <SearchableDropdown
+                    label={t("taxSummeryReport.filters.tax")}
+                    name="taxId"
+                    value={filters.taxId}
+                    onChange={(value) => onFilterChange('taxId', value)}
+                    options={taxOptions}
+                    placeholder={t("All")}
+                    searchPlaceholder={t("taxSummeryReport.filters.tax")}
+                    // clearable
+                />
+
 
                 {/* Form Type */}
-                <div className="w-[160px]">
+
+                <SearchableDropdown
+                    label={t("taxSummeryReport.filters.formType")}
+                    name="formType"
+                    value={filters.formType}
+                    onChange={(value) => onFilterChange('formType', value)}
+                    options={formTypeOptions}
+                    placeholder={t("All")}
+                    searchPlaceholder={t("Search...")}
+                    // clearable
+                />
+  {isMainBranch && (
                     <SearchableDropdown
-                        label={t("taxSummeryReport.filters.formType")}
-                        name="formType"
-                        value={filters.formType}
-                        onChange={(value) => onFilterChange('formType', value)}
-                        options={formTypeOptions}
-                        placeholder={t("All")}
-                        searchPlaceholder={t("Search...")}
-                        clearable
+                        label={t('salesReport.filters.branch') || 'Branch'}
+                        name="branchId"
+                        value={filters.selectedBranchId ?? null}
+                        onChange={(value) => onFilterChange('selectedBranchId', value ?? null)}
+                        options={branchOptions}
+                        placeholder={t('salesReport.filters.allBranches') || 'All Branches'}
+                        searchPlaceholder={t('salesReport.filters.searchBranch') || 'Search branch...'}
+                        // clearable
                     />
-                </div>
+                )}
+
 
                 {/* Optional Checkbox */}
                 <div className="flex items-center gap-1.5 h-[34px]">

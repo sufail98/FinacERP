@@ -13,13 +13,14 @@ import updateReducer from './slice/updateSlice'; // ✅ ADD THIS
 import productReducer from './slice/productSlice';
 import { persistStore, persistReducer } from 'redux-persist';
 import storage from 'redux-persist/lib/storage';
+import organizationReducer from "./slice/organizationSlice";
 
 import { combineReducers } from 'redux';
 
 const persistConfig = {
   key: 'root',
   storage,
-  whitelist: ['auth', 'settings'], // Only persist auth, NOT update state
+  whitelist: ['auth', 'settings','organization'], // Only persist auth, NOT update state
 };
 
 const rootReducer = combineReducers({
@@ -33,6 +34,7 @@ const rootReducer = combineReducers({
   theme: themeReducer,
   update: updateReducer,
   products: productReducer,
+  organization: organizationReducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

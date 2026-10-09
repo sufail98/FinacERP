@@ -6,12 +6,12 @@ import { useSelector } from 'react-redux';
 
 const RecieptVoucherFormFooter = ({ formData, setFormData, handleFormChange, editMode }) => {
     const { t } = useTranslation();
-     const {generalSettings}=useSelector((state)=>state.settings)
-    
+    const { generalSettings } = useSelector((state) => state.settings)
+
     return (
         <div>
-            <div className="flex justify-between mt-3">
-                <div className='w-[300px]'>
+            <div className="flex flex-col md:flex-row justify-between gap-4 md:gap-0 mt-3">
+                <div className='w-full md:w-[300px]'>
 
                     <TextArea
                         name="narration"
@@ -24,11 +24,11 @@ const RecieptVoucherFormFooter = ({ formData, setFormData, handleFormChange, edi
 
                 </div>
 
-                <div className='text-end'>
+                <div className='text-left md:text-end'>
 
-                    <div className='flex gap-3 mt-3'>
-                        <p className='font-bold text-3xl'>{t("recieptVoucher.form.label.totalAmount")} : </p>
-                        <p className='font-bold text-3xl text-red-600'>{formData.totalAmount.toFixed(generalSettings.decimalPart)}</p>
+                    <div className='flex flex-wrap items-center gap-2 sm:gap-3 mt-3'>
+                        <p className='font-bold text-xl sm:text-2xl md:text-3xl'>{t("recieptVoucher.form.label.totalAmount")} : </p>
+                        <p className='font-bold text-xl sm:text-2xl md:text-3xl text-red-600'>{formData.totalAmount.toFixed(generalSettings.decimalPart)}</p>
                     </div>
                 </div>
 

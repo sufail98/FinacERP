@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { EllipsisVertical, Plus, PlusIcon, RefreshCcw, Trash2 } from 'lucide-react';
-import axiosInstance from '@/lib/axiosConfig';
 import { useDispatch, useSelector } from 'react-redux';
-import EditProuctDetailsModal from './EditProuctDetailsModal';
+import EditProuctDetailsModal from '../SalesInvoice/EditProuctDetailsModal';
 import useAuth from '@/redux/hook/auth/useAuth';
 import PurchaseInvoiceFooterSection from './PurchaseInvoiceFooterSection';
 import Swal from 'sweetalert2';
@@ -10,10 +9,11 @@ import { useTranslation } from 'react-i18next';
 import PropTypes from 'prop-types';
 import ProductFormModal from '../../Master/multiMasterForms/Product/ProductFormModal';
 import { refreshProductsByType } from '@/redux/slice/productSlice';
+import axiosInstance from '@/lib/axiosConfig';
 
 const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: propRows, otherChargeLedgers, taxData, bank, cash }) => {
     const { t } = useTranslation();
-    const { purchaseSettings, inventorySettings } = useSelector((state) => state.settings);
+    const { purchaseSettings, inventorySettings, } = useSelector((state) => state.settings);
     const [editProductModalOpen, setEditProductModalOpen] = useState(false);
     const [selectedProductCode, setSelectedProductCode] = useState(null);
     const { selectedBranchId } = useAuth();
@@ -34,6 +34,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
     const [isInitialized] = useState(false);
     const { purchaseProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products)
     const dispatch = useDispatch()
+    const [selectedRowIdForEdit, setSelectedRowIdForEdit] = useState(null);
 
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState({});
     const [selectingProduct, setSelectingProduct] = useState({});
@@ -62,7 +63,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                 desc: parseFloat(item.discountPercentage) || 0,
                 descAmt: 0,
                 grossAmount: (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0),
-
+                category: item?.category,
                 billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
                 netValue: parseFloat(item.netAmount) || 0,
                 tax: parseFloat(item.taxRate) || 0,
@@ -110,6 +111,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                 netValue: 0,
                 tax: 0,
                 taxId: null,
+                category: null,
                 taxAmt: 0,
                 amount: 0,
                 taxType: 'Excluded',
@@ -201,6 +203,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                 salesManId: item.salesManId || formData.employeeId || null,
                 GodownId: item.GodownId || formData.GodownId || null,
                 barcodeInput: item.barcode || '',
+                category: item?.category,
                 productDetails: rows[index]?.productDetails || {
                     productCode: item.productCode || '',
                     barcode: item.barcode || '',
@@ -237,7 +240,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
             columns.push('netValue');
         }
 
-        if (generalSettings?.ActivateTax) {
+        if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
             columns.push('tax');
         }
 
@@ -331,7 +334,13 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                     break;
             }
         }
-
+        if (currentField === 'productName' && e.key === 'Enter') {
+            const row = rows.find(r => r.id === rowId);
+            if (!row?.productCode || row.productCode.trim() === '') {
+                e.preventDefault();
+                return; // do nothing — don't create a new row, don't move focus
+            }
+        }
         const editableColumns = getEditableColumns();
         const currentRowIndex = rows.findIndex(row => row.id === rowId);
         const currentFieldIndex = editableColumns.indexOf(currentField);
@@ -433,6 +442,24 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
             if (hasChanges) setRows(updatedRows);
         }
     }, [formData.billDiscount]);
+    useEffect(() => {
+        if (formData.purchaseDetails && formData.purchaseDetails.length > 0) {
+            let hasChanges = false;
+            const updatedRows = rows.map((row, index) => {
+                const detail = formData.purchaseDetails[index];
+                if (
+                    detail &&
+                    detail.otherchargeOnProduct !== undefined &&
+                    parseFloat(detail.otherchargeOnProduct) !== parseFloat(row.otherchargeOnProduct || 0)
+                ) {
+                    hasChanges = true;
+                    return calculateRow({ ...row, otherchargeOnProduct: parseFloat(detail.otherchargeOnProduct) });
+                }
+                return row;
+            });
+            if (hasChanges) setRows(updatedRows);
+        }
+    }, [formData.othercharge]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -476,10 +503,11 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
             productDescription: row.productDetails.productDescription || "",
             billDiscOnProduct: row.billDiscOnProduct ?? null,
             AddCostonProduct: null,
-            otherchargeOnProduct: null,
+            otherchargeOnProduct: row.otherchargeOnProduct ?? null,
             salesManId: formData.employeeId,
             GodownId: row.GodownId || formData.GodownId || 1,
             RackId: null,
+            category: row.category || null,
             branchId: selectedBranchId
         }));
 
@@ -533,6 +561,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
             SalesRate: 0,
             rate: 0,
             taxRate: 0,
+            category: null,
             desc: 0,
             descAmt: 0,
             grossAmount: 0,
@@ -565,7 +594,9 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
 
         setRows(reordered);
     };
-
+    useEffect(() => {
+        setRows(prevRows => prevRows.map(row => calculateRow(row)));
+    }, [formData.taxType]);
 
 
     const calculateRow = (row, updatedField = null) => {
@@ -573,7 +604,6 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
 
         if (updatedField === 'grossAmount') {
             const inputGross = parseFloat(row.grossAmount) || 0;
-
             const qty = parseFloat(row.qty) || 0;
 
             if (qty > 0) {
@@ -583,33 +613,29 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                 descAmt = (gross * descPercentage) / 100;
                 netValue = gross - descAmt;
 
-
-                // =================== NEW: apply billDiscOnProduct ===================
                 const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
-                const netValueAfterBillDisc = netValue - billDiscOnProduct;
-                // ====================================================================
+                const otherchargeOnProduct = parseFloat(row.otherchargeOnProduct) || 0;
+                const netValueAfterAdjustments = netValue - billDiscOnProduct + otherchargeOnProduct;
 
-                if (generalSettings?.ActivateTax) {
-                    taxAmt = (netValueAfterBillDisc * row.tax) / 100;  // NEW: was (netValue * row.tax)
+                if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+                    taxAmt = (netValueAfterAdjustments * row.tax) / 100;
                 }
-                amount = netValueAfterBillDisc + taxAmt;  // NEW: was netValue + taxAmt
+                amount = netValueAfterAdjustments + taxAmt;
 
                 return {
                     ...row,
-                    rate: parseFloat(calculatedRate.toFixed(generalSettings.decimalPart)),
+                    rate: parseFloat(calculatedRate),
                     grossAmount: parseFloat(inputGross.toFixed(generalSettings.decimalPart)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings.decimalPart)),
                     descAmt: parseFloat(descAmt.toFixed(generalSettings.decimalPart)),
                     netValue: parseFloat(netValue.toFixed(generalSettings.decimalPart)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings.decimalPart)),
                     amount: parseFloat(amount.toFixed(generalSettings.decimalPart)),
-                    // =================== NEW ===================
-                    billDiscOnProduct: parseFloat((row.billDiscOnProduct || 0).toFixed(generalSettings.decimalPart))
-                    // ===========================================
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings.decimalPart)),
+                    otherchargeOnProduct: parseFloat(otherchargeOnProduct.toFixed(generalSettings.decimalPart))
                 };
             }
         }
-
 
         if (updatedField === 'netValue') {
             const inputNetValue = parseFloat(row.netValue) || 0;
@@ -625,34 +651,30 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                 netValue = inputNetValue;
                 gross = calculatedGross;
 
-                // =================== NEW: apply billDiscOnProduct ===================
                 const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
-                const netValueAfterBillDisc = netValue - billDiscOnProduct;
-                // ====================================================================
+                const otherchargeOnProduct = parseFloat(row.otherchargeOnProduct) || 0;
+                const netValueAfterAdjustments = netValue - billDiscOnProduct + otherchargeOnProduct;
 
-                if (generalSettings?.ActivateTax) {
-                    taxAmt = (netValueAfterBillDisc * row.tax) / 100;  // NEW: was (netValue * row.tax)
+                if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+                    taxAmt = (netValueAfterAdjustments * row.tax) / 100;
                 }
-                amount = netValueAfterBillDisc + taxAmt;  // NEW: was netValue + taxAmt
+                amount = netValueAfterAdjustments + taxAmt;
 
                 return {
                     ...row,
-                    rate: parseFloat(calculatedRate.toFixed(generalSettings.decimalPart)),
+                    rate: parseFloat(calculatedRate),
                     grossAmount: parseFloat(calculatedGross.toFixed(generalSettings.decimalPart)),
                     descAmt: parseFloat(descAmt.toFixed(generalSettings.decimalPart)),
                     netValue: parseFloat(netValue.toFixed(generalSettings.decimalPart)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings.decimalPart)),
                     amount: parseFloat(amount.toFixed(generalSettings.decimalPart)),
-                    // =================== NEW ===================
-                    billDiscOnProduct: parseFloat((row.billDiscOnProduct || 0).toFixed(generalSettings.decimalPart))
-                    // ===========================================
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings.decimalPart)),
+                    otherchargeOnProduct: parseFloat(otherchargeOnProduct.toFixed(generalSettings.decimalPart))
                 };
             }
         }
 
         // ─── Normal calculation flow ───────────────────────────────────────────────
-
-        // Always Exclusive calculation
         gross = row.qty * row.rate;
 
         if (updatedField === 'descAmt') {
@@ -665,16 +687,15 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
 
         netValue = gross - descAmt;
 
-        // =================== NEW: apply billDiscOnProduct ===================
         const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
-        const netValueAfterBillDisc = netValue - billDiscOnProduct;
-        // ====================================================================
+        const otherchargeOnProduct = parseFloat(row.otherchargeOnProduct) || 0;
+        const netValueAfterAdjustments = netValue - billDiscOnProduct + otherchargeOnProduct;
 
-        if (generalSettings?.ActivateTax) {
-            taxAmt = (netValueAfterBillDisc * row.tax) / 100;  // NEW: was (netValue * row.tax)
+        if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+            taxAmt = (netValueAfterAdjustments * row.tax) / 100;
         }
 
-        amount = netValueAfterBillDisc + taxAmt;  // NEW: was netValue + taxAmt
+        amount = netValueAfterAdjustments + taxAmt;
 
         return {
             ...row,
@@ -684,9 +705,8 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
             taxAmt: parseFloat(taxAmt.toFixed(generalSettings.decimalPart)),
             amount: parseFloat(amount.toFixed(generalSettings.decimalPart)),
             descAmt: parseFloat(descAmt.toFixed(generalSettings.decimalPart)),
-            // =================== NEW ===================
-            billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings.decimalPart))
-            // ===========================================
+            billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings.decimalPart)),
+            otherchargeOnProduct: parseFloat(otherchargeOnProduct.toFixed(generalSettings.decimalPart))
         };
     };
 
@@ -756,20 +776,70 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
             setLoadingProducts(prev => ({ ...prev, [rowId]: false }));
         }
     };
+    const getDisplayPrice = (product) => {
+        const price = parseFloat(product.purchasePrice || product.purchaseRate || 0);
+        return price;
+    };
+    const renderStockBadges = (product) => {
+        if (!Array.isArray(product.stock) || product.stock.length === 0) return null;
+        return (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                {product.stock.map((s, i) => {
+                    const qty = parseFloat(s.currentStock) || 0;
+                    const label = s.name || 'Unassigned';
+                    const isNeg = qty < 0;
+                    return (
+                        <span
+                            key={i}
+                            style={{
+                                fontSize: '11px',
+                                padding: '2px 7px',
+                                borderRadius: '99px',
+                                background: isNeg ? '#FCEBEB' : '#EAF3DE',
+                                color: isNeg ? '#A32D2D' : '#3B6D11',
+                                fontWeight: 500,
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {label}: {qty}
+                        </span>
+                    );
+                })}
+            </div>
+        );
+    };
+
+    const fetchSupplierLastPurchaseRate = async (ledgerId, productCode) => {
+        if (!ledgerId || !productCode) return null;
+        try {
+            const response = await axiosInstance.post('supplier-last-purchase-rate', {
+                ledgerId,
+                productCode,
+                branchId: selectedBranchId
+            });
+
+            const data = response.data; // axios already parses JSON into .data
+
+            if (!data?.success) return null;
+
+            const rate = parseFloat(data?.data?.lastPurchaseRate);
+            return isNaN(rate) ? null : rate;
+        } catch (err) {
+            console.error("Error fetching supplier last purchase rate:", err);
+            return null;
+        }
+    };
 
     const selectProduct = async (rowId, product, selectedUnitId) => {
-
         try {
-            // Find the selected unit from the product data
             const selectedUnit = product.units.find(u => u.unitId === selectedUnitId) || product.units[0];
 
-            // IMPORTANT: Get the sales price for the selected unit by finding the matching product entry
             const productWithUnit = allProducts?.find(p =>
                 p.productCode === product.productCode && p.unitId === selectedUnitId
             );
 
             const unitSalesPrice = productWithUnit ? parseFloat(productWithUnit.salesPrice || 0) : parseFloat(product.salesPrice || 0);
-            const purchaseRate = parseFloat(
+            let purchaseRate = parseFloat(
                 productWithUnit?.purchaseRate ||
                 product.purchaseRate ||
                 productWithUnit?.PurchaseRate ||
@@ -777,7 +847,13 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                 0
             );
 
-            // Get the last sales tax as default
+            // Fetch supplier's last purchase rate for this product
+            const supplierLedgerId = formData.ledgerId || formData.supplierId;
+            const lastPurchaseRate = await fetchSupplierLastPurchaseRate(supplierLedgerId, product.productCode);
+            if (lastPurchaseRate !== null) {
+                purchaseRate = lastPurchaseRate;
+            }
+
             const defaultTax = product.purchaseTaxes && product.purchaseTaxes.length > 0
                 ? product.purchaseTaxes[0]
                 : null;
@@ -797,19 +873,18 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                         availableUnits: product.units || [],
                         unit: selectedUnitId || product.unitId || row.unit,
                         baseunitId: product.baseunitId || null,
+                        category: product?.category,
                         salesRate: unitSalesPrice,
-                        // Set tax from salesTaxes - use first item as default
                         taxId: defaultTax?.taxId || null,
                         tax: parseFloat(defaultTax?.rate || 0),
                         taxRate: parseFloat(defaultTax?.rate || 0),
                         taxType: 'Excluded',
-                        // Store salesTaxes for this row to use in dropdown
                         purchaseTaxes: product.purchaseTaxes || [],
-                        purchaseRate: product.purchaseRate,
+                        purchaseRate: purchaseRate,
+                        rate: purchaseRate,
                         productNameArb: product.productNameArb,
                         maximumSellingPrice: parseFloat(productWithUnit?.maximumSellingPrice || product.maximumSellingPrice || 0),
                         lowestSellingPrice: parseFloat(productWithUnit?.lowestSellingPrice || product.lowestSellingPrice || 0),
-
                         productDetails: {
                             barcode: productWithUnit?.barcode || product.barcode || '',
                             productCode: product.productCode,
@@ -859,6 +934,15 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
             // Get the sales price for this specific unit
             const unitSalesPrice = parseFloat(product.salesPrice || 0);
 
+            let purchaseRate = parseFloat(product.purchaseRate || product.PurchaseRate || 0);
+
+            // Fetch supplier's last purchase rate for this product
+            const supplierLedgerId = formData.ledgerId || formData.supplierId;
+            const lastPurchaseRate = await fetchSupplierLastPurchaseRate(supplierLedgerId, product.productCode);
+            if (lastPurchaseRate !== null) {
+                purchaseRate = lastPurchaseRate;
+            }
+
             // Get the first sales tax as default
             const defaultTax = product.purchaseTaxes && product.purchaseTaxes.length > 0
                 ? product.purchaseTaxes[0]
@@ -880,14 +964,14 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                         unit: product.unitId || row.unit,
                         baseunitId: product.baseunitId || null,
                         salesRate: unitSalesPrice,
-                        // Set tax from salesTaxes - use first item as default
+                        category: product?.category,
                         taxId: defaultTax?.taxId || null,
                         tax: parseFloat(defaultTax?.rate || 0),
                         taxRate: parseFloat(defaultTax?.rate || 0),
                         taxType: 'Excluded',
-                        // Store salesTaxes for this row to use in dropdown
                         purchaseTaxes: product.purchaseTaxes || [],
-                        purchaseRate: product.purchaseRate,
+                        purchaseRate: purchaseRate,
+                        rate: purchaseRate,
                         productNameArb: product.productNameArb,
                         maximumSellingPrice: parseFloat(product?.maximumSellingPrice || 0),
                         lowestSellingPrice: parseFloat(product?.lowestSellingPrice || 0),
@@ -943,21 +1027,14 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
             }
         }
     }, [selectedSuggestionIndex, activeSuggestionRow]);
-    const handleProductUpdate = (productCode, updatedDescription) => {
-        setRows(prevRows =>
-            prevRows.map(row =>
-                row.productDetails.productCode === productCode
-                    ? {
-                        ...row,
-                        productDetails: {
-                            ...row.productDetails,
-                            productDescription: updatedDescription
-                        }
-                    }
-                    : row
-            )
-        );
+    const handleProductUpdate = (rowId, updatedDescription) => {
+        setRows(prevRows => prevRows.map(row =>
+            row.id === rowId
+                ? { ...row, productDetails: { ...row.productDetails, productDescription: updatedDescription } }
+                : row
+        ));
     };
+
 
     const handleInputChange = (id, field, value, updatedField = null) => {
         const updatedRows = rows.map(row => {
@@ -1002,6 +1079,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                 grossAmount: 0,
                 receiptDetails1Id: '',
                 orderDetails1Id: '',
+                category: null,
                 netValue: 0,
                 tax: 0,
                 taxRate: 0,
@@ -1061,6 +1139,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                     SalesRate: 0,
                     rate: 0,
                     desc: 0,
+                    category: null,
                     descAmt: 0,
                     grossAmount: 0,
                     netValue: 0,
@@ -1098,7 +1177,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
         const totalDiscount = rows.reduce((sum, row) => sum + row.descAmt, 0);
         const totalNetValue = rows.reduce((sum, row) => sum + row.netValue, 0);
 
-        const totalTax = generalSettings?.ActivateTax
+        const totalTax = (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product')
             ? rows.reduce((sum, row) => sum + row.taxAmt, 0)
             : 0;
 
@@ -1160,7 +1239,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                     </>
                                 )}
                                 <col className="w-[100px]" />
-                                {generalSettings?.ActivateTax && (
+                                {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                     <>
                                         <col className="w-[70px]" />
                                         <col className="w-[50px]" />
@@ -1199,7 +1278,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                     </th>
                                     {purchaseSettings?.ChangeSalesPrice && (
                                         <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[70px]">
-                                            {t("salesInvoice.form.gridSection.columns.salesRate")}
+                                            {t("purchaseInvoice.form.gridSection.columns.salesRate")}
                                         </th>
                                     )}
                                     <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[80px]">
@@ -1221,7 +1300,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                     <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">
                                         {t("salesInvoice.form.gridSection.columns.netValue")}
                                     </th>
-                                    {generalSettings?.ActivateTax && (
+                                    {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                         <>
                                             <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[70px]">
                                                 {t("salesInvoice.form.gridSection.columns.tax%")}
@@ -1301,7 +1380,12 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                 <div
                                                     ref={suggestionRef}
                                                     data-suggestion-row={row.id}
-                                                    className="absolute z-90 w-full bg-primary dark:bg-secondary border border-themed dark:border-themed rounded-md shadow-lg max-h-60 overflow-y-auto mt-1 custom-scrollbar"
+                                                    className="absolute z-[100] bg-primary dark:bg-secondary border border-themed dark:border-themed rounded-md shadow-lg max-h-70 mt-1 custom-scrollbar"
+                                                    style={
+                                                        saleSettings?.ProductLookUpModel === 'Table'
+                                                            ? { minWidth: '650px', width: 'max-content', maxWidth: '90vw', overflowY: 'auto', overflowX: 'auto' }
+                                                            : { minWidth: '600px', overflowY: 'auto' }
+                                                    }
                                                 >
                                                     {loadingProducts[row.id] ? (
                                                         <div className="flex items-center justify-center py-8">
@@ -1310,40 +1394,154 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                     ) : (
                                                         <>
                                                             {suggestions[row.id]?.length > 0 ? (
-                                                                suggestions[row.id].map((product, idx) => (
-                                                                    <div
-                                                                        key={idx}
-                                                                        data-suggestion-index={idx}
-                                                                        onClick={() => {
-                                                                            selectProduct(row.id, product, product.unitId);
-                                                                            setSelectedSuggestionIndex(prev => ({ ...prev, [row.id]: -1 }));
-                                                                        }}
-                                                                        className={`px-1 py-1 cursor-pointer border-b border-themed dark:border-themed last:border-b-0 relative ${selectedSuggestionIndex[row.id] === idx
-                                                                            ? 'bg-blue-100 dark:bg-blue-900 border-l-4 border-l-blue-600'
-                                                                            : 'hover:bg-hover dark:hover:bg-hover'
-                                                                            } ${selectingProduct[row.id] ? 'opacity-50 pointer-events-none' : ''}`}
-                                                                    >
-                                                                        {selectingProduct[row.id] && selectedSuggestionIndex[row.id] === idx && (
-                                                                            <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50">
-                                                                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 dark:border-blue-400"></div>
-                                                                            </div>
-                                                                        )}
-
-                                                                        <div className="font-medium text-sm text-primary dark:text-primary">
-                                                                            {product.productName}
-                                                                        </div>
-                                                                        <div className="text-xs text-tertiary dark:text-tertiary mt-0.5 flex gap-3">
-                                                                            {product.barcode && <span>{t("salesInvoice.form.gridSection.prodDetailsLabels.barcodeLabels")}: {product.barcode}</span>}
-                                                                            {product.partNo && <span>{t("salesInvoice.form.gridSection.prodDetailsLabels.partNo")}: {product.partNo}</span>}
-                                                                            {product.unitName && <span>{t("salesInvoice.form.gridSection.prodDetailsLabels.unit")}: {product.unitName}</span>}
-                                                                            {product.purchasePrice && (
-                                                                                <span className="text-green-600 dark:text-green-400 font-medium">
-                                                                                    {Number(product.purchasePrice).toFixed(generalSettings.decimalPart)}
-                                                                                </span>
+                                                                saleSettings?.ProductLookUpModel === 'Table' ? (
+                                                                    // ── Table mode (mirrors SalesInvoiceTable) ──────────────────
+                                                                    <table className="w-full border-collapse text-xs">
+                                                                        <thead className="sticky top-0 bg-gray-200 dark:bg-gray-700 z-10">
+                                                                            <tr>
+                                                                                <th className="px-2 py-1.5 text-left font-semibold border-b border-themed dark:border-themed w-[28px]">#</th>
+                                                                                <th className="px-2 w-[300px] py-1.5 text-left font-semibold border-b border-themed dark:border-themed">
+                                                                                    {t("salesInvoice.form.gridSection.columns.ProdName") || "Product Name"}
+                                                                                </th>
+                                                                                <th className="px-2 py-1.5 text-left font-semibold border-b border-themed dark:border-themed w-[80px]">
+                                                                                    {t("salesInvoice.form.gridSection.prodDetailsLabels.productCode") || "Code"}
+                                                                                </th>
+                                                                                <th className="px-2 py-1.5 text-left font-semibold border-b border-themed dark:border-themed w-[90px]">
+                                                                                    {t("salesInvoice.form.gridSection.prodDetailsLabels.barcodeLabels") || "Barcode"}
+                                                                                </th>
+                                                                                {suggestions[row.id].some(p => p.partNo) && (
+                                                                                    <th className="px-2 py-1.5 text-left font-semibold border-b border-themed dark:border-themed w-[80px]">
+                                                                                        {t("salesInvoice.form.gridSection.prodDetailsLabels.partNo") || "Part No"}
+                                                                                    </th>
+                                                                                )}
+                                                                                <th className="px-2 py-1.5 text-left font-semibold border-b border-themed dark:border-themed w-[60px]">
+                                                                                    {t("salesInvoice.form.gridSection.prodDetailsLabels.unit") || "Unit"}
+                                                                                </th>
+                                                                                <th className="px-2 py-1.5 text-left font-semibold border-b border-themed dark:border-themed w-[160px]">
+                                                                                    Stock
+                                                                                </th>
+                                                                                <th className="px-2 py-1.5 text-right font-semibold border-b border-themed dark:border-themed w-[80px]">
+                                                                                    {t("purchaseInvoice.form.gridSection.columns.purchaseRate") || "Purchase Rate"}
+                                                                                </th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {suggestions[row.id].map((product, idx) => (
+                                                                                <tr
+                                                                                    key={idx}
+                                                                                    data-suggestion-index={idx}
+                                                                                    onClick={() => {
+                                                                                        selectProduct(row.id, product, product.unitId);
+                                                                                        setSelectedSuggestionIndex(prev => ({ ...prev, [row.id]: -1 }));
+                                                                                    }}
+                                                                                    className={`cursor-pointer border-b border-themed dark:border-themed last:border-b-0 relative
+                                            ${selectedSuggestionIndex[row.id] === idx
+                                                                                            ? 'bg-[#4e23485f] dark:bg-blue-900 border-l-4 border-l-blue-600'
+                                                                                            : 'hover:bg-hover dark:hover:bg-hover'}
+                                            ${selectingProduct[row.id] ? 'opacity-50 pointer-events-none' : ''}`}
+                                                                                >
+                                                                                    <td className="px-2 py-1 text-tertiary dark:text-tertiary">{idx + 1}</td>
+                                                                                    <td className="px-2 py-1 font-medium text-primary dark:text-primary">
+                                                                                        {product.productName}
+                                                                                    </td>
+                                                                                    <td className="px-2 py-1 text-tertiary dark:text-tertiary">{product.productCode || '—'}</td>
+                                                                                    <td className="px-2 py-1 text-tertiary dark:text-tertiary">{product.barcode || '—'}</td>
+                                                                                    {suggestions[row.id].some(p => p.partNo) && (
+                                                                                        <td className="px-2 py-1 text-tertiary dark:text-tertiary">{product.partNo || '—'}</td>
+                                                                                    )}
+                                                                                    <td className="px-2 py-1 text-tertiary dark:text-tertiary">{product.unitName || '—'}</td>
+                                                                                    <td className="px-2 py-1">
+                                                                                        {Array.isArray(product.stock) && product.stock.length > 0 ? (
+                                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                                                                {product.stock.map((s, i) => {
+                                                                                                    const qty = parseFloat(s.currentStock) || 0;
+                                                                                                    const label = s.name || 'Unassigned';
+                                                                                                    const isNeg = qty < 0;
+                                                                                                    return (
+                                                                                                        <span
+                                                                                                            key={i}
+                                                                                                            style={{
+                                                                                                                fontSize: '11px',
+                                                                                                                padding: '2px 7px',
+                                                                                                                borderRadius: '99px',
+                                                                                                                background: isNeg ? '#FCEBEB' : '#EAF3DE',
+                                                                                                                color: isNeg ? '#A32D2D' : '#3B6D11',
+                                                                                                                fontWeight: 500,
+                                                                                                                whiteSpace: 'nowrap',
+                                                                                                                display: 'inline-block',
+                                                                                                            }}
+                                                                                                        >
+                                                                                                            {label}: {qty}
+                                                                                                        </span>
+                                                                                                    );
+                                                                                                })}
+                                                                                            </div>
+                                                                                        ) : '—'}
+                                                                                    </td>
+                                                                                    <td className="px-2 py-1 text-right text-green-600 dark:text-green-400 font-medium">
+                                                                                        {getDisplayPrice(product) > 0
+                                                                                            ? getDisplayPrice(product).toFixed(generalSettings.decimalPart)
+                                                                                            : '—'}
+                                                                                    </td>
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                ) : (
+                                                                    // ── List mode (mirrors SalesInvoiceTable) ───────────────────
+                                                                    suggestions[row.id].map((product, idx) => (
+                                                                        <div
+                                                                            key={idx}
+                                                                            data-suggestion-index={idx}
+                                                                            onClick={() => {
+                                                                                selectProduct(row.id, product, product.unitId);
+                                                                                setSelectedSuggestionIndex(prev => ({ ...prev, [row.id]: -1 }));
+                                                                            }}
+                                                                            className={`px-1 py-1 cursor-pointer border-b border-themed dark:border-themed last:border-b-0 relative
+                                    ${selectedSuggestionIndex[row.id] === idx
+                                                                                    ? 'bg-[#4e23485f] dark:bg-blue-900 border-l-4 border-l-blue-600'
+                                                                                    : 'hover:bg-hover dark:hover:bg-hover'}
+                                    ${selectingProduct[row.id] ? 'opacity-50 pointer-events-none' : ''}`}
+                                                                        >
+                                                                            {selectingProduct[row.id] && selectedSuggestionIndex[row.id] === idx && (
+                                                                                <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50">
+                                                                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 dark:border-blue-400"></div>
+                                                                                </div>
                                                                             )}
+                                                                            <div className="font-bold text-sm text-primary dark:text-primary">
+                                                                                {product.productName}
+                                                                            </div>
+                                                                            <div className="text-xs text-tertiary dark:text-tertiary mt-0.5 flex gap-3 flex-wrap">
+                                                                                {product.productCode && (
+                                                                                    <span>
+                                                                                        {t("salesInvoice.form.gridSection.prodDetailsLabels.productCode")}: {product.productCode}
+                                                                                    </span>
+                                                                                )}
+                                                                                {product.barcode && (
+                                                                                    <span>
+                                                                                        {t("salesInvoice.form.gridSection.prodDetailsLabels.barcodeLabels")}: {product.barcode}
+                                                                                    </span>
+                                                                                )}
+                                                                                {product.partNo && (
+                                                                                    <span>
+                                                                                        {t("salesInvoice.form.gridSection.prodDetailsLabels.partNo")}: {product.partNo}
+                                                                                    </span>
+                                                                                )}
+                                                                                {product.unitName && (
+                                                                                    <span>
+                                                                                        {t("salesInvoice.form.gridSection.prodDetailsLabels.unit")}: {product.unitName}
+                                                                                    </span>
+                                                                                )}
+                                                                                {getDisplayPrice(product) > 0 && (
+                                                                                    <span className="text-green-600 dark:text-green-400 font-medium">
+                                                                                        {getDisplayPrice(product).toFixed(generalSettings.decimalPart)}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                            {renderStockBadges(product)}
                                                                         </div>
-                                                                    </div>
-                                                                ))
+                                                                    ))
+                                                                )
                                                             ) : (
                                                                 <div className="px-3 py-2 text-sm text-muted dark:text-muted text-center">
                                                                     No Product Found
@@ -1367,63 +1565,44 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                     )}
                                                 </div>
                                             )}
-                                            {shoBottomDeailsOnRow && (
-                                                row.productName && (row.productDetails.barcode || row.productDetails.partNo || row.productDetails.brand) && (
-                                                    <div className='flex justify-between'>
-                                                        <div className="mt-1 text-xs text-tertiary dark:text-tertiary space-y-0.5">
-                                                            {(row.productDetails.barcode || row.productDetails.partNo) && (
+                                            {row.productName && (
+                                                <div className='flex justify-between'>
+                                                    <div className="mt-1 text-xs text-tertiary dark:text-tertiary space-y-0.5">
+                                                        {shoBottomDeailsOnRow && (row.productDetails.barcode || row.productDetails.partNo || row.productDetails.brand) && (
+                                                            (row.productDetails.barcode || row.productDetails.partNo) && (
                                                                 <div className="flex gap-3 flex-wrap">
-                                                                    {row.productDetails.barcode && (
-                                                                        <span>
-                                                                            <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.barcodeLabels")}:</span> {row.productDetails.barcode}
-                                                                        </span>
-                                                                    )}
-                                                                    {(row.productDetails.partNo && purchaseSettings?.ShowPartNo) && (
-                                                                        <span>
-                                                                            <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.partNo")}:</span> {row.productDetails.partNo}
-                                                                        </span>
-                                                                    )}
-                                                                    {row.productDetails.mrp && (
-                                                                        <span>
-                                                                            <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.mrp")}:</span> {row.productDetails.mrp}
-                                                                        </span>
-                                                                    )}
+                                                                    {row.productDetails.barcode && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.barcodeLabels")}:</span> {row.productDetails.barcode}</span>}
+                                                                    {row.productDetails.partNo && saleSettings.ShowPartNo && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.partNo")}:</span> {row.productDetails.partNo}</span>}
+                                                                    {row.productDetails.mrp && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.mrp")}:</span> {row.productDetails.mrp}</span>}
                                                                     <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.unit")} :{row.productDetails.UnitName}</span>
-                                                                    {(row.productDetails.purchase && purchaseSettings?.showPurchaserate) && (
+                                                                    {row.productDetails.purchase && saleSettings.showPurchaserate && (
                                                                         <div className="flex gap-3">
-                                                                            <span>
-                                                                                <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.purchase")}:</span> {row.productDetails.purchase}
-                                                                            </span>
-
-                                                                            {row.productDetails.brand && (
-                                                                                <span>
-                                                                                    <span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.brand")}:</span> {row.productDetails.brand}
-                                                                                </span>
-                                                                            )}
+                                                                            <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.purchase")}:</span> {row.productDetails.purchase}</span>
+                                                                            {row.productDetails.brand && <span><span className="font-medium">{t("salesInvoice.form.gridSection.prodDetailsLabels.brand")}:</span> {row.productDetails.brand}</span>}
                                                                         </div>
                                                                     )}
                                                                 </div>
-                                                            )}
-
-                                                            {(row.productDetails.productDescription && purchaseSettings?.showProductDescription) && (
-                                                                <p className="text-muted dark:text-muted leading-tight">
-                                                                    {t("salesInvoice.form.gridSection.prodDetailsLabels.desc")}: {row.productDetails.productDescription}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        {(purchaseSettings?.showProductDescription) && (
-                                                            <div className='cursor-pointer'>
-                                                                <EllipsisVertical
-                                                                    onClick={() => {
-                                                                        setSelectedProductCode(row.productDetails.productCode);
-                                                                        setEditProductModalOpen(true);
-                                                                    }}
-                                                                    className="text-secondary dark:text-secondary"
-                                                                />
-                                                            </div>
+                                                            )
+                                                        )}
+                                                        {row.productDetails.productDescription && saleSettings.showProductDescription && (
+                                                            <p className="text-muted dark:text-muted leading-tight">
+                                                                {t("salesInvoice.form.gridSection.prodDetailsLabels.desc")}: {row.productDetails.productDescription}
+                                                            </p>
                                                         )}
                                                     </div>
-                                                )
+                                                    {saleSettings.showProductDescription && (
+                                                        <div className='cursor-pointer'>
+                                                            <EllipsisVertical
+                                                                onClick={() => {
+                                                                    setSelectedProductCode(row.productDetails.productCode);
+                                                                    setSelectedRowIdForEdit(row.id);
+                                                                    setEditProductModalOpen(true);
+                                                                }}
+                                                                className="text-secondary dark:text-secondary"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
                                         </td>
                                         <td className="p-0.2 border border-themed dark:border-themed">
@@ -1475,12 +1654,12 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                     const selectedUnitId = parseInt(e.target.value);
 
                                                     const productWithUnit = allProducts.find(
-                                                        (p) => p.productCode === row.productCode && p.unitId === selectedUnitId
+                                                        (p) => p.productCode === row.productCode && (p.unitId || p.unitid) === selectedUnitId
                                                     );
 
                                                     if (productWithUnit) {
                                                         const selectedUnit = row.availableUnits?.find(
-                                                            (u) => u.unitId === selectedUnitId
+                                                            (u) => (u.unitId || u.unitid) === selectedUnitId
                                                         );
 
                                                         let updatedRow = {
@@ -1492,7 +1671,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                             productDetails: {
                                                                 ...row.productDetails,
                                                                 barcode: productWithUnit.barcode || row.productDetails.barcode,
-                                                                UnitName: selectedUnit?.unitName || selectedUnit?.unitname || productWithUnit.unitName || row.productDetails.UnitName,
+                                                                UnitName: selectedUnit?.unitName || selectedUnit?.unitname || selectedUnit?.UnitName || productWithUnit.unitName || row.productDetails.UnitName,
                                                             },
                                                         };
 
@@ -1508,8 +1687,8 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                 className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded  disabled:text-gray-500 disabled:cursor-not-allowed"
                                             >
                                                 {row.availableUnits?.map((unit) => (
-                                                    <option key={unit.unitId} value={unit.unitId}>
-                                                        {unit.unitName || unit.unitname}
+                                                    <option key={unit.unitId || unit.unitid} value={unit.unitId || unit.unitid}>
+                                                        {unit.unitName || unit.unitname || unit.UnitName}
                                                     </option>
                                                 ))}
                                             </select>
@@ -1558,7 +1737,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                                     handleInputChange(
                                                         row.id,
                                                         'rate',
-                                                        num.toFixed(decimalPart)
+                                                        num
                                                     );
                                                 }}
                                                 onKeyDown={(e) => handleKeyDown(e, row.id, 'rate')}
@@ -1681,7 +1860,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                                             )}
                                         </td>
 
-                                        {generalSettings?.ActivateTax && (
+                                        {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                             <>
                                                 <td className="p-0.2 border border-themed dark:border-themed">
                                                     <select
@@ -1784,11 +1963,17 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
             </div>
             <EditProuctDetailsModal
                 open={editProductModalOpen}
-                handleClose={() => setEditProductModalOpen(false)}
-                productCode={selectedProductCode}
-                onSuccess={(updatedDescription) => {
-                    handleProductUpdate(selectedProductCode, updatedDescription);
+                handleClose={() => {
+                    setEditProductModalOpen(false);
+                    setSelectedRowIdForEdit(null);
+                    if (focusedRowId) focusInput(focusedRowId, 'productName');
                 }}
+                productCode={selectedProductCode}
+                initialDescription={
+                    rows.find(r => r.id === selectedRowIdForEdit)
+                        ?.productDetails?.productDescription || ''
+                }
+                onSuccess={(updatedDescription) => handleProductUpdate(selectedRowIdForEdit, updatedDescription)}
             />
             <PurchaseInvoiceFooterSection
                 totals={totals}
@@ -1797,7 +1982,7 @@ const PurchaseInvoiceTable = ({ godowns, formData, setFormData, editMode, rows: 
                 otherChargeLedgers={otherChargeLedgers}
                 cash={cash}
                 bank={bank}
-                getCurrentProductCode={getCurrentProductCode}  
+                getCurrentProductCode={getCurrentProductCode}
             />
             <ProductFormModal
                 open={productModalOpen}

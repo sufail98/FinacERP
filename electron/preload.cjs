@@ -2,40 +2,50 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+
+
 contextBridge.exposeInMainWorld('electronAPI', {
-   openExternal: (url) => ipcRenderer.send('open-external', url),
+  openExternal: (url) => ipcRenderer.send('open-external', url),
+  clearAppDataAndReload: () => ipcRenderer.invoke('clear-app-data-and-reload'),
   // ============================================
   // Printer APIs (Your existing code)
   // ============================================
   getPrinters: () => ipcRenderer.invoke('get-printers'),
   getDefaultPrinter: () => ipcRenderer.invoke('get-default-printer'),
-  savePrinterPreference: (type, printerName) => 
+  savePrinterPreference: (type, printerName) =>
     ipcRenderer.invoke('save-printer-preference', { type, printerName }),
-  getPrinterPreference: (type) => 
+  getPrinterPreference: (type) =>
     ipcRenderer.invoke('get-printer-preference', type),
-  printSilent: (html, printerName, printType) => 
+  printSilent: (html, printerName, printType) =>
     ipcRenderer.invoke('print-silent', { html, printerName, printType }),
-  printDialog: (html, printType) => 
-    ipcRenderer.invoke('print-dialog', { html, printType }),
- savePDF: async (htmlContent, filename) => {
-        return await ipcRenderer.invoke('save-pdf', htmlContent, filename);
-    },
+  printDialog: (html, printType, pageSize) =>
+    ipcRenderer.invoke('print-dialog', { html, printType, pageSize }),
+  savePDF: async (htmlContent, filename) => {
+    return await ipcRenderer.invoke('save-pdf', htmlContent, filename);
+  },
+  saveFileBase64: async (dataUrl, filename) => {
+    return await ipcRenderer.invoke('save-file-base64', { dataUrl, filename });
+  },
+      getComputerName: () => ipcRenderer.invoke('get-computer-name'),
+  renderHtmlToPdfBuffer: async (htmlContent) => {
+    return await ipcRenderer.invoke('render-html-to-pdf-buffer', htmlContent);
+  },
   // ============================================
   // File System APIs
   // ============================================
-  saveFileDialog: (defaultPath, filters) => 
+  saveFileDialog: (defaultPath, filters) =>
     ipcRenderer.invoke('save-file-dialog', { defaultPath, filters }),
-  openFileDialog: (filters, properties) => 
+  openFileDialog: (filters, properties) =>
     ipcRenderer.invoke('open-file-dialog', { filters, properties }),
 
   // ============================================
   // Barcode Scanner APIs
   // ============================================
-  registerBarcodeListener: () => 
+  registerBarcodeListener: () =>
     ipcRenderer.send('register-barcode-listener'),
-  onBarcodeScanned: (callback) => 
+  onBarcodeScanned: (callback) =>
     ipcRenderer.on('barcode-scanned', (event, barcode) => callback(barcode)),
-  removeBarcodeListener: () => 
+  removeBarcodeListener: () =>
     ipcRenderer.removeAllListeners('barcode-scanned'),
 
   // ============================================
@@ -47,7 +57,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ============================================
   // ✅ NEW: Auto Update APIs
   // ============================================
-  
+
   // Actions
   checkForUpdates: () => ipcRenderer.invoke('updater-check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('updater-download-update'),
@@ -84,7 +94,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update-error', handler);
     return () => ipcRenderer.removeListener('update-error', handler);
   },
-
+printEplLabels: (payload) => ipcRenderer.invoke('print-epl-labels', payload),
   // Platform check
   platform: process.platform,
   isElectron: true,

@@ -41,45 +41,49 @@ const UserDropdown = ({ isOpen, onToggle }) => {
     
     const { updateAvailable, downloaded, updateInfo, installUpdate } = updateState;
 
-    const handleLogout = async () => {
-        if (onToggle) onToggle();
+  const handleLogout = async () => {
+    if (onToggle) onToggle();
 
-        const result = await Swal.fire({
-            title: t("logout.title"),
-            text: "",
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonColor: "#3085d6",
-            cancelButtonColor: "#d33",
-            confirmButtonText: t("logout.confirmButtonText"),
-            cancelButtonText: t("logout.cancelButtonText"),
-        });
+    const result = await Swal.fire({
+        title: t("logout.title"),
+        text: "",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#3085d6",
+        cancelButtonColor: "#d33",
+        confirmButtonText: t("logout.confirmButtonText"),
+        cancelButtonText: t("logout.cancelButtonText"),
+    });
 
-        if (!result.isConfirmed) return;
+    if (!result.isConfirmed) return;
 
-        Swal.fire({
-            title: t("loadingText") || "Logging out...",
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
-        try {
-            await axiosInstance.post('logout');
-        } catch (error) {
-            console.error('Logout API error:', error);
+    Swal.fire({
+        title: t("loadingText") || "Logging out...",
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
         }
+    });
 
-        dispatch(logoutAction());
-        // localStorage.clear();
-        // sessionStorage.clear();
-        clearMenuData();
-        
-        Swal.close();
+    try {
+        await axiosInstance.post('logout');
+    } catch (error) {
+        console.error('Logout API error:', error);
+    }
 
-        window.location.href = window.location.origin + window.location.pathname + '#/login';
-    };
+    dispatch(logoutAction());
+    clearMenuData();
+
+    Swal.close();
+
+    // ✅ Capture current path (ignore if already on login) and pass as redirect query
+    const currentPath = window.location.hash.replace('#', '') || '/';
+    const redirectParam = currentPath && currentPath !== '/login'
+        ? `?redirect=${encodeURIComponent(currentPath)}`
+        : '';
+
+    window.location.href = window.location.origin + window.location.pathname + `#/login${redirectParam}`;
+};
 
     const handleMenuItemClick = (action) => {
         if (onToggle) onToggle();

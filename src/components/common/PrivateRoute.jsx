@@ -68,32 +68,38 @@ const PrivateRoute = ({ children }) => {
       }
     });
   };
-
-  const checkAuth = async () => {
-    try {
-      const response = await axiosInstance.get('check-auth');
-      if (response.status === 200 && response.data.data?.isLoggedIn === true) {
-        setIsAuthenticated(true);
-      } else if (response.status === 200 && response.data.data?.isLoggedIn === false) {
-        handleLogout();
-      } else {
-        // showNetworkAlert();
-        handleLogout();
-
-      }
-    } catch (error) {
-      console.error('Authentication check failed:', error);
+const checkAuth = async () => {
+  try {
+    const response = await axiosInstance.get('check-auth');
+    if (response.status === 200 && response.data.data?.isLoggedIn === true) {
+      setIsAuthenticated(true);
+    } else if (response.status === 200 && response.data.data?.isLoggedIn === false) {
       handleLogout();
-
     }
-  };
+    // else: unexpected shape/status — don't logout, just skip this cycle
+  } catch (error) {
+    console.error('Authentication check failed:', error);
+    // Only logout on actual auth failure (401/403), not network errors
+    if (error.response && [401, 403].includes(error.response.status)) {
+      handleLogout();
+    }
+    // network/timeout errors: silently retry next interval, don't kick the user out
+  }
+};
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    clearInterval(intervalRef.current);
+const handleLogout = () => {
+  setIsAuthenticated(false);
+  clearInterval(intervalRef.current);
+
+  // Give active forms a chance to auto-hold their data
+  window.dispatchEvent(new CustomEvent('app:force-logout'));
+
+  // Delay navigation slightly so listeners can synchronously hold data
+  setTimeout(() => {
     localStorage.removeItem('authToken');
     navigate('/login');
-  };
+  }, 50);
+};
 
   useEffect(() => {
     if (!token) {

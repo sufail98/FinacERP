@@ -30,6 +30,54 @@ const SalesPriceTable = ({
     const initializedRef = useRef(false);
     const [focusedField, setFocusedField] = useState(null);
 
+    // ── NEW: checkbox state ──────────────────────────────────────────────────
+    const [checkedRows, setCheckedRows] = useState({});
+
+    const activeRowIds = salePriceRows.filter(r => !r.deleted).map(r => r.id);
+    const allChecked = activeRowIds.length > 0 && activeRowIds.every(id => checkedRows[id]);
+    const someChecked = activeRowIds.some(id => checkedRows[id]);
+
+    const toggleAll = () => {
+        const next = {};
+        if (!allChecked) activeRowIds.forEach(id => { next[id] = true; });
+        setCheckedRows(next);
+    };
+
+    const toggleRow = (id) => setCheckedRows(prev => ({ ...prev, [id]: !prev[id] }));
+
+    // Source row = first non-deleted row that has a salesPrice > 0
+    const sourceRow = salePriceRows.find(r => !r.deleted && parseFloat(r.salesPrice) > 0);
+
+   useEffect(() => {
+    if (!sourceRow) return;
+    const checkedIds = Object.keys(checkedRows).filter(id => checkedRows[id]).map(Number);
+    if (checkedIds.length === 0) return;
+
+    const updatedRows = salePriceRows.map(row => {
+        if (!checkedRows[row.id] || row.id === sourceRow.id || row.deleted) return row;
+
+        const mrp = parseFloat(sourceRow.mrp) || 0;  // ✅ use sourceRow's mrp
+        const sp = parseFloat(sourceRow.salesPrice) || 0;
+        const discAmount = mrp > 0 ? (mrp - sp).toFixed(dp) : '0';
+        const discPercent = mrp > 0 ? ((parseFloat(discAmount) / mrp) * 100).toFixed(dp) : '0';
+
+        return {
+            ...row,
+            mrp: sourceRow.mrp,           // ✅ ADD THIS - copy mrp
+            salesPrice: sourceRow.salesPrice,
+            discAmount,
+            discPercent,
+            lowestSellingPrice: row.lowestSellingPrice || sourceRow.lowestSellingPrice,
+        };
+    });
+
+    isInternalUpdate.current = true;
+    setSalePriceRows(updatedRows);
+    if (onDataChange) onDataChange(updatedRows);
+}, [sourceRow?.salesPrice, sourceRow?.mrp, sourceRow?.id, JSON.stringify(checkedRows)]);
+//                        ^^^^^^^^^^^^^^ ✅ ADD THIS dependency
+    // ── END NEW ──────────────────────────────────────────────────────────────
+
     // Derive the tax objects that are currently selected
     const activeTaxes = (taxList || []).filter(t =>
         (selectedTaxIds || []).some(id => id?.toString() === t.taxId?.toString())
@@ -42,10 +90,8 @@ const SalesPriceTable = ({
         const sp = parseFloat(row.salesPrice) || 0;
         const rate = parseFloat(taxObj?.rate) || 0;
         if (taxType === 'Excluded') {
-            // Add tax on top
             return (sp + (sp * rate) / 100).toFixed(dp);
         } else {
-            // Already includes tax — same price
             return sp.toFixed(dp);
         }
     };
@@ -77,7 +123,6 @@ const SalesPriceTable = ({
             const mrp = parseFloat(row.mrp) || 0;
             let updatedRow = { ...row, salesPrice: calculatedSalesPrice };
 
-            // Recalculate discount fields if mrp is set
             if (mrp > 0) {
                 const discAmount = (mrp - parseFloat(calculatedSalesPrice)).toFixed(dp);
                 const discPercent = ((parseFloat(discAmount) / mrp) * 100).toFixed(dp);
@@ -178,6 +223,18 @@ const SalesPriceTable = ({
     const hasRowData = (row) =>
         row.branchId || row.unit || row.pricingLevel || row.mrp || row.discPercent || row.discAmount || row.salesPrice || row.lowestSellingPrice;
 
+    const sanitizeAmountInput = (value) => {
+        if (value === null || value === undefined) return '';
+        if (typeof value !== 'string') return String(value);
+
+        const cleaned = value.replace(/[^\d.]/g, '');
+        const parts = cleaned.split('.');
+        if (parts.length > 2) {
+            return `${parts[0]}.${parts.slice(1).join('')}`;
+        }
+        return cleaned;
+    };
+
     const shouldAddNewRow = (updatedRows) => {
         const activeRows = updatedRows.filter(row => !row.deleted);
         if (activeRows.length === 0) return false;
@@ -185,9 +242,12 @@ const SalesPriceTable = ({
     };
 
     const handleSalePriceChange = (id, field, value) => {
+        const numericFields = ['mrp', 'discPercent', 'discAmount', 'salesPrice', 'lowestSellingPrice'];
+        const sanitizedValue = numericFields.includes(field) ? sanitizeAmountInput(value) : value;
+
         const updatedRows = salePriceRows.map(row => {
             if (row.id !== id) return row;
-            let updatedRow = { ...row, [field]: value };
+            let updatedRow = { ...row, [field]: sanitizedValue };
             const mrp = parseFloat(updatedRow.mrp) || 0;
             const discPercent = parseFloat(updatedRow.discPercent) || 0;
             const discAmount = parseFloat(updatedRow.discAmount) || 0;
@@ -234,8 +294,8 @@ const SalesPriceTable = ({
             salespriceId: null, id: newId,
             branchId: singleBranchId || '', unit: defaultUnit,
             pricingLevel: defaultPricingLevelId,
-            mrp: '', discPercent: '', discAmount: '',
-            salesPrice: '', lowestSellingPrice: '', deleted: false
+            mrp: '0', discPercent: '0', discAmount: '0',
+            salesPrice: '0', lowestSellingPrice: '0', deleted: false
         }];
         setSalePriceRows(updatedRows);
         if (onDataChange) onDataChange(updatedRows);
@@ -243,6 +303,8 @@ const SalesPriceTable = ({
 
     const removeSalePriceRow = (id) => {
         const updatedRows = salePriceRows.map(row => row.id === id ? { ...row, deleted: true } : row);
+        // Also uncheck deleted row
+        setCheckedRows(prev => { const next = { ...prev }; delete next[id]; return next; });
         setSalePriceRows(updatedRows);
         if (onDataChange) onDataChange(updatedRows);
     };
@@ -275,7 +337,6 @@ const SalesPriceTable = ({
                 </div>
             )}
 
-            {/* Tax type legend */}
             {activeTaxes.length > 0 && (
                 <div className="mb-2 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                     <span className="font-medium">Tax columns:</span>
@@ -292,6 +353,19 @@ const SalesPriceTable = ({
                     <table className="w-full min-w-[200px]">
                         <thead className="bg-gray-50 dark:bg-[#2c2c2c]">
                             <tr>
+                                {/* ── Checkbox header ── */}
+                                <th className="px-2 py-2 w-8 text-center border-r border-gray-300 dark:border-gray-600">
+                                    <input
+                                        type="checkbox"
+                                        checked={allChecked}
+                                        ref={el => { if (el) el.indeterminate = someChecked && !allChecked; }}
+                                        onChange={toggleAll}
+                                        disabled={viewMode}
+                                        title="Select all rows"
+                                        className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer disabled:cursor-not-allowed"
+                                    />
+                                </th>
+
                                 {!isSingleBranch && (
                                     <th className={`${thCls} min-w-[120px]`}>{t("product.tables.branch")}</th>
                                 )}
@@ -303,7 +377,6 @@ const SalesPriceTable = ({
                                 <th className={`${thCls} min-w-[70px]`}>{t("product.tables.salesPrice")}</th>
                                 <th className={`${thCls} min-w-[100px]`}>Lowest Selling Price</th>
 
-                                {/* Dynamic tax columns */}
                                 {activeTaxes.map(tax => (
                                     <th
                                         key={tax.taxId}
@@ -330,8 +403,29 @@ const SalesPriceTable = ({
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
                             {activeRows.map((row) => {
                                 const isDuplicate = duplicateRows.has(row.id);
+                                const isChecked = !!checkedRows[row.id];
                                 return (
-                                    <tr key={row.id} className={isDuplicate ? 'bg-red-50 dark:bg-red-900/10' : ''}>
+                                    <tr
+                                        key={row.id}
+                                        className={
+                                            isDuplicate
+                                                ? 'bg-red-50 dark:bg-red-900/10'
+                                                : isChecked
+                                                    ? 'bg-teal-50/60 dark:bg-teal-900/10'
+                                                    : ''
+                                        }
+                                    >
+                                        {/* ── Checkbox cell ── */}
+                                        <td className="px-2 py-1 border-r border-gray-300 dark:border-gray-600 text-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={() => toggleRow(row.id)}
+                                                disabled={viewMode}
+                                                className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer disabled:cursor-not-allowed"
+                                            />
+                                        </td>
+
                                         {!isSingleBranch && (
                                             <td className={cellCls}>
                                                 <NormalSelectInput
@@ -392,7 +486,8 @@ const SalesPriceTable = ({
                                                 value={formatDisplayValue(row.discPercent, 'discPercent', row.id)}
                                                 onChange={(e) => handleSalePriceChange(row.id, 'discPercent', e.target.value)}
                                                 placeholder={t("product.placeholders.discPercent")}
-                                                className={`${inputCls} ${!parseFloat(row.salesPrice) && !viewMode ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : ''}`} readOnly={viewMode || !parseFloat(row.salesPrice)} />
+                                                className={`${inputCls} ${!parseFloat(row.salesPrice) && !viewMode ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : ''}`}
+                                                readOnly={viewMode || !parseFloat(row.salesPrice)} />
                                         </td>
                                         <td className={cellCls}>
                                             <input type="text" inputMode="decimal"
@@ -401,8 +496,8 @@ const SalesPriceTable = ({
                                                 value={formatDisplayValue(row.discAmount, 'discAmount', row.id)}
                                                 onChange={(e) => handleSalePriceChange(row.id, 'discAmount', e.target.value)}
                                                 placeholder={t("product.placeholders.discAmount")}
-                                                className={`${inputCls} ${!parseFloat(row.salesPrice) && !viewMode ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : ''}`} readOnly={viewMode || !parseFloat(row.salesPrice)}
-                                            />
+                                                className={`${inputCls} ${!parseFloat(row.salesPrice) && !viewMode ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : ''}`}
+                                                readOnly={viewMode || !parseFloat(row.salesPrice)} />
                                         </td>
                                         <td className={cellCls}>
                                             <input type="text" inputMode="decimal"
@@ -424,12 +519,8 @@ const SalesPriceTable = ({
                                                 readOnly={viewMode || !parseFloat(row.salesPrice)} />
                                         </td>
 
-                                        {/* Dynamic tax value cells — read-only computed */}
                                         {activeTaxes.map(tax => (
-                                            <td
-                                                key={tax.taxId}
-                                                className={`${cellCls} bg-teal-50/50 dark:bg-teal-900/5`}
-                                            >
+                                            <td key={tax.taxId} className={`${cellCls} bg-teal-50/50 dark:bg-teal-900/5`}>
                                                 <span className="block p-1 text-xs text-teal-700 dark:text-teal-300 font-medium tabular-nums">
                                                     {computeWithTax(row, tax)}
                                                 </span>

@@ -16,8 +16,8 @@ import useAuth from '@/redux/hook/auth/useAuth'
 const CurrencyConvertionList = () => {
     const { generalSettings } = useSelector((state) => state.settings);
 
-const formatDecimal = (value) =>
-  Number(value || 0).toFixed(generalSettings.decimalPart);
+    const formatDecimal = (value) =>
+        Number(value || 0).toFixed(generalSettings.decimalPart);
     const [open, setOpen] = useState(false);
     const [alert, setAlert] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -104,31 +104,31 @@ const formatDecimal = (value) =>
     };
 
     const getData = async () => {
-    setLoading(true);
-    try {
-        const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+        setLoading(true);
+        try {
+            const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
 
-        const formattedData = response.data.data.map((item, index) => ({
-            ...item,
-            SNo: index + 1,
+            const formattedData = response.data.data.map((item, index) => ({
+                ...item,
+                SNo: index + 1,
 
-            // ✅ Remove 00:00:00
-           date: formatDate(item.date),
-            // ✅ Show only 2 decimal places
-            rate: item.rate !== null && item.rate !== undefined
-    ? formatDecimal(item.rate)
-    : formatDecimal(0),
-        }));
+                // ✅ Remove 00:00:00
+                date: formatDate(item.date),
+                // ✅ Show only 2 decimal places
+                rate: item.rate !== null && item.rate !== undefined
+                    ? formatDecimal(item.rate)
+                    : formatDecimal(0),
+            }));
 
-        setData(formattedData);
+            setData(formattedData);
 
-    } catch (error) {
-        console.error(error);
-        setAlert({ key: new Date(), type: "error", message: t("fetchError") });
-    } finally {
-        setLoading(false);
-    }
-};
+        } catch (error) {
+            console.error(error);
+            setAlert({ key: new Date(), type: "error", message: t("fetchError") });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleDelete = async (id) => {
         if (!privileges?.can_delete) {

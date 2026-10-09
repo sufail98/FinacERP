@@ -33,7 +33,10 @@ const FormSectionMain = ({
   const { t } = useTranslation();
   const { generalSettings, saleSettings } = useSelector((state) => state.settings);
   const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
-  const { currentCurrency: currentCurrencyFromStore,currentFinancialYear } = useAuth();
+  const { currentCurrency: currentCurrencyFromStore, currentFinancialYear, selectedBranchDetails } = useAuth();
+  console.log(selectedBranchDetails);
+  const isMainBranch = selectedBranchDetails?.mainBranch;
+
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -101,6 +104,7 @@ const FormSectionMain = ({
               className="w-full"
               required
               error={errors.branchIdFrom}
+              disabled={!isMainBranch}
 
             />
             {saleSettings?.ActiveGodown === true && (

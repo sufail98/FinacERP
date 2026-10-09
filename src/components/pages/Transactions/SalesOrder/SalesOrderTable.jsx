@@ -54,8 +54,8 @@ const SalesOrderTable = ({ formData, setFormData, editMode, rows: propRows, setS
     const inputRefs = useRef({});
     const [isInitialized] = useState(false);
     const { salesProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products);
-const [pendingFocusRowId, setPendingFocusRowId] = useState(null);
-const [pendingFocusField, setPendingFocusField] = useState('qty');
+    const [pendingFocusRowId, setPendingFocusRowId] = useState(null);
+    const [pendingFocusField, setPendingFocusField] = useState('qty');
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState({});
     const [selectingProduct, setSelectingProduct] = useState({});
     const [productModalOpen, setProductModalOpen] = useState(false);
@@ -64,6 +64,8 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
     const dispatch = useDispatch();
     const [focusedRowId, setFocusedRowId] = useState(null);
     const [isTableFocused, setIsTableFocused] = useState(false);
+    const [selectedRowIdForEdit, setSelectedRowIdForEdit] = useState(null);
+    const [showPurchaseRate, setShowPurchaseRate] = useState({});
 
     const handleInputFocus = (rowId) => {
         setFocusedRowId(rowId);
@@ -297,15 +299,15 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
 
     // Update initial focus useEffect
     useEffect(() => {
-      if(!editMode) {
-          if (!productsLoading && allProducts?.length > 0) {
-            const timer = setTimeout(() => {
-                const focusField = saleSettings?.focusAfterSalesRate === 'barcode' ? 'barcode' : 'productName';
-                focusInput(1, focusField);
-            }, 100);
-            return () => clearTimeout(timer);
+        if (!editMode) {
+            if (!productsLoading && allProducts?.length > 0) {
+                const timer = setTimeout(() => {
+                    const focusField = saleSettings?.focusAfterSalesRate === 'barcode' ? 'barcode' : 'productName';
+                    focusInput(1, focusField);
+                }, 100);
+                return () => clearTimeout(timer);
+            }
         }
-      }
     }, [productsLoading, allProducts]);
 
     const getEditableColumns = () => {
@@ -455,11 +457,13 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                     focusInput(nextRowId, 'productName');
                 }
             } else {
-                addRow();
-                setTimeout(() => {
-                    const newRowId = rows.length + 1;
-                    focusInput(newRowId, 'productName');
-                }, 0);
+                if (currentRow.productCode && currentRow.productCode.trim() !== '') {
+                    addRow();
+                    setTimeout(() => {
+                        const newRowId = rows.length + 1;
+                        focusInput(newRowId, 'productName');
+                    }, 0);
+                }
             }
             return;
         }
@@ -555,11 +559,14 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                 if (currentRowIndex < rows.length - 1) {
                     targetRowId = rows[currentRowIndex + 1].id;
                 } else {
-                    addRow();
-                    setTimeout(() => {
-                        const newRowId = rows.length + 1;
-                        focusInput(newRowId, currentField);
-                    }, 0);
+                    const currentRow = rows[currentRowIndex];
+                    if (currentRow.productCode && currentRow.productCode.trim() !== '') {
+                        addRow();
+                        setTimeout(() => {
+                            const newRowId = rows.length + 1;
+                            focusInput(newRowId, currentField);
+                        }, 0);
+                    }
                     return;
                 }
                 break;
@@ -642,8 +649,8 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
             productNameArb: row.productNameArb || '',
             qty: row.qty || null,
             freeQty: row.freeQty || null,
-            rate: row.salesRateWithoutTax ? parseFloat(Number(row.salesRateWithoutTax).toFixed(4)) : null,
-            inclusiveRate: row.salesRate ? parseFloat(Number(row.salesRate).toFixed(2)) : null,
+            rate: row.salesRateWithoutTax ? parseFloat(Number(row.salesRateWithoutTax)) : null,
+            inclusiveRate: row.salesRate ? parseFloat(Number(row.salesRate)) : null,
             lineDiscountWithTax: row.lineDiscountWithTax || null,
             unitId: row.unit || null,
             unitName: row.productDetails?.UnitName || '',
@@ -762,13 +769,17 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
 
     useEffect(() => {
         const handleGlobalKeyDown = (e) => {
-
+            if (e.key === 'F4') {
+                e.preventDefault();
+                if (focusedRowId) setShowPurchaseRate(prev => ({ ...prev, [focusedRowId]: !prev[focusedRowId] }));
+            }
             if (e.ctrlKey && e.key === 'F2') {
                 e.preventDefault();
                 if (focusedRowId) {
                     const currentRow = rows.find(r => r.id === focusedRowId);
                     if (currentRow?.productCode) {
                         setSelectedProductCode(currentRow.productDetails?.productCode || currentRow.productCode);
+                        setSelectedRowIdForEdit(currentRow.id);
                         setEditProductModalOpen(true);
                     }
                 }
@@ -857,40 +868,40 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
         }
     };
 
-// AFTER
-useEffect(() => {
-  if (formData.orderDetails && formData.orderDetails.length > 0) {
-    let hasChanges = false;
-    const updatedRows = rows.map((row) => {
-      const detail = formData.orderDetails.find(
-        d => d.productCode === row.productCode && d.SlNo === row.sn
-      );
-      if (!detail) return row;
+    // AFTER
+    useEffect(() => {
+        if (formData.orderDetails && formData.orderDetails.length > 0) {
+            let hasChanges = false;
+            const updatedRows = rows.map((row) => {
+                const detail = formData.orderDetails.find(
+                    d => d.productCode === row.productCode && d.SlNo === row.sn
+                );
+                if (!detail) return row;
 
-      const billDiscChanged =
-        detail.billDiscOnProduct !== undefined &&
-        safeParsePrice(detail.billDiscOnProduct) !== safeParsePrice(row.billDiscOnProduct || 0);
+                const billDiscChanged =
+                    detail.billDiscOnProduct !== undefined &&
+                    safeParsePrice(detail.billDiscOnProduct) !== safeParsePrice(row.billDiscOnProduct || 0);
 
-      const otherChargeChanged =
-        detail.otherchargeonproduct !== undefined &&
-        safeParsePrice(detail.otherchargeonproduct) !== safeParsePrice(row.otherchargeonproduct || 0);
+                const otherChargeChanged =
+                    detail.otherchargeonproduct !== undefined &&
+                    safeParsePrice(detail.otherchargeonproduct) !== safeParsePrice(row.otherchargeonproduct || 0);
 
-      if (billDiscChanged || otherChargeChanged) {
-        hasChanges = true;
-        return calculateRow({
-          ...row,
-          billDiscOnProduct: safeParsePrice(detail.billDiscOnProduct),
-          otherchargeonproduct: safeParsePrice(detail.otherchargeonproduct)
-        });
-      }
-      return row;
-    });
+                if (billDiscChanged || otherChargeChanged) {
+                    hasChanges = true;
+                    return calculateRow({
+                        ...row,
+                        billDiscOnProduct: safeParsePrice(detail.billDiscOnProduct),
+                        otherchargeonproduct: safeParsePrice(detail.otherchargeonproduct)
+                    });
+                }
+                return row;
+            });
 
-    if (hasChanges) setRows(updatedRows);
-  }
-}, [formData.orderDetails]);
+            if (hasChanges) setRows(updatedRows);
+        }
+    }, [formData.orderDetails]);
 
-   const calculateRow = (row, updatedField = null) => {
+    const calculateRow = (row, updatedField = null) => {
         let gross, descAmt, netValue, taxAmt = 0, amount, descPercentage, salesRateWithoutTax = 0;
         const otherChargeOnProduct = parseFloat(row.otherchargeonproduct || 0);
         const qty = parseFloat(row.qty) || 0;
@@ -908,27 +919,25 @@ useEffect(() => {
                 return calculateRow({ ...row, salesRate: beforeTaxRate });
             }
 
-            const derivedSalesRate = generalSettings?.taxincluded === true
-                ? beforeTaxRate * taxMultiplier
-                : beforeTaxRate;
+            // beforeTax is always ex-tax, so always multiply up to get inclusive rate
+            const derivedSalesRate = Math.round(beforeTaxRate * taxMultiplier * 1e10) / 1e10;
 
-            return calculateRow({ ...row, salesRate: parseFloat(derivedSalesRate) });
+            return calculateRow({ ...row, salesRate: derivedSalesRate });
         }
-        // ← FIX: use stored salesRateWithoutTax when available,
-        //         back-calculate only when user is editing salesRate directly
-        // REPLACE the rateWithoutTax block in calculateRow
 
-        const rateWithoutTax = (row.salesRateWithoutTax && safeParsePrice(row.salesRateWithoutTax) > 0 && updatedField !== 'salesRate' && updatedField !== 'beforeTax')
+        const rateWithoutTax = (safeParsePrice(row.salesRateWithoutTax) > 0
+            && updatedField !== 'salesRate'
+            && updatedField !== 'beforeTax'
+            && updatedField !== 'amount')
             ? safeParsePrice(row.salesRateWithoutTax)
             : (!taxApplicable || taxMultiplier === 0)
                 ? salesRate
-                : (salesRate * 100) / (100 + taxPercentage);
+                : parseFloat(((salesRate * 100) / (100 + taxPercentage)));
 
         salesRateWithoutTax = safeParsePrice(rateWithoutTax);
-        salesRateWithoutTax = safeParsePrice(rateWithoutTax);
+
         if (updatedField === 'amount') {
             const inputAmount = parseFloat(row.amount) || 0;
-
             if (qty <= 0) return row;
 
             const existingDescAmt = parseFloat(row.descAmt) || 0;
@@ -955,16 +964,17 @@ useEffect(() => {
                 return {
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRate: parseFloat(calculatedSalesRate.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                    salesRate: parseFloat(calculatedSalesRate),
+                    // ✅ FIX: use freshly computed rateWithoutTaxCalc, not the stale outer rateWithoutTax
+                    salesRateWithoutTax: Math.round(rateWithoutTaxCalc * 1e10) / 1e10,
                     grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
-                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2))
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
-
             } else {
                 const netValueAfterBillDisc = inputAmount / taxMultiplier;
                 const netValueBeforeBillDisc = netValueAfterBillDisc + billDiscOnProduct - otherChargeOnProduct;
@@ -977,25 +987,28 @@ useEffect(() => {
 
                 netValue = netValueBeforeBillDisc;
                 gross = netValue + existingDescAmt;
-
-                netValue = netValueAfterBillDisc + billDiscOnProduct;
-                gross = netValue + existingDescAmt;
-                const calculatedSalesRate = qty > 0 ? gross / qty : 0;
-                salesRateWithoutTax = calculatedSalesRate;
                 descPercentage = gross > 0 ? (existingDescAmt / gross) * 100 : 0;
+
+                // ✅ FIX: name honestly as the ex-tax rate, derive the inclusive rate from it
+                const calculatedRateWithoutTax = qty > 0 ? gross / qty : 0;
+                const calculatedSalesRate = calculatedRateWithoutTax * taxMultiplier;
+                salesRateWithoutTax = calculatedRateWithoutTax;
 
                 return {
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRate: parseFloat(calculatedSalesRate.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                    // ✅ FIX: salesRate is now truly the inclusive rate
+                    salesRate: parseFloat(calculatedSalesRate),
+                    // ✅ FIX: use the freshly computed ex-tax rate, not the stale outer one
+                    salesRateWithoutTax: Math.round(calculatedRateWithoutTax * 1e10) / 1e10,
                     grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
                     billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
-                    otherchargeonproduct: parseFloat((parseFloat(row.otherchargeonproduct || 0)).toFixed(generalSettings?.decimalPart || 2)),
+                    otherchargeonproduct: parseFloat(otherChargeOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
             }
         }
@@ -1022,7 +1035,6 @@ useEffect(() => {
             }
 
             amount = netValueAfterBillDisc + taxAmt;
-
         } else {
             if (updatedField === 'descAmt') {
                 descAmt = parseFloat(row.descAmt) || 0;
@@ -1042,7 +1054,6 @@ useEffect(() => {
             }
 
             amount = netValueAfterBillDisc + taxAmt;
-            amount = netValueAfterBillDisc + taxAmt + otherChargeOnProduct;
         }
 
         return {
@@ -1053,9 +1064,10 @@ useEffect(() => {
             taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
             amount: parseFloat(amount.toFixed(generalSettings?.decimalPart || 2)),
             descAmt: parseFloat(descAmt.toFixed(generalSettings?.decimalPart || 2)),
-            salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+            salesRateWithoutTax: Math.round(rateWithoutTax * 1e10) / 1e10,
             billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
-            otherchargeonproduct: parseFloat((parseFloat(row.otherchargeonproduct || 0)).toFixed(generalSettings?.decimalPart || 2)),
+            otherchargeonproduct: parseFloat(otherChargeOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+            lineDiscountWithTax: taxApplicable ? parseFloat((descAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
         };
     };
 
@@ -1218,13 +1230,13 @@ useEffect(() => {
 
     const [pendingFocusBarcodeRowId, setPendingFocusBarcodeRowId] = useState(null);
     // Add this useEffect near the existing pendingFocusRowId useEffect
-useEffect(() => {
-    if (pendingFocusRowId !== null) {
-        focusInput(pendingFocusRowId, pendingFocusField);
-        setPendingFocusRowId(null);
-        setPendingFocusField('qty');
-    }
-}, [rows, pendingFocusRowId]);
+    useEffect(() => {
+        if (pendingFocusRowId !== null) {
+            focusInput(pendingFocusRowId, pendingFocusField);
+            setPendingFocusRowId(null);
+            setPendingFocusField('qty');
+        }
+    }, [rows, pendingFocusRowId]);
 
 
     const selectProduct = async (rowId, product, selectedUnitId) => {
@@ -1324,8 +1336,8 @@ useEffect(() => {
                         availableUnits: product.units || [],
                         unit: selectedUnitId || product.unitId || row.unit,
                         baseunitId: product.baseunitId || null,
-                        salesRate: safeParsePrice(salesRate.toFixed(generalSettings?.decimalPart || 2)),
-                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                        salesRate: safeParsePrice(salesRate),
+                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax),
                         taxId: defaultTax?.taxId || null,
                         tax: taxRate,
                         taxRate: taxRate,
@@ -1349,80 +1361,80 @@ useEffect(() => {
             setRows(updatedRows);
             setSuggestions((prev) => ({ ...prev, [rowId]: [] }));
             setActiveSuggestionRow(null);
-           setTimeout(() => {
-    const focusSetting = saleSettings?.GridFocusingProductNameToNext;
-    const currentRowIndex = updatedRows.findIndex(r => r.id === rowId);
-    const isLastRow = currentRowIndex === updatedRows.length - 1;
+            setTimeout(() => {
+                const focusSetting = saleSettings?.GridFocusingProductNameToNext;
+                const currentRowIndex = updatedRows.findIndex(r => r.id === rowId);
+                const isLastRow = currentRowIndex === updatedRows.length - 1;
 
-    if (focusSetting === 'BarcodeInNextRow' || focusSetting === 'productNameInNextRow') {
-        const focusField = focusSetting === 'BarcodeInNextRow' ? 'barcode' : 'productName';
+                if (focusSetting === 'BarcodeInNextRow' || focusSetting === 'productNameInNextRow') {
+                    const focusField = focusSetting === 'BarcodeInNextRow' ? 'barcode' : 'productName';
 
-        if (!isLastRow) {
-            const nextRowId = updatedRows[currentRowIndex + 1].id;
-            focusInput(nextRowId, focusField);
-        } else {
-            const newRowId = updatedRows.length + 1;
-            setRows(prev => [
-                ...prev,
-                {
-                    id: newRowId,
-                    sn: newRowId,
-                    barcodeInput: '',
-                    productName: '',
-                    productNameArb: '',
-                    deliveryNoteDetails1Id: '',
-                    orderDetails1Id: '',
-                    quotationDetailsId: '',
-                    proformaDetails1Id: '',
-                    productCode: '',
-                    ConversionFactor: 0,
-                    purchaseRate: 0,
-                    qty: 1,
-                    freeQty: 0,
-                    unit: 2,
-                    salesRate: 0,
-                    salesRateWithoutTax: 0,
-                    desc: 0,
-                    descAmt: 0,
-                    netValue: 0,
-                    tax: 0,
-                    taxRate: 0,
-                    taxId: null,
-                    taxAmt: 0,
-                    amount: 0,
-                    taxType: 'Excluded',
-                    salesManId: formData.employeeId || null,
-                    GodownId: formData.GodownId || null,
-                    baseunitId: null,
-                    maximumSellingPrice: 0,
-                    lowestSellingPrice: 0,
-                    lineDiscountWithTax: null,
-                    salesTaxes: [],
-                    billDiscOnProduct: 0,
-                    otherchargeonproduct: 0,
-                    productDetails: {
-                        barcode: '',
-                        partNo: '',
-                        brand: '',
-                        mrp: '',
-                        purchase: '',
-                        description: '',
-                        productCode: ''
+                    if (!isLastRow) {
+                        const nextRowId = updatedRows[currentRowIndex + 1].id;
+                        focusInput(nextRowId, focusField);
+                    } else {
+                        const newRowId = updatedRows.length + 1;
+                        setRows(prev => [
+                            ...prev,
+                            {
+                                id: newRowId,
+                                sn: newRowId,
+                                barcodeInput: '',
+                                productName: '',
+                                productNameArb: '',
+                                deliveryNoteDetails1Id: '',
+                                orderDetails1Id: '',
+                                quotationDetailsId: '',
+                                proformaDetails1Id: '',
+                                productCode: '',
+                                ConversionFactor: 0,
+                                purchaseRate: 0,
+                                qty: 1,
+                                freeQty: 0,
+                                unit: 2,
+                                salesRate: 0,
+                                salesRateWithoutTax: 0,
+                                desc: 0,
+                                descAmt: 0,
+                                netValue: 0,
+                                tax: 0,
+                                taxRate: 0,
+                                taxId: null,
+                                taxAmt: 0,
+                                amount: 0,
+                                taxType: 'Excluded',
+                                salesManId: formData.employeeId || null,
+                                GodownId: formData.GodownId || null,
+                                baseunitId: null,
+                                maximumSellingPrice: 0,
+                                lowestSellingPrice: 0,
+                                lineDiscountWithTax: null,
+                                salesTaxes: [],
+                                billDiscOnProduct: 0,
+                                otherchargeonproduct: 0,
+                                productDetails: {
+                                    barcode: '',
+                                    partNo: '',
+                                    brand: '',
+                                    mrp: '',
+                                    purchase: '',
+                                    description: '',
+                                    productCode: ''
+                                }
+                            }
+                        ]);
+                        if (focusField === 'barcode') {
+                            setPendingFocusBarcodeRowId(newRowId);
+                        } else {
+                            setPendingFocusField('productName');
+                            setPendingFocusRowId(newRowId);
+                        }
                     }
+                } else {
+                    // Default: qty on same row
+                    focusInput(rowId, 'qty');
                 }
-            ]);
-            if (focusField === 'barcode') {
-                setPendingFocusBarcodeRowId(newRowId);
-            } else {
-                setPendingFocusField('productName');
-                setPendingFocusRowId(newRowId);
-            }
-        }
-    } else {
-        // Default: qty on same row
-        focusInput(rowId, 'qty');
-    }
-}, 100);
+            }, 100);
         } catch (err) {
             console.error("Error selecting product:", err);
         }
@@ -1533,8 +1545,8 @@ useEffect(() => {
                         availableUnits: product.units || [],
                         unit: product.unitId || row.unit,
                         baseunitId: product.baseunitId || null,
-                        salesRate: safeParsePrice(salesRate.toFixed(generalSettings?.decimalPart || 2)),
-                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                        salesRate: safeParsePrice(salesRate),
+                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax),
                         taxId: defaultTax?.taxId || null,
                         tax: taxRate,
                         taxRate: taxRate,
@@ -1557,73 +1569,73 @@ useEffect(() => {
 
             setRows(updatedRows);
 
-          setTimeout(() => {
-    const focusSetting = saleSettings?.GridFocusingBarcodeToNext;
+            setTimeout(() => {
+                const focusSetting = saleSettings?.GridFocusingBarcodeToNext;
 
-    if (focusSetting === 'ProductNameOnSameRow') {
-        focusInput(rowId, 'productName');
-    } else {
-        // Default: BarcodeInNextRow
-        const currentRowIndex = rows.findIndex(r => r.id === rowId);
+                if (focusSetting === 'ProductNameOnSameRow') {
+                    focusInput(rowId, 'productName');
+                } else {
+                    // Default: BarcodeInNextRow
+                    const currentRowIndex = rows.findIndex(r => r.id === rowId);
 
-        if (currentRowIndex < rows.length - 1) {
-            const nextRowId = rows[currentRowIndex + 1].id;
-            focusInput(nextRowId, 'barcode');
-        } else {
-            const newRowId = rows.length + 1;
-            setRows(prev => [
-                ...prev,
-                {
-                    id: newRowId,
-                    sn: newRowId,
-                    barcodeInput: '',
-                    productName: '',
-                    productNameArb: '',
-                    deliveryNoteDetails1Id: '',
-                    orderDetails1Id: '',
-                    quotationDetailsId: '',
-                    proformaDetails1Id: '',
-                    productCode: '',
-                    ConversionFactor: 0,
-                    purchaseRate: 0,
-                    qty: 1,
-                    freeQty: 0,
-                    unit: 2,
-                    salesRate: 0,
-                    salesRateWithoutTax: 0,
-                    desc: 0,
-                    descAmt: 0,
-                    netValue: 0,
-                    tax: 0,
-                    taxRate: 0,
-                    taxId: null,
-                    taxAmt: 0,
-                    amount: 0,
-                    taxType: 'Excluded',
-                    salesManId: formData.employeeId || null,
-                    GodownId: formData.GodownId || null,
-                    baseunitId: null,
-                    maximumSellingPrice: 0,
-                    lowestSellingPrice: 0,
-                    lineDiscountWithTax: null,
-                    salesTaxes: [],
-                    billDiscOnProduct: 0,
-                    otherchargeonproduct: 0,
-                    productDetails: {
-                        barcode: '',
-                        partNo: '',
-                        brand: '',
-                        mrp: '',
-                        purchase: '',
-                        description: '',
-                        productCode: ''
+                    if (currentRowIndex < rows.length - 1) {
+                        const nextRowId = rows[currentRowIndex + 1].id;
+                        focusInput(nextRowId, 'barcode');
+                    } else {
+                        const newRowId = rows.length + 1;
+                        setRows(prev => [
+                            ...prev,
+                            {
+                                id: newRowId,
+                                sn: newRowId,
+                                barcodeInput: '',
+                                productName: '',
+                                productNameArb: '',
+                                deliveryNoteDetails1Id: '',
+                                orderDetails1Id: '',
+                                quotationDetailsId: '',
+                                proformaDetails1Id: '',
+                                productCode: '',
+                                ConversionFactor: 0,
+                                purchaseRate: 0,
+                                qty: 1,
+                                freeQty: 0,
+                                unit: 2,
+                                salesRate: 0,
+                                salesRateWithoutTax: 0,
+                                desc: 0,
+                                descAmt: 0,
+                                netValue: 0,
+                                tax: 0,
+                                taxRate: 0,
+                                taxId: null,
+                                taxAmt: 0,
+                                amount: 0,
+                                taxType: 'Excluded',
+                                salesManId: formData.employeeId || null,
+                                GodownId: formData.GodownId || null,
+                                baseunitId: null,
+                                maximumSellingPrice: 0,
+                                lowestSellingPrice: 0,
+                                lineDiscountWithTax: null,
+                                salesTaxes: [],
+                                billDiscOnProduct: 0,
+                                otherchargeonproduct: 0,
+                                productDetails: {
+                                    barcode: '',
+                                    partNo: '',
+                                    brand: '',
+                                    mrp: '',
+                                    purchase: '',
+                                    description: '',
+                                    productCode: ''
+                                }
+                            }
+                        ]);
+                        setPendingFocusBarcodeRowId(newRowId);
                     }
                 }
-            ]);
-            setPendingFocusBarcodeRowId(newRowId);
-        }
-    }
-}, 100);    
+            }, 100);
 
         } catch (err) {
             console.error("Error fetching product by barcode/product code:", err);
@@ -1655,22 +1667,13 @@ useEffect(() => {
 
 
 
-    const handleProductUpdate = (productCode, updatedDescription) => {
-        setRows(prevRows =>
-            prevRows.map(row =>
-                row.productDetails.productCode === productCode
-                    ? {
-                        ...row,
-                        productDetails: {
-                            ...row.productDetails,
-                            productDescription: updatedDescription
-                        }
-                    }
-                    : row
-            )
-        );
+    const handleProductUpdate = (rowId, updatedDescription) => {
+        setRows(prevRows => prevRows.map(row =>
+            row.id === rowId
+                ? { ...row, productDetails: { ...row.productDetails, productDescription: updatedDescription } }
+                : row
+        ));
     };
-
     const validateSalesPrice = (price, row) => {
         const action = saleSettings?.ledgerPricingAlertAction || 'block'; // default to 'block'
 
@@ -1708,23 +1711,7 @@ useEffect(() => {
                 if (field === 'productName') {
                     filterProducts(value, id);
                 }
-                // Validate sales price when sales rate changes
-                if (field === 'salesRate' && row.productCode) {
-                    const priceValue = safeParsePrice(value);
-                    const validation = validateSalesPrice(priceValue, row);
 
-                    // Block entry if validation fails and action is 'block'
-                    if (!validation.isValid && validation.action === 'block') {
-                        Swal.fire({
-                            title: t("salesInvoice.alert.invalidPrice.title") || "Invalid Price",
-                            text: validation.message,
-                            icon: "warning",
-                            confirmButtonColor: "#3085d6",
-                            confirmButtonText: t("okBtn") || "OK",
-                        });
-                        return row; // Don't update if validation fails
-                    }
-                }
 
                 let updatedRow = { ...row, [field]: value };
                 // ← tell calculateRow to back-calculate salesRateWithoutTax from salesRate
@@ -2162,7 +2149,11 @@ useEffect(() => {
                                                     {saleSettings.showProductDescription && (
                                                         <div className='cursor-pointer'>
                                                             <EllipsisVertical
-                                                                onClick={() => { setSelectedProductCode(row.productDetails.productCode); setEditProductModalOpen(true); }}
+                                                                onClick={() => {
+                                                                    setSelectedProductCode(row.productDetails.productCode);
+                                                                    setSelectedRowIdForEdit(row.id);
+                                                                    setEditProductModalOpen(true);
+                                                                }}
                                                                 className="text-secondary dark:text-secondary"
                                                             />
                                                         </div>
@@ -2248,13 +2239,13 @@ useEffect(() => {
 
                                                     // Find the product entry matching BOTH productCode AND the selected unitId
                                                     const productForUnit = allProducts.find(
-                                                        p => p.productCode === row.productCode && p.unitId === selectedUnitId
+                                                        p => p.productCode === row.productCode && (p.unitId || p.unitid) === selectedUnitId
                                                     );
                                                     // Fallback to any entry with matching productCode
                                                     const product = productForUnit || allProducts.find(p => p.productCode === row.productCode);
 
                                                     if (product) {
-                                                        const selectedUnit = row.availableUnits?.find(u => u.unitId === selectedUnitId);
+                                                        const selectedUnit = row.availableUnits?.find(u => (u.unitId || u.unitid) === selectedUnitId);
 
                                                         // conversionRate comes from the matched product entry, not from selectedUnit
                                                         const conversionFactor = safeParsePrice(productForUnit?.conversionRate || product.conversionRate || 1);
@@ -2296,7 +2287,7 @@ useEffect(() => {
                                                             productDetails: {
                                                                 ...row.productDetails,
                                                                 barcode: product.barcode || row.productDetails.barcode,
-                                                                UnitName: selectedUnit?.unitName || row.productDetails.UnitName
+                                                                UnitName: selectedUnit?.unitName || selectedUnit?.unitname || selectedUnit?.UnitName || row.productDetails.UnitName
                                                             }
                                                         };
                                                         updatedRow = calculateRow(updatedRow);
@@ -2307,8 +2298,8 @@ useEffect(() => {
                                                 className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded"
                                             >
                                                 {row.availableUnits?.map((unit) => (
-                                                    <option key={unit.unitId} value={unit.unitId}>
-                                                        {unit.unitName || unit.unitname}
+                                                    <option key={unit.unitId || unit.unitid} value={unit.unitId || unit.unitid}>
+                                                        {unit.unitName || unit.unitname || unit.UnitName}
                                                     </option>
                                                 ))}
                                             </select>
@@ -2322,7 +2313,7 @@ useEffect(() => {
                                                 value={
                                                     inputValues[`${row.id}-beforeTax`] !== undefined
                                                         ? inputValues[`${row.id}-beforeTax`]
-                                                        : Number(row.salesRateWithoutTax).toFixed(4)  // ← 4 decimal places
+                                                        : Number(row.salesRateWithoutTax)  // ← 4 decimal places
                                                 }
                                                 onFocus={(e) => {
                                                     setInputValues(prev => ({ ...prev, [`${row.id}-beforeTax`]: row.salesRateWithoutTax }));
@@ -2364,7 +2355,7 @@ useEffect(() => {
                                                     }}
                                                     value={inputValues[`${row.id}-salesRate`] !== undefined
                                                         ? inputValues[`${row.id}-salesRate`]
-                                                        : Number(row.salesRate).toFixed(2)}  // ← 2 decimal places
+                                                        : Number(row.salesRate)}  // ← 2 decimal places
                                                     onKeyDown={(e) => {
                                                         if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                                                             handleKeyDown(e, row.id, 'salesRate');
@@ -2382,7 +2373,7 @@ useEffect(() => {
                                                         handleInputChange(row.id, 'salesRate', numValue || 0);
                                                     }}
                                                     onBlur={(e) => {
-                                                        const value = customRoundDecimal(e.target.value, 2);
+                                                        const value = e.target.value;
                                                         const validation = validateSalesPrice(value, row);
 
                                                         // Handle based on action type
@@ -2444,7 +2435,6 @@ useEffect(() => {
                                                         // onBlur={handleInputBlur}
                                                         ref={el => inputRefs.current[`${row.id}-desc`] = el}
                                                         type="number"
-                                                        disabled={!row.productCode || row.productCode.trim() === ''}
                                                         min={0} max={99}
                                                         value={row.desc}
                                                         onFocus={(e) => e.target.select()}
@@ -2459,12 +2449,13 @@ useEffect(() => {
                                                             handleInputChange(row.id, "desc", num);
                                                         }}
                                                         onKeyDown={(e) => handleKeyDown(e, row.id, 'desc')}
-                                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
+                                                        disabled={!row.productCode || row.productCode.trim() === ''}
+                                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right  disabled:text-gray-500 disabled:cursor-not-allowed"
                                                     />
                                                 </td>
                                                 <td className="p-0.2 border border-themed dark:border-themed">
                                                     <input
-                                                        disabled={!row.productCode || row.productCode.trim() === ''}
+                                                        // onBlur={handleInputBlur}
                                                         ref={el => inputRefs.current[`${row.id}-descAmt`] = el}
                                                         type="number"
                                                         value={row.descAmt}
@@ -2484,58 +2475,68 @@ useEffect(() => {
                                                             handleInputChange(row.id, "descAmt", num, 'descAmt');
                                                         }}
                                                         onKeyDown={(e) => handleKeyDown(e, row.id, 'descAmt')}
-                                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
+                                                        disabled={!row.productCode || row.productCode.trim() === ''}
+                                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right  disabled:text-gray-500 disabled:cursor-not-allowed"
                                                     />
                                                 </td>
 
-                                                {/* ── NEW: Discount with Tax cell ── */}
-                                                {((generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') && (
-                                                    <td className="p-0.2 border border-themed dark:border-themed">
-                                                        <input
-                                                            ref={el => inputRefs.current[`${row.id}-lineDiscWithTax`] = el}
-                                                            type="text"
-                                                            disabled={!row.productCode || row.productCode.trim() === ''}
-                                                            value={
-                                                                inputValues[`${row.id}-lineDiscWithTax`] !== undefined
-                                                                    ? inputValues[`${row.id}-lineDiscWithTax`]
-                                                                    : (row.lineDiscountWithTax != null
-                                                                        ? safeDisplayValue(row.lineDiscountWithTax, generalSettings?.decimalPart)
-                                                                        : '0.00') // Changed from '' to '0.00'
-                                                            }
-                                                            placeholder="w/tax"
-                                                            onFocus={(e) => {
-                                                                // handleInputFocus(row.id);
-                                                                setInputValues(prev => ({
-                                                                    ...prev,
-                                                                    [`${row.id}-lineDiscWithTax`]: row.lineDiscountWithTax ?? '0' // Changed from '' to '0'
-                                                                }));
-                                                                setTimeout(() => e.target.select(), 0);
-                                                            }}
-                                                            onChange={(e) => {
-                                                                const raw = e.target.value.replace(/[^0-9.]/g, '');
-                                                                const valid = raw.split('.').length > 2
-                                                                    ? raw.slice(0, raw.lastIndexOf('.'))
-                                                                    : raw;
-                                                                setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: valid }));
-                                                                handleLineDiscWithTaxChange(row.id, valid);
-                                                            }}
-                                                            onBlur={(e) => {
-                                                                handleLineDiscWithTaxChange(row.id, safeParsePrice(e.target.value));
-                                                                setInputValues(prev => {
-                                                                    const s = { ...prev };
-                                                                    delete s[`${row.id}-lineDiscWithTax`];
-                                                                    return s;
-                                                                });
-                                                                // handleInputBlur();
-                                                            }}
-                                                            onKeyDown={(e) => {
-                                                                if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key))
-                                                                    handleKeyDown(e, row.id, 'lineDiscWithTax');
-                                                            }}
-                                                            className="w-full px-2 py-1 text-sm border-0  focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
-                                                        />
-                                                    </td>
-                                                ))}
+                                                {(generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') && (
+                                                    <>
+                                                        {/* ── NEW: Discount with Tax cell ── */}
+                                                        <td className="p-0.2 border border-themed dark:border-themed">
+                                                            <input
+                                                                ref={el => inputRefs.current[`${row.id}-lineDiscWithTax`] = el}
+                                                                type="text"
+                                                                value={
+                                                                    inputValues[`${row.id}-lineDiscWithTax`] !== undefined
+                                                                        ? inputValues[`${row.id}-lineDiscWithTax`]
+                                                                        : (row.lineDiscountWithTax != null
+                                                                            ? safeDisplayValue(row.lineDiscountWithTax, generalSettings?.decimalPart)
+                                                                            : '0.00') // Changed from '' to '0.00'
+                                                                }
+                                                                placeholder="w/tax"
+                                                                onFocus={(e) => {
+                                                                    handleInputFocus(row.id);
+                                                                    setInputValues(prev => ({
+                                                                        ...prev,
+                                                                        [`${row.id}-lineDiscWithTax`]: row.lineDiscountWithTax ?? '0' // Changed from '' to '0'
+                                                                    }));
+                                                                    setTimeout(() => e.target.select(), 0);
+                                                                }}
+                                                                onChange={(e) => {
+                                                                    const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                                                    const valid = raw.split('.').length > 2
+                                                                        ? raw.slice(0, raw.lastIndexOf('.'))
+                                                                        : raw;
+
+                                                                    // ── NEW: cap to gross (with tax) ──
+                                                                    const grossWithTax = safeParsePrice(row.qty) * safeParsePrice(row.salesRate);
+                                                                    let num = safeParsePrice(valid);
+                                                                    if (num > grossWithTax) num = grossWithTax;
+                                                                    const finalValue = num.toString();
+                                                                    // ── END NEW ──
+
+                                                                    setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: finalValue }));
+                                                                    handleLineDiscWithTaxChange(row.id, finalValue);
+                                                                }}
+                                                                onBlur={(e) => {
+                                                                    handleLineDiscWithTaxChange(row.id, safeParsePrice(e.target.value));
+                                                                    setInputValues(prev => {
+                                                                        const s = { ...prev };
+                                                                        delete s[`${row.id}-lineDiscWithTax`];
+                                                                        return s;
+                                                                    });
+                                                                    // handleInputBlur();
+                                                                }}
+                                                                onKeyDown={(e) => {
+                                                                    if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key))
+                                                                        handleKeyDown(e, row.id, 'lineDiscWithTax');
+                                                                }}
+                                                                disabled={!row.productCode || row.productCode.trim() === ''}
+                                                                className="w-full px-2 py-1 text-sm border-0  focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right  disabled:text-gray-500 disabled:cursor-not-allowed"
+                                                            />
+                                                        </td></>
+                                                )}
                                             </>
                                         )}
                                         <td className="p-0.2 border border-themed">
@@ -2543,6 +2544,11 @@ useEffect(() => {
                                                 <span className="text-sm font-medium text-primary">
                                                     {row.netValue.toFixed(generalSettings.decimalPart)}
                                                 </span>
+                                                {showPurchaseRate[row.id] && row.purchaseRate !== undefined && row.purchaseRate !== null && (
+                                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                                        PRate: {safeDisplayValue(row.purchaseRate, generalSettings.decimalPart)}
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
 
@@ -2656,51 +2662,51 @@ useEffect(() => {
                     </div>
                 </div>
             </div>
-         <div className={`flex ${saleSettings?.showBillProfit === true ? 'justify-between' : 'justify-end'} items-center mt-2`}>
-                    {saleSettings?.showBillProfit === true && (() => {
-                        const totalPurchase = rows.reduce((sum, row) => {
-                            return sum + (safeParsePrice(row.qty) * safeParsePrice(row.purchaseRate));
-                        }, 0);
+            <div className={`flex ${saleSettings?.showBillProfit === true ? 'justify-between' : 'justify-end'} items-center mt-2`}>
+                {saleSettings?.showBillProfit === true && (() => {
+                    const totalPurchase = rows.reduce((sum, row) => {
+                        return sum + (safeParsePrice(row.qty) * safeParsePrice(row.purchaseRate));
+                    }, 0);
 
-                        const totalSales = safeParsePrice(formData.totalAmount) - safeParsePrice(formData.totalTax);
-                        const profit = totalSales - totalPurchase;
-                        const profitPercent = totalSales > 0 ? (profit / totalSales) * 100 : 0;
-                        const isLoss = profit < 0;
+                    const totalSales = safeParsePrice(formData.totalAmount) - safeParsePrice(formData.totalTax);
+                    const profit = totalSales - totalPurchase;
+                    const profitPercent = totalSales > 0 ? (profit / totalSales) * 100 : 0;
+                    const isLoss = profit < 0;
 
-                        return (
-                            <div className=" flex justify-end">
-                                <div className="flex gap-4 p-1 px-2 rounded-sm border border-themed dark:border-themed bg-gray-50 dark:bg-gray-800 text-xs">
-                                    <div className="flex flex-col items-end gap-0.5">
-                                        <span className="text-muted dark:text-muted font-medium">Total Cost :   <span className="text-primary dark:text-primary font-semibold">
-                                            {totalPurchase.toFixed(generalSettings?.decimalPart || 2)}
-                                        </span></span>
-                                      
-                                    </div>
-                                    <div className="w-px bg-gray-300 dark:bg-gray-600" />
-                                    <div className="flex flex-col items-end gap-0.5">
-                                        <span className="text-muted dark:text-muted font-medium">Total Sales (ex-tax) :  <span className="text-primary dark:text-primary font-semibold">
-                                            {totalSales.toFixed(generalSettings?.decimalPart || 2)}
-                                        </span></span>
-                                       
-                                    </div>
-                                    <div className="w-px bg-gray-300 dark:bg-gray-600" />
-                                    <div className="flex flex-col items-end gap-0.5">
-                                        <span className="text-muted dark:text-muted font-medium">
-                                            {isLoss ? 'Loss' : 'Profit'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                                                {profit.toFixed(generalSettings?.decimalPart || 2)}
-                                            </span>
-                                            <span className={`text-xs ${isLoss ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`}>
-                                                ({profitPercent.toFixed(1)}%)
-                                            </span>
+                    return (
+                        <div className=" flex justify-end">
+                            <div className="flex gap-4 p-1 px-2 rounded-sm border border-themed dark:border-themed bg-gray-50 dark:bg-gray-800 text-xs">
+                                <div className="flex flex-col items-end gap-0.5">
+                                    <span className="text-muted dark:text-muted font-medium">Total Cost :   <span className="text-primary dark:text-primary font-semibold">
+                                        {totalPurchase.toFixed(generalSettings?.decimalPart || 2)}
+                                    </span></span>
+
+                                </div>
+                                <div className="w-px bg-gray-300 dark:bg-gray-600" />
+                                <div className="flex flex-col items-end gap-0.5">
+                                    <span className="text-muted dark:text-muted font-medium">Total Sales (ex-tax) :  <span className="text-primary dark:text-primary font-semibold">
+                                        {totalSales.toFixed(generalSettings?.decimalPart || 2)}
+                                    </span></span>
+
+                                </div>
+                                <div className="w-px bg-gray-300 dark:bg-gray-600" />
+                                <div className="flex flex-col items-end gap-0.5">
+                                    <span className="text-muted dark:text-muted font-medium">
+                                        {isLoss ? 'Loss' : 'Pf value'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                            {profit.toFixed(generalSettings?.decimalPart || 2)}
                                         </span>
-                                        <div className="flex items-center gap-1">
-                                          
-                                        </div>
+                                        <span className={`text-xs ${isLoss ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`}>
+                                            ({profitPercent.toFixed(1)}%)
+                                        </span>
+                                    </span>
+                                    <div className="flex items-center gap-1">
+
                                     </div>
                                 </div>
                             </div>
-                        );
-                    })()}
+                        </div>
+                    );
+                })()}
                 <button
                     onClick={addRow}
                     className="flex items-center gap-2 main-bg text-white text-sm px-4 py-1 rounded-sm hover:bg-blue-700 dark:hover:main-bg transition"
@@ -2728,14 +2734,15 @@ useEffect(() => {
                 open={editProductModalOpen}
                 handleClose={() => {
                     setEditProductModalOpen(false);
+                    setSelectedRowIdForEdit(null);
                     if (focusedRowId) focusInput(focusedRowId, 'productName');
                 }}
                 productCode={selectedProductCode}
                 initialDescription={
-                    rows.find(r => r.productDetails?.productCode === selectedProductCode)
+                    rows.find(r => r.id === selectedRowIdForEdit)
                         ?.productDetails?.productDescription || ''
                 }
-                onSuccess={(updatedDescription) => handleProductUpdate(selectedProductCode, updatedDescription)}
+                onSuccess={(updatedDescription) => handleProductUpdate(selectedRowIdForEdit, updatedDescription)}
             />
             <SalesOrderFooterSection
                 totals={totals}

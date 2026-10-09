@@ -1,7 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import PaymentMode from "./FooterTabData/PaymentMode";
-import RetentionData from "./FooterTabData/RetentionData";
-import AdditionalCost from "./FooterTabData/AdditionalCost";
+
 import OtherDetails from "./FooterTabData/OtherDetails";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -56,7 +54,7 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
       setBillDiscount(parseFloat(formData.billDiscount) || 0);
 
       setOtherChargRemark(formData.OtherChargeRemark || '');
-      setOtherChargAmt(formData.othercharge || '');
+      setOtherChargAmt(formData.OtherCharge || '');
 
       setIsInitialized(true);
     }
@@ -86,6 +84,33 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
         };
       }
       return { ...detail, billDiscOnProduct: 0 };
+    });
+  };
+
+  const distributeOtherCharge = (otherCharge, quotationDetails) => {
+    if (!quotationDetails || quotationDetails.length === 0) return quotationDetails;
+
+    const validRows = quotationDetails.filter(d => d.productCode && d.qty > 0);
+    if (validRows.length === 0) return quotationDetails;
+
+    const totalNetAmount = validRows.reduce((sum, d) => sum + parseFloat(d.netAmount || 0), 0);
+
+    if (totalNetAmount === 0 || !otherCharge || parseFloat(otherCharge) === 0) {
+      return quotationDetails.map(d => ({ ...d, OtherChargeOnProduct: 0 }));
+    }
+
+    const chargePercentage = (parseFloat(otherCharge) * 100) / totalNetAmount;
+
+    return quotationDetails.map(detail => {
+      if (detail.productCode && detail.qty > 0) {
+        const netValue = parseFloat(detail.netAmount || 0);
+        const chargeForRow = (netValue * chargePercentage) / 100;
+        return {
+          ...detail,
+          OtherChargeOnProduct: parseFloat(chargeForRow.toFixed(dp))
+        };
+      }
+      return { ...detail, OtherChargeOnProduct: 0 };
     });
   };
 
@@ -119,15 +144,16 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
     otherChargeAmt,
   ]);
 
-  useEffect(() => {
+ useEffect(() => {
     if (formData.quotationDetails && formData.quotationDetails.length > 0) {
-      const updatedQuotationDetails = distributeBillDiscount(billDiscount, formData.quotationDetails);
+      let updatedQuotationDetails = distributeBillDiscount(billDiscount, formData.quotationDetails);
+      updatedQuotationDetails = distributeOtherCharge(otherChargeAmt, updatedQuotationDetails);
       setFormData(prev => ({
         ...prev,
         additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
         billDiscount,
         roundoff: roundOffType === "+" ? roundOff : -roundOff,
-        othercharge: otherChargeAmt,
+        OtherCharge: otherChargeAmt,
         OtherChargeRemark: otherChargeRemark,
         quotationDetails: updatedQuotationDetails,
         totalAmount: finalGrandTotal,
@@ -138,7 +164,7 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
         additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
         billDiscount,
         roundoff: roundOffType === "+" ? roundOff : -roundOff,
-        othercharge: otherChargeAmt,
+        OtherCharge: otherChargeAmt,
         OtherChargeRemark: otherChargeRemark,
         totalAmount: finalGrandTotal,
       }));
@@ -161,52 +187,13 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "payment":
-        return (
-          <PaymentMode finalGrandTotal={finalGrandTotal} totals={totals} formData={formData} setFormData={setFormData} bank={bank} cash={cash} />
-        );
-      case "retention":
-        return (
-          <RetentionData totals={totals} formData={formData} setFormData={setFormData} />
-        );
-      case "addCost":
-        return (
-          <AdditionalCost totals={totals} formData={formData} setFormData={setFormData} />
-        );
-      case "other":
-        return (
-          <OtherDetails totals={totals} formData={formData} setFormData={setFormData} />
-        );
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-6 gap-2 lg:gap-1 mt-2">
       {/* Left Side - Tabs (60% on desktop, full width on mobile) */}
       <div className="lg:col-span-4 order-2 lg:order-1">
         <div className="bg-primary dark:bg-primary rounded border border-themed dark:border-themed">
-          {/* Tab Headers */}
-          {/* <div className="flex flex-wrap lg:flex-nowrap border-b border-themed dark:border-themed overflow-x-auto">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 min-w-[120px] px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab.id
-                  ? "main-bg text-white border-b-2 border-[#2b216a]"
-                  : "bg-secondary dark:bg-secondary text-secondary dark:text-secondary hover:bg-hover dark:hover:bg-hover"
-                  }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div> */}
-
-          {/* Tab Content */}
-          {/* <div className="bg-primary dark:bg-primary">{renderTabContent()}</div> */}
+        
           <div className="bg-primary dark:bg-primary"> <OtherDetails totals={totals} formData={formData} setFormData={setFormData} /></div>
           <div className="grid grid-cols-4 mb-3 pl-2">
             {/* ✅ New Checkbox */}
@@ -260,7 +247,7 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
           </div>
 
           {/* ✅ Additional Cost */}
-          <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
+          {/* <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
             <label className="px-2 py-1 font-medium text-secondary dark:text-secondary sm:min-w-[100px] lg:min-w-0">
               {t("salesInvoice.form.footerSection.paymentSummery.additionalCost")}
             </label>
@@ -278,11 +265,12 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
                 value={additionalCost}
                 onChange={(e) => setAdditionalCost(parseFloat(e.target.value) || 0)}
                 onFocus={handleSelectAll}
+                 disabled={totals?.grandTotal <= 0}
                 onBlur={(e) => setAdditionalCost(parseFloat(e.target.value || 0).toFixed(generalSettings.decimalPart))}
                 className="flex-1 px-2 py-1 bg-primary dark:bg-primary text-primary dark:text-primary focus:outline-none text-right"
               />
             </div>
-          </div>
+          </div> */}
 
           {/* ✅ Bill Discount */}
           <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
@@ -294,13 +282,14 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
               value={billDiscount}
               onChange={(e) => setBillDiscount(parseFloat(e.target.value) || 0)}
               onFocus={handleSelectAll}
+              disabled={totals?.grandTotal <= 0}
               onBlur={(e) => setBillDiscount(parseFloat(e.target.value || 0).toFixed(generalSettings.decimalPart))}
               className="flex-1 px-2 py-1 sm:border-l border-themed dark:border-themed bg-primary dark:bg-primary text-primary dark:text-primary focus:outline-none text-right"
             />
           </div>
 
           {/* Total Tax */}
-          {generalSettings.ActivateTax && (
+          {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
             <div className="flex flex-col sm:flex-row sm:items-center border-b border-themed dark:border-themed">
               <label className="px-2 py-1 font-medium text-secondary dark:text-secondary sm:min-w-[100px] lg:w-28">
                 {t("salesInvoice.form.footerSection.paymentSummery.totalTax")}
@@ -336,10 +325,15 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
                 />
                 <input
                   type="number"
+                  max={0}
+                  onKeyDown={(e) => {
+                    if(e.key === "-" || e.key === "+") e.preventDefault()
+                  }}
                   value={otherChargeAmt}
                   className="flex-1 px-2 py-1 sm:border-l border-themed dark:border-themed bg-primary dark:bg-primary text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none text-right sm:w-20"
                   onChange={(e) => setOtherChargAmt(e.target.value)}
                   onFocus={handleSelectAll}
+                   disabled={totals?.grandTotal <= 0}
                   onBlur={(e) => setOtherChargAmt(parseFloat(e.target.value || 0).toFixed(generalSettings.decimalPart))}
                   placeholder={t("salesInvoice.form.footerSection.paymentSummery.amntPlaceholder")}
                 />
@@ -373,6 +367,7 @@ const PurchaseQuotationFooterSection = ({ totals, formData, setFormData, otherCh
                   }
                 }}
                 onFocus={handleSelectAll}
+                 disabled={totals?.grandTotal <= 0}
                 step={Math.pow(10, -(generalSettings?.RoundOffDigit ?? 2))}
                 className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right pr-2"
               />

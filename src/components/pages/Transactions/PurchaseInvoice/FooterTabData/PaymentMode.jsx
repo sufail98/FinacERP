@@ -144,6 +144,7 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal, bank: ban
                 onChange={(e) => handlePaymentModeChange(e.target.value)}
                 className="border border-themed dark:border-themed rounded px-2 py-1 text-xs w-full bg-primary dark:bg-secondary text-primary dark:text-primary focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
               >
+                <option value="null">NA</option>
                 <option value="cash">Cash</option>
                 <option value="card" disabled={isBankEmpty}>
                   Bank {isBankEmpty && '(No bank account)'}

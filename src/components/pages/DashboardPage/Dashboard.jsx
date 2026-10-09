@@ -34,9 +34,9 @@ const Dashboard = () => {
   const [statsLoading, setStatsLoading] = useState(true); // Separate loading for stats
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const mainBranch = selectedBranchDetails.mainBranch || false;
-  const { generalSettings,financeSettings } = useSelector((state) => state.settings);
- 
-  
+  const { generalSettings, financeSettings } = useSelector((state) => state.settings);
+
+
   const { t } = useTranslation()
 
   // Customer and Supplier data states
@@ -66,28 +66,38 @@ const Dashboard = () => {
   }, [selectedBranchId, selectedDate, mainBranch]);
 
   const fetchDashboardData = async () => {
-    setStatsLoading(true);
+  setStatsLoading(true);
 
-    try {
-      const payload = {
-        fromDate: selectedDate,
-        toDate: selectedDate,
-        branchId: selectedBranchId,
-        isShowOpeningBalance: true,
-        isMainGroup: true,
-        currencyId: currentCurrency.currencyId
-      };
+  try {
+    const rangeDays = Number(financeSettings?.DashboardDateRangeInDays) || 0;
 
-      const response = await axiosInstance.post('dashboard', payload);
-      
-      setDashboardData(response.data);
-      
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setStatsLoading(false);
-    }
-  };
+    // Calculate fromDate = selectedDate - rangeDays
+    const toDateObj = new Date(selectedDate);
+    const fromDateObj = new Date(toDateObj);
+    fromDateObj.setDate(fromDateObj.getDate() - rangeDays);
+
+    const fromDate = fromDateObj.toISOString().split('T')[0];
+
+    const payload = {
+      fromDate: fromDate,
+      toDate: selectedDate,
+      branchId: selectedBranchId,
+      isShowOpeningBalance: true,
+      isMainGroup: true,
+      currencyId: currentCurrency.currencyId
+    };
+
+    const response = await axiosInstance.post('dashboard', payload);
+
+    setDashboardData(response.data);
+
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+  } finally {
+    setStatsLoading(false);
+  }
+};
+
 
   const fetchAllBranchCustomerBalanceData = async () => {
     setAllBranchCustomerLoading(true);
@@ -188,12 +198,12 @@ const Dashboard = () => {
   // Extract data with defaults
   const salesData = dashboardData?.sales?.[0] || { TotalSalesCount: 0, TotalSalesAmount: '0' };
   const purchaseData = dashboardData?.purchase?.[0] || { TotalPurchaseCount: 0, TotalPurchaseAmount: '0' };
- const bankBalance = dashboardData?.bankBalance?.currentbal 
-    || dashboardData?.bankBalance?.totalBalance 
+  const bankBalance = dashboardData?.bankBalance?.currentbal
+    || dashboardData?.bankBalance?.totalBalance
     || '0';
 
-const cashBalance = dashboardData?.cashBalance?.currentbal 
-    || dashboardData?.cashBalance?.totalBalance 
+  const cashBalance = dashboardData?.cashBalance?.currentbal
+    || dashboardData?.cashBalance?.totalBalance
     || '0';
 
 
@@ -308,19 +318,20 @@ const cashBalance = dashboardData?.cashBalance?.currentbal
   };
 
   // Stat Card Component - Redesigned to match the provided image
-  const StatCard = ({ icon: Icon, title, amount, iconBgColor, iconColor, amountColor }) => (
-    <div className="flex flex-col items-start justify-center gap-3 p-5 bg-white dark:bg-gray-900 relative last:after:hidden after:content-[''] after:absolute after:right-0 after:top-1/2 after:-translate-y-1/2 after:h-[60%] after:w-px after:bg-gray-200 dark:after:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-      <div className="flex gap-2 items-center justify-center">
-        <img src={Icon} alt={title} className='w-8 h-8' />
-        <p className="text-sm font-[500] text-gray-600 dark:text-gray-400">{title}</p>
-      </div>
-      <div className="w-full">
-        <p className={`text-3xl font-bold tracking-tight  text-[#4D4D4D] dark:text-white`}>
-          {formatCurrency(amount)}
-        </p>
-      </div>
+// Stat Card Component - Redesigned to match the provided image
+const StatCard = ({ icon: Icon, title, amount, iconBgColor, iconColor, amountColor }) => (
+  <div className="flex flex-col items-start justify-center gap-2 sm:gap-3 p-3 sm:p-5 bg-white dark:bg-gray-900 relative last:after:hidden after:content-[''] after:absolute after:right-0 after:top-1/2 after:-translate-y-1/2 after:h-[60%] after:w-px after:bg-gray-200 dark:after:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+    <div className="flex gap-1.5 sm:gap-2 items-center justify-center">
+      <img src={Icon} alt={title} className='w-6 h-6 sm:w-8 sm:h-8' />
+      <p className="text-xs sm:text-sm font-[500] text-gray-600 dark:text-gray-400">{title}</p>
     </div>
-  );
+    <div className="w-full">
+      <p className={`text-xl sm:text-3xl font-bold tracking-tight text-[#4D4D4D] dark:text-white`}>
+        {formatCurrency(amount)}
+      </p>
+    </div>
+  </div>
+);
 
   // Skeleton Card Component for Stats - Updated design
   const SkeletonStatCard = () => (
@@ -332,6 +343,16 @@ const cashBalance = dashboardData?.cashBalance?.currentbal
       </div>
     </div>
   );
+  // Skeleton for Balance Cards (Payable/Receivable)
+const SkeletonBalanceCard = () => (
+  <div className="flex items-center gap-4 p-15 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 animate-pulse">
+    <div className="p-3 rounded-full bg-gray-200 dark:bg-gray-800 w-12 h-12 flex-shrink-0"></div>
+    <div className="flex-1 min-w-0">
+      <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-28 mb-2"></div>
+      <div className="h-7 bg-gray-200 dark:bg-gray-800 rounded w-20"></div>
+    </div>
+  </div>
+);
 
   return (
     <div className="p-2 bg-[#F6F6F6] dark:bg-gray-950 ">
@@ -403,24 +424,34 @@ const cashBalance = dashboardData?.cashBalance?.currentbal
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
           {/* Sales Chart - Takes 2 columns */}
           <div className="lg:col-span-2">
-           <SalesChart selectedDate={selectedDate} />
+            <SalesChart selectedDate={selectedDate} />
           </div>
 
           {/* Balance Cards - Takes 1 column */}
-          <div className="space-y-2">
-            <BalanceCard
-  title="Total Payable"
-  amount={(0).toFixed(generalSettings.decimalPart)}
-              type="payable"
-              icon={payableImg}
-            />
-            <BalanceCard
-  title="Total Receivable"
-  amount={(0).toFixed(generalSettings.decimalPart)}
-              type="receivable"
-              icon={recivableImg}
-            />
-          </div>
+       {/* Balance Cards - Takes 1 column */}
+<div className="space-y-2">
+  {statsLoading ? (
+    <>
+      <SkeletonBalanceCard />
+      <SkeletonBalanceCard />
+    </>
+  ) : (
+    <>
+      <BalanceCard
+        title="Total Payable"
+        amount={Number(dashboardData?.totalPayable || 0).toFixed(generalSettings.decimalPart)}
+        type="payable"
+        icon={payableImg}
+      />
+      <BalanceCard
+        title="Total Receivable"
+        amount={Number(dashboardData?.totalReceivable || 0).toFixed(generalSettings.decimalPart)}
+        type="receivable"
+        icon={recivableImg}
+      />
+    </>
+  )}
+</div>
         </div>
         <TopSellingsProductTable branchId={selectedBranchId} />
 

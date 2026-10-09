@@ -28,6 +28,7 @@ const JournalReportFilter = ({
           name="fromDate"
           value={filters.fromDate}
           onChange={(e, value) => onFilterChange('fromDate', value)}
+          max={new Date().toISOString().split(("T")[0])}
           required
           className='w-full'
         />
@@ -43,13 +44,13 @@ const JournalReportFilter = ({
         />
 
         <SearchableDropdown
-           label={t("reportFilters.selectLedger")}
+           label={t("journalVoucher.form.placeholders.selectLedger")}
           name="ledgerId"
           value={filters.ledgerId}
           onChange={(value) => onFilterChange('ledgerId', value)}
           options={ledgerOptions}
-          placeholder={t("reportFilters.selectLedger")}
-          searchPlaceholder={t("reportFilters.selectLedger")}
+          placeholder={t("journalVoucher.form.placeholders.selectLedger")}
+          searchPlaceholder={t("journalVoucher.form.placeholders.selectLedger")}
           clearable
         />
 

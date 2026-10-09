@@ -11,10 +11,13 @@ import { useTranslation } from 'react-i18next';
 import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
 import DateInput from '@/components/elements/theme/DateInput';
 import CrDrLabel from '@/components/common/CrDrLabel';
+import { sanitize } from '@/lib/inputSanitizer';
+import LedgerCreationModal from '@/components/common/LedgerCreationModal';
 
-const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, setRows: propSetRows, ledgers, banks, cash }) => {
+const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, setRows: propSetRows, ledgers, banks, cash, onLedgerCreated }) => {
 
     const { t } = useTranslation();
+    const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
     const [taxData, setTaxData] = useState([])
     const { selectedBranchId, currentCurrency } = useAuth();
     const { generalSettings, purchaseSettings, financeSettings } = useSelector((state) => state.settings);
@@ -38,53 +41,51 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
             return null;
         }
     };
+const emptyRow = (index) => ({
+    id: index + 1,
+    sn: index + 1,
+    ledgerId: '',
+    ledgerName: '',
+    grossAmount: (0).toFixed(generalSettings?.decimalPart ?? 2), // renamed from "amount"
+    discAmt: 0,
+    discPerc: 0,
+    netAmount: 0,
+    taxId: null,
+    taxRate: 0,
+    taxType: 'Excluded',
+    taxAmount: 0,
+    chequeNo: '',
+    chequeDate: null,
+    narration: '',
+    amount: 0,           // renamed from "totalAmount" — final payable, maps to API "amount"
+    ledgerBalance: null,
+});
 
-    const emptyRow = (index) => ({
-        id: index + 1,
-        sn: index + 1,
-        ledgerId: '',
-        ledgerName: '',
-        amount: (0).toFixed(generalSettings?.decimalPart ?? 2),
-        discAmt: 0,
-        discPerc: 0,
-        netAmount: 0,
-        taxId: null,
-        taxRate: 0,
-        taxType: 'Excluded',
-        taxAmount: 0,
-        chequeNo: '',
-        chequeDate: null,
-        narration: '',
-        totalAmount: 0,
-        ledgerBalance: null,   // ← ledger balance field
-    });
-
-    const [rows, setRows] = useState(() => {
-        if (editMode && propRows && propRows.length > 0) {
-            return propRows.map((item, index) => ({
-                id: index + 1,
-                sn: index + 1,
-                ledgerId: item.ledgerId || '',
-                ledgerName: item.ledgerName || '',
-                amount: (parseFloat(item.amount) || 0).toFixed(generalSettings?.decimalPart ?? 2),
-                discAmt: parseFloat(item.discAmt) || 0,
-                discPerc: parseFloat(item.discPerc) || 0,
-                netAmount: parseFloat(item.netAmount) || 0,
-                taxId: item.taxId || null,
-                taxRate: parseFloat(item.taxRate) || 0,
-                taxType: item.taxType || 'Excluded',
-                taxAmount: parseFloat(item.taxAmount) || 0,
-                chequeNo: item.chequeNo || '',
-                chequeDate: item.chequeDate ? new Date(item.chequeDate) : null,
-                narration: item.narration || '',
-                totalAmount: parseFloat(item.totalAmount) || 0,
-                ledgerBalance: null,  // ← will be fetched in useEffect below
-            }));
-        } else {
-            return Array.from({ length: 4 }, (_, index) => emptyRow(index));
-        }
-    });
-
+const [rows, setRows] = useState(() => {
+    if (editMode && propRows && propRows.length > 0) {
+        return propRows.map((item, index) => ({
+            id: index + 1,
+            sn: index + 1,
+            ledgerId: item.ledgerId || '',
+            ledgerName: item.ledgerName || '',
+            grossAmount: (parseFloat(item.grossAmount) || 0).toFixed(generalSettings?.decimalPart ?? 2),
+            discAmt: parseFloat(item.discAmt) || 0,
+            discPerc: parseFloat(item.discountPercentage ?? item.discPerc) || 0,
+            netAmount: parseFloat(item.netAmount) || 0,
+            taxId: item.taxId || null,
+            taxRate: parseFloat(item.taxRate) || 0,
+            taxType: item.taxType || 'Excluded',
+            taxAmount: parseFloat(item.taxAmount) || 0,
+            chequeNo: item.chequeNo || '',
+            chequeDate: item.chequeDate ? new Date(item.chequeDate) : null,
+            narration: item.Narration || item.narration || '',
+            amount: parseFloat(item.amount) || 0,
+            ledgerBalance: null,
+        }));
+    } else {
+        return Array.from({ length: 4 }, (_, index) => emptyRow(index));
+    }
+});
     // Fetch balances for all pre-filled ledgers on edit mode mount
     useEffect(() => {
         if (!editMode) return;
@@ -116,41 +117,48 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
         }
     };
 
-    const calculateRow = (row, changedField = null) => {
-        let amountAfterDiscount, taxAmount, netAmount, discAmt, discPerc;
+  const calculateRow = (row, changedField = null) => {
+    let amountAfterDiscount, taxAmount, netAmount, discAmt, discPerc;
 
-        if (changedField === 'discAmt') {
-            discAmt = row.discAmt;
-            discPerc = row.amount > 0 ? (discAmt / row.amount) * 100 : 0;
-        } else if (changedField === 'discPerc') {
-            discPerc = row.discPerc;
-            discAmt = (row.amount * discPerc) / 100;
+    if (changedField === 'discAmt') {
+        discAmt  = row.discAmt;
+        discPerc = row.grossAmount > 0 ? (discAmt / row.grossAmount) * 100 : 0;
+    } else if (changedField === 'discPerc') {
+        discPerc = row.discPerc;
+        discAmt  = (row.grossAmount * discPerc) / 100;
+    } else {
+        discPerc = row.discPerc;
+        discAmt  = (row.grossAmount * discPerc) / 100;
+    }
+
+    amountAfterDiscount = parseFloat(row.grossAmount) - discAmt;
+
+    if (row.taxId && row.taxRate > 0) {
+        taxAmount = (amountAfterDiscount * row.taxRate) / 100;
+
+        if (row.taxType === 'Included') {
+            netAmount = amountAfterDiscount - taxAmount;
         } else {
-            discPerc = row.discPerc;
-            discAmt = (row.amount * discPerc) / 100;
-        }
-
-        amountAfterDiscount = row.amount - discAmt;
-
-        if (row.taxType === 'Included' && row.taxId && row.taxRate > 0) {
-            taxAmount = (amountAfterDiscount * row.taxRate) / 100;
-            netAmount = amountAfterDiscount + taxAmount;
-        } else {
-            taxAmount = 0;
             netAmount = amountAfterDiscount;
         }
+    } else {
+        taxAmount = 0;
+        netAmount = amountAfterDiscount;
+    }
 
-        const totalAmount = netAmount;
+    const finalAmount = row.taxType === 'Included'
+        ? amountAfterDiscount
+        : amountAfterDiscount + taxAmount;
 
-        return {
-            ...row,
-            discAmt: parseFloat(discAmt.toFixed(generalSettings.decimalPart)),
-            discPerc: parseFloat(discPerc.toFixed(generalSettings.decimalPart)),
-            netAmount: parseFloat(netAmount.toFixed(generalSettings.decimalPart)),
-            taxAmount: parseFloat(taxAmount.toFixed(generalSettings.decimalPart)),
-            totalAmount: parseFloat(totalAmount.toFixed(generalSettings.decimalPart))
-        };
+    return {
+        ...row,
+        discAmt:   parseFloat(discAmt.toFixed(generalSettings.decimalPart)),
+        discPerc:  parseFloat(discPerc.toFixed(generalSettings.decimalPart)),
+        netAmount: parseFloat(netAmount.toFixed(generalSettings.decimalPart)),
+        taxAmount: parseFloat(taxAmount.toFixed(generalSettings.decimalPart)),
+        amount:    parseFloat(finalAmount.toFixed(generalSettings.decimalPart)),
     };
+};
 
     const validateRow = (row) => {
         const errors = {};
@@ -163,8 +171,13 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
     const handleInputChange = (id, field, value) => {
         const updatedRows = rows.map(row => {
             if (row.id === id) {
-                let updatedRow = { ...row, [field]: value };
-
+                   let updatedValue = value;
+                    if(field === "chequeNo"){
+                            updatedValue = sanitize.numbers(value)
+                        }
+                let updatedRow = { ...row, [field]: updatedValue };
+                
+                        
                 // If ledger changed, update ledger name and trigger balance fetch
                 if (field === 'ledgerId') {
                     const selectedLedger = ledgers.find(l => l.ledgerId === value);
@@ -187,10 +200,7 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
                     updatedRow.taxRate = parseFloat(selectedTax?.rate || 0);
                 }
 
-                if (field === 'taxType' && value === 'Excluded') {
-                    updatedRow.taxId = null;
-                    updatedRow.taxRate = 0;
-                }
+                
 
                 updatedRow = calculateRow(updatedRow, field);
 
@@ -269,48 +279,54 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
         }
     };
 
-    useEffect(() => {
-        const filledRows = rows.filter(row => row.ledgerId && row.ledgerId !== '');
+   useEffect(() => {
+    const filledRows = rows.filter(row => row.ledgerId && row.ledgerId !== '');
 
-        const payableDetails = filledRows.map((row, index) => ({
-            lineIndex: index + 1,
-            ledgerId: row.ledgerId,
-            grossAmount: row.amount,
-            amount: row.amount,
-            discountPercentage: row.discPerc,
-            netAmount: row.netAmount,
-            taxId: row.taxId,
-            taxType: row.taxType,
-            taxAmount: row.taxAmount,
-            chequeNo: row.chequeNo,
-            chequeDate: row.chequeDate,
-            Narration: row.narration,
-            totalAmount: row.totalAmount,
-        }));
+    const payableDetails = filledRows.map((row, index) => ({
+        lineIndex: index + 1,
+        ledgerId: row.ledgerId,
+        ledgerName: row.ledgerName,
+        grossAmount: row.grossAmount,
+        discAmt: row.discAmt,
+        discPerc: row.discPerc,
+        discountPercentage: row.discPerc,
+        netAmount: row.netAmount,
+        taxId: row.taxId,
+        taxRate: row.taxRate,
+        taxType: row.taxType,
+        taxAmount: row.taxAmount,
+        amount: row.amount,          // final payable — matches API's "amount"
+        chequeNo: row.chequeNo,
+        chequeDate: row.chequeDate,
+        Narration: row.narration,
+    }));
 
-        const totalNetAmount = filledRows.reduce((sum, row) => sum + row.netAmount, 0);
-        const totalTaxAmount = filledRows.reduce((sum, row) => sum + row.taxAmount, 0);
+    const subTotal = filledRows.reduce((sum, row) => sum + row.netAmount, 0);
+    const totalTaxAmt = filledRows.reduce((sum, row) => sum + row.taxAmount, 0);
+    const totalAmount = filledRows.reduce((sum, row) => sum + row.amount, 0);
 
-        setFormData(prev => ({
-            ...prev,
-            payableDetails,
-            subTotal: totalNetAmount.toFixed(generalSettings.decimalPart),
-            totalTax: totalTaxAmount.toFixed(generalSettings.decimalPart),
-            totalAmount: totalNetAmount.toFixed(generalSettings.decimalPart)
-        }));
-    }, [rows, selectedBranchId]);
+    setFormData(prev => ({
+        ...prev,
+        payableDetails,
+        subTotal: subTotal.toFixed(generalSettings.decimalPart),
+        totalTax: totalTaxAmt.toFixed(generalSettings.decimalPart),
+        totalAmount: totalAmount.toFixed(generalSettings.decimalPart),
+    }));
+}, [rows, selectedBranchId]);
+
 
     const calculateTotals = () => {
-        const totalNetAmount = rows.reduce((sum, row) => sum + row.netAmount, 0);
-        const totalTaxAmount = rows.reduce((sum, row) => sum + row.taxAmount, 0);
-        const grandTotal = rows.reduce((sum, row) => sum + row.totalAmount, 0);
+    const filledRows = rows.filter(row => row.ledgerId && row.ledgerId !== '');
+    const totalNetAmount = filledRows.reduce((sum, row) => sum + row.netAmount, 0);
+    const totalTaxAmount = filledRows.reduce((sum, row) => sum + row.taxAmount, 0);
+    const grandTotal = filledRows.reduce((sum, row) => sum + row.amount, 0);
 
-        return {
-            totalNetAmount: totalNetAmount.toFixed(generalSettings.decimalPart),
-            totalTaxAmount: totalTaxAmount.toFixed(generalSettings.decimalPart),
-            grandTotal: grandTotal.toFixed(generalSettings.decimalPart)
-        };
+    return {
+        totalNetAmount: totalNetAmount.toFixed(generalSettings.decimalPart),
+        totalTaxAmount: totalTaxAmount.toFixed(generalSettings.decimalPart),
+        grandTotal: grandTotal.toFixed(generalSettings.decimalPart),
     };
+};
 
     const totals = calculateTotals();
 
@@ -366,19 +382,31 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
 
                                 {/* Ledger Name */}
                                 <td className="p-1 border border-themed dark:border-themed w-64">
-                                    <SearchableDropdown
-                                        options={ledgers?.map((ledger) => ({
-                                            value: ledger.ledgerId,
-                                            label: ledger.ledgerName,
-                                        }))}
-                                        value={row.ledgerId}
-                                        onChange={(value) => handleInputChange(row.id, 'ledgerId', value)}
-                                        placeholder="Select Expense Account"
-                                        searchPlaceholder="Search Expense..."
-                                        clearable={true}
-                                        className="w-full"
-                                        loading={loadingLedgers}
-                                    />
+                                    <div className="flex items-start">
+                                        <div className="flex-1 min-w-0">
+                                            <SearchableDropdown
+                                                options={ledgers?.map((ledger) => ({
+                                                    value: ledger.ledgerId,
+                                                    label: ledger.ledgerName,
+                                                }))}
+                                                value={row.ledgerId}
+                                                onChange={(value) => handleInputChange(row.id, 'ledgerId', value)}
+                                                placeholder="Select Expense Account"
+                                                searchPlaceholder="Search Expense..."
+                                                clearable={true}
+                                                className="w-full"
+                                                loading={loadingLedgers}
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsLedgerModalOpen(true)}
+                                            className="p-1.5 ml-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 shrink-0"
+                                            title="Create New Ledger"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
 
                                     {/* Ledger Balance */}
                                     {financeSettings?.showLedgerbalance && (
@@ -399,29 +427,36 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
                                 </td>
 
                                 {/* Amount */}
-                                <td className="p-1 border border-themed dark:border-themed w-20">
-                                    <input
-                                        ref={el => inputRefs.current[`${row.id}-amount`] = el}
-                                        type="number"
-                                        value={row.amount}
-                                        onFocus={(e) => e.target.select()}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-                                            if (/^\d*\.?\d*$/.test(value)) {
-                                                handleInputChange(row.id, 'amount', value);
-                                            }
-                                        }}
-                                        onBlur={(e) => {
-                                            const num = parseFloat(e.target.value) || 0;
-                                            handleInputChange(
-                                                row.id,
-                                                'amount',
-                                                num.toFixed(generalSettings.decimalPart)
-                                            );
-                                        }}
-                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
-                                    />
-                                </td>
+                               <td className="p-1 border border-themed dark:border-themed w-20">
+    <input
+        ref={el => inputRefs.current[`${row.id}-amount`] = el}
+        type="number"
+        min="0"
+        step="0.01"
+        value={row.grossAmount}
+        onFocus={(e) => e.target.select()}
+        onKeyDown={(e) => {
+            if(["-","+","e","E"].includes(e.key)){
+                e.preventDefault()
+            }
+        }}
+        onChange={(e) => {
+            const value = e.target.value;
+            if (/^\d*\.?\d*$/.test(value)) {
+                handleInputChange(row.id, 'grossAmount', value);
+            }
+        }}
+        onBlur={(e) => {
+            const num = parseFloat(e.target.value) || 0;
+            handleInputChange(
+                row.id,
+                'grossAmount',
+                num.toFixed(generalSettings.decimalPart)
+            );
+        }}
+        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
+    />
+</td>
 
                                 {purchaseSettings?.showLineDiscount && (
                                     <>
@@ -433,7 +468,13 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                 max={100}
                                                 value={row.discPerc}
                                                 onFocus={(e) => e.target.select()}
-                                                onChange={(e) => handleInputChange(row.id, 'discPerc', parseFloat(e.target.value) || 0)}
+                                                // onChange={(e) => handleInputChange(row.id, 'discPerc', parseFloat(e.target.value) || 0)}
+                                                onChange={(e) => {
+                                                    let value = parseFloat(e.target.value);
+                                                     if (isNaN(value)) value = 0;
+                                                     value = Math.min(Math.max(value, 0), 99);
+                                                     handleInputChange(row.id, "discPerc", value);
+                                                    }}
                                                 className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
                                             />
                                         </td>
@@ -468,12 +509,14 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
                                             </select>
                                         </td>
 
+                                        {/* Tax Master — remove disabled={row.taxType === 'Excluded'} */}
                                         <td className="p-1 border border-themed dark:border-themed w-32">
                                             <select
                                                 value={row.taxId || ''}
                                                 onChange={(e) => handleInputChange(row.id, 'taxId', parseInt(e.target.value))}
-                                                disabled={row.taxType === 'Excluded'}
-                                                className="w-full px-2 py-1 text-sm border-0 bg-primary dark:bg-secondary text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className="w-full px-2 py-1 text-sm border-0 bg-primary dark:bg-secondary 
+                   text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 
+                   dark:focus:ring-blue-400 rounded"
                                             >
                                                 <option value="">Select Tax</option>
                                                 {taxData?.map((tax) => (
@@ -512,7 +555,7 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
                                 </td>
 
                                 {/* Cheque Date */}
-                                <td className="p-1 border border-themed dark:border-themed w-20">
+                                <td className="p-1 border border-themed dark:border-themed w-25">
                                     <div>
                                         <DateInput
                                             value={row.chequeDate
@@ -552,7 +595,7 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
                                 {/* Total Amount */}
                                 <td className="p-1 border border-themed dark:border-themed w-24">
                                     <span className="text-sm font-bold block text-right px-2 text-red-700 dark:text-red-400">
-                                        {row.totalAmount.toFixed(generalSettings.decimalPart)}
+                                        {row.amount.toFixed(generalSettings.decimalPart)}
                                     </span>
                                 </td>
 
@@ -592,7 +635,7 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
                 cash={cash}
             />
 
-            <EditProductDetailsModal
+        <EditProductDetailsModal
                 open={editModalOpen}
                 handleClose={() => {
                     setEditModalOpen(false);
@@ -600,6 +643,15 @@ const PayableVoucherTable = ({ formData, setFormData, editMode, rows: propRows, 
                 }}
                 onSuccess={handleEditSuccess}
                 rowData={editingRow}
+            />
+            
+            <LedgerCreationModal 
+                open={isLedgerModalOpen} 
+                handleClose={() => setIsLedgerModalOpen(false)} 
+                onSuccess={() => {
+                    setIsLedgerModalOpen(false);
+                    if (onLedgerCreated) onLedgerCreated();
+                }} 
             />
         </div>
     );

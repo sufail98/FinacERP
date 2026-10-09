@@ -31,7 +31,7 @@ const ProductHistoryModal = ({ isOpen, onClose, productCode, productName }) => {
 
             const res = await axiosInstance.post('history/purchase', {
                 productCode: productCode,
-                branchId: selectedBranchId,
+                branchId: null,
                 currencyId: currentCurrency.currencyId,
                 ledgerId: null // Pass null as requested
             });
@@ -159,7 +159,7 @@ const ProductHistoryModal = ({ isOpen, onClose, productCode, productName }) => {
                     ) : (
                         <div className="flex items-center justify-center py-12">
                             <p className="text-muted dark:text-muted">
-                                {t("salesInvoice.form.productHistoryModal.noData") || "No sales history found for this product"}
+                                {"No sales history found for this product"}
                             </p>
                         </div>
                     )}

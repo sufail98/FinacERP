@@ -33,6 +33,7 @@ const AreaWiseSalesReportFilter = ({
                     name="fromDate"
                     value={filters.fromDate}
                     onChange={(e, value) => onFilterChange('fromDate', value)}
+                    max={new Date().toISOString().split(('T')[0])}
                     required
                     className='w-full'
                 />
@@ -94,14 +95,14 @@ const AreaWiseSalesReportFilter = ({
                     placeholder={t('areaWiseSalesReport.filters.all')}
                 />
 
-                <SearchableDropdown
+                {/* <SearchableDropdown
                     label={t('areaWiseSalesReport.filters.currency')}
                     name="currencyId"
                     value={filters.currencyId}
                     onChange={(value) => onFilterChange('currencyId', value)}
                     options={currencyOptions}
                     placeholder={t('areaWiseSalesReport.filters.all')}
-                />
+                /> */}
 
                 <SearchableDropdown
                     label={t('areaWiseSalesReport.filters.brand')}
@@ -129,7 +130,7 @@ const AreaWiseSalesReportFilter = ({
                         </span>
                     </label>
 
-                    {generalSettings?.AccountPosting && (
+                    {/* {generalSettings?.AccountPosting && (
     <label className="flex items-center cursor-pointer">
         <input
             type="checkbox"
@@ -141,7 +142,7 @@ const AreaWiseSalesReportFilter = ({
             {t('areaWiseSalesReport.filters.accountsPosting')}
         </span>
     </label>
-)}
+)} */}
                 </div>
 
                 {/* Buttons */}

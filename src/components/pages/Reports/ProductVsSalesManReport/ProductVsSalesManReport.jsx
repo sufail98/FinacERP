@@ -27,7 +27,7 @@ const ProductVsSalesManReport = () => {
     const [brandData, setBrandData] = useState([]);
 
     const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Product Vs Salesman Report");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Product v/s Salesman");
     const { generalSettings } = useSelector((state) => state.settings);
 const navigate = useNavigate();
     const handleRowClick = (row) => {
@@ -42,9 +42,9 @@ const navigate = useNavigate();
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -52,11 +52,11 @@ const navigate = useNavigate();
     const [filters, setFilters] = useState({
         fromDate: getDefaultDates().fromDate,
         toDate: getDefaultDates().toDate,
-        groupId: 'All',
-        productCode: 'All',
-        brandId: 0,
+        groupId: null,
+        productCode: null,
+        brandId: null,     
         mode: 'Detailed',
-        isAccountsPosting: false
+        isAccountsPosting:  generalSettings?.AccountPosting 
     });
 
     // ── Columns (same schema for both Detailed / Summary modes) ───────────
@@ -130,13 +130,13 @@ const navigate = useNavigate();
     };
 
     const productGroupOptions = useMemo(() => [
-        { label: t('productVsSalesManReport.filters.all'), value: 'All' },
+        { label: t('productVsSalesManReport.filters.all'), value: null },
         ...productGroupData.map(g => ({ label: g.groupName, value: g.groupId }))
     ], [productGroupData, t]);
 
     const productOptions = useMemo(() => {
         let filtered = productData;
-        if (filters.groupId && filters.groupId !== 'All') {
+        if (filters.groupId && filters.groupId !== null) {
             filtered = productData.filter(p => p.group1Id === filters.groupId);
         }
         const unique = filtered.reduce((acc, p) => {
@@ -144,13 +144,13 @@ const navigate = useNavigate();
             return acc;
         }, []);
         return [
-            { label: t('productVsSalesManReport.filters.all'), value: 'All' },
+            { label: t('productVsSalesManReport.filters.all'), value: null },
             ...unique.map(p => ({ label: `${p.productCode} - ${p.productName}`, value: p.productCode }))
         ];
     }, [productData, filters.groupId, t]);
 
     const brandOptions = useMemo(() => [
-        { label: t('productVsSalesManReport.filters.all'), value: 0 },
+        { label: t('productVsSalesManReport.filters.all'), value: null },
         ...brandData.map(b => ({ label: b.brandName || b.BrandName, value: b.brandId || b.BrandId }))
     ], [brandData, t]);
 
@@ -199,7 +199,7 @@ const navigate = useNavigate();
     const handleFilterChange = (field, value) => {
         setFilters(prev => {
             const next = { ...prev, [field]: value };
-            if (field === 'groupId') next.productCode = 'All';
+            if (field === 'groupId') next.productCode = null;
             return next;
         });
         if (field === 'mode') { setReportData(null); setAlert(null); }
@@ -207,7 +207,7 @@ const navigate = useNavigate();
 
     const resetFilters = () => {
         const dates = getDefaultDates();
-        setFilters({ fromDate: dates.fromDate, toDate: dates.toDate, groupId: 'All', productCode: 'All', brandId: 0, mode: 'Detailed', isAccountsPosting: false });
+        setFilters({ fromDate: dates.fromDate, toDate: dates.toDate, groupId: null, productCode: null, brandId: null, mode: 'Detailed', isAccountsPosting:  generalSettings?.AccountPosting});
         setReportData(null);
         setAlert(null);
     };

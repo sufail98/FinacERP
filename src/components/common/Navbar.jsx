@@ -1,7 +1,7 @@
 // components/Navbar.jsx
 import { useEffect, useState } from 'react';
 import { User, Menu as MenuIcon, X, RefreshCw } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import useAuth from '@/redux/hook/auth/useAuth';
 import LanguageDropdown from './LanguageDropdown';
 import NavSearchBar from './NavSearchBar';
@@ -9,9 +9,6 @@ import BranchDropdown from './branchDropdown';
 import UserDropdown from './UserDropdown';
 import ThemeToggle from './ThemeToggle';
 import NotificationBell from './NotificationBell';
-import axiosInstance from '@/lib/axiosConfig';
-import { clearMenuData } from '../../../public/assets/js/menuData';
-import Swal from 'sweetalert2';
 import { useTranslation } from 'react-i18next';
 
 const Navbar = () => {
@@ -19,7 +16,6 @@ const Navbar = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [isElectron, setIsElectron] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const navigate = useNavigate();
   const location = useLocation();
   const [show, setShow] = useState(true);
   const { t } = useTranslation();
@@ -30,6 +26,7 @@ const Navbar = () => {
     const checkElectron = () => {
       return !!(
         window.navigator.userAgent.includes('Electron') ||
+        window.electronAPI?.isElectron ||
         window.process?.type ||
         window.electron
       );
@@ -56,6 +53,20 @@ const Navbar = () => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    const handleShortcut = (event) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'r') {
+        event.preventDefault();
+        handleHardRefresh();
+      }
+    };
+
+    document.addEventListener('keydown', handleShortcut);
+    return () => {
+      document.removeEventListener('keydown', handleShortcut);
+    };
+  }, []);
+
   if (!show) {
     return null;
   }
@@ -73,19 +84,19 @@ const Navbar = () => {
     setActiveDropdown(null);
   };
 
-  // ✅ Handle refresh action
   const handleRefresh = () => {
+    window.location.reload();
+  };
+
+  const handleHardRefresh = async () => {
     setIsRefreshing(true);
-    
-    if (window.electron) {
-      // If Electron API is available
-      window.electron.reload();
+
+    if (window.electronAPI?.clearAppDataAndReload) {
+      await window.electronAPI.clearAppDataAndReload();
     } else {
-      // Fallback to window reload
       window.location.reload();
     }
-    
-    // Reset refreshing state after animation
+
     setTimeout(() => {
       setIsRefreshing(false);
     }, 1000);
@@ -95,7 +106,7 @@ const Navbar = () => {
     <>
       {/* Main Navbar */}
       <div
-        style={{ zIndex: '999999999999999999999999999999' }}
+        style={{ zIndex: '999999' }}
         className="main-bg h-[50px] md:h-[45px] flex justify-between items-center px-2 md:pr-2 sticky top-0 w-full"
       >
         {/* Logo Section */}
@@ -236,22 +247,25 @@ const Navbar = () => {
               </div>
 
               {/* Branch Dropdown for Mobile */}
-              <div className="flex items-center">
-                <div className="pb-4">
-                  <BranchDropdown
-                    isOpen={activeDropdown === 'branch'}
-                    onToggle={() => handleDropdownToggle('branch')}
-                    onClose={closeDropdown}
-                  />
-                </div>
-                {/* Language Dropdown for Mobile */}
-                <div className="pb-4">
-                  <LanguageDropdown
-                    isOpen={activeDropdown === 'language'}
-                    onToggle={() => handleDropdownToggle('language')}
-                  />
-                </div>
+              <div className="flex flex-col gap-3">
+              <div className="pb-4 relative">
+      <BranchDropdown
+        isOpen={activeDropdown === 'branch'}
+        onToggle={() => handleDropdownToggle('branch')}
+        onClose={closeDropdown}
+      />
+    </div>
+
+             <div className="pb-4 relative">
+      <LanguageDropdown
+        isOpen={activeDropdown === 'language'}
+        onToggle={() => handleDropdownToggle('language')}
+        // isMobile={true}
+      />
+    </div>
               </div>
+
+          
 
               {/* ✅ Theme Toggle for Mobile */}
               <div className="pb-4 flex items-center justify-between border-b border-gray-600">

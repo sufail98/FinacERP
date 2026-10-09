@@ -24,7 +24,7 @@ const DamageStockTable = ({ formData, setFormData, editMode, rows: propRows, }) 
     const suggestionRef = useRef(null);
     const inputRefs = useRef({});
     const [isInitialized] = useState(false);
-    const { inventoryProducts:allProducts, loading: productsLoading } = useSelector((state) => state.products)
+    const { inventoryProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products)
 
     const dispatch = useDispatch()
 
@@ -131,28 +131,29 @@ const DamageStockTable = ({ formData, setFormData, editMode, rows: propRows, }) 
         const columns = ['productName', 'qty', 'unit', 'purchaseRate'];
         return columns;
     };
-useEffect(() => {
-    if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
-        const suggestionContainer = suggestionRef.current;
-        const activeItem = suggestionContainer?.querySelector(
-            `[data-suggestion-index="${selectedSuggestionIndex[activeSuggestionRow]}"]`
-        );
-        
-        if (activeItem && suggestionContainer) {
-            const containerRect = suggestionContainer.getBoundingClientRect();
-            const itemRect = activeItem.getBoundingClientRect();
-            const stickyButtonHeight = 42; // height of "Add New Product" button
-            
-            if (itemRect.bottom > containerRect.bottom - stickyButtonHeight) {
-                suggestionContainer.scrollTop += 
-                    itemRect.bottom - containerRect.bottom + stickyButtonHeight;
-            } else if (itemRect.top < containerRect.top) {
-                suggestionContainer.scrollTop -= 
-                    containerRect.top - itemRect.top;
+    useEffect(() => {
+        if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
+            const suggestionContainer = suggestionRef.current;
+            const activeItem = suggestionContainer?.querySelector(
+                `[data-suggestion-index="${selectedSuggestionIndex[activeSuggestionRow]}"]`
+            );
+
+            if (activeItem && suggestionContainer) {
+                const containerRect = suggestionContainer.getBoundingClientRect();
+                const itemRect = activeItem.getBoundingClientRect();
+                const stickyButtonHeight = 42; // height of "Add New Product" button
+
+                if (itemRect.bottom > containerRect.bottom - stickyButtonHeight) {
+                    suggestionContainer.scrollTop +=
+                        itemRect.bottom - containerRect.bottom + stickyButtonHeight;
+                } else if (itemRect.top < containerRect.top) {
+                    suggestionContainer.scrollTop -=
+                        containerRect.top - itemRect.top;
+                }
             }
         }
-    }
-}, [selectedSuggestionIndex, activeSuggestionRow]);
+    }, [selectedSuggestionIndex, activeSuggestionRow]);
+
     const handleKeyDown = (e, rowId, currentField) => {
         // Handle qty field Enter key - move to purchaseRate in same row
         if (currentField === 'qty' && e.key === 'Enter') {
@@ -222,7 +223,13 @@ useEffect(() => {
                     break;
             }
         }
-
+        if (currentField === 'productName' && e.key === 'Enter') {
+            const row = rows.find(r => r.id === rowId);
+            if (!row?.productCode || row.productCode.trim() === '') {
+                e.preventDefault();
+                return; // do nothing — don't create a new row, don't move focus
+            }
+        }
         const editableColumns = getEditableColumns();
         const currentRowIndex = rows.findIndex(row => row.id === rowId);
         const currentFieldIndex = editableColumns.indexOf(currentField);
@@ -941,7 +948,7 @@ useEffect(() => {
                                         <td className="p-0.5 border border-themed dark:border-themed">
                                             <input
                                                 ref={el => inputRefs.current[`${row.id}-purchaseRate`] = el}
-                                                type="text"
+                                                type="number"
                                                 onFocus={(e) => e.target.select()}
                                                 value={row.purchaseRate}
                                                 onChange={(e) => {

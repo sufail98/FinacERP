@@ -22,6 +22,7 @@ import DateInput from './SalesQuotationDateInput'
 import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal'
 import AddCustomerModal from '@/components/elements/theme/AddCustomerModal'
 import NormalSelectInput from '@/components/elements/theme/NormalSelectInput'
+import usePrivileges from '@/lib/hooks/usePrivileges'
 
 const FormSectionMain = ({
   existingInvoiceNo,
@@ -53,9 +54,12 @@ const FormSectionMain = ({
 
 }) => {
   const [loadingCustomer, setLoadingCustomer] = useState(false);
+  const { hasAccess: hasTransactionBatchAccess } = usePrivileges("Transaction Batch");
+  const { hasAccess: hasEmployeeAccess, } = usePrivileges("Employee");
+
 
   const { t } = useTranslation();
-  const { generalSettings, financeSettings } = useSelector((state) => state.settings);
+  const { generalSettings, financeSettings, saleSettings } = useSelector((state) => state.settings);
   const [salesAcModalOpen, setSalesAcModalOpen] = useState(false);
   const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
   const [salesModeModalOpen, setSalesModeModalOpen] = useState(false);
@@ -65,6 +69,8 @@ const FormSectionMain = ({
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [fetchSalesAccountLoading, setSalesAcLoading] = useState(false)
   const [showTaxType, setShowTaxType] = useState(false);
+  const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
+
   // const [shippingAdderess, setShippingAddress] = useState(null);
   const [currentledgerBalance, setCurrentLedgerBalance] = useState('')
   // const [billingAddress, setBlillingAddress] = useState(null);
@@ -93,7 +99,45 @@ const FormSectionMain = ({
       console.error(error);
     }
   }
+  useEffect(() => {
+    fetchCurrencyConvertion()
+  }, [selectedBranchId])
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
 
+    const date = new Date(dateString);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const MM = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+
+    const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+    return format
+      .replace('dd', dd)
+      .replace('MM', MM)
+      .replace('yyyy', yyyy);
+  };
+  const formatDecimal = (value) =>
+    Number(value || 0).toFixed(generalSettings.decimalPart);
+  const fetchCurrencyConvertion = async () => {
+    try {
+      const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+
+      const formattedData = response.data.data.map((item, index) => ({
+        ...item,
+        SNo: index + 1,
+        date: formatDate(item.date),
+        rate: item.rate !== null && item.rate !== undefined
+          ? formatDecimal(item.rate)
+          : formatDecimal(0),
+      }));
+
+      setCurrencyConvertionData(formattedData);
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
 
   useEffect(() => {
@@ -174,6 +218,7 @@ const FormSectionMain = ({
   const currentLedgerIdRef = useRef(null);
   const handleDropdownChange = (name, value) => {
 
+
     if (name === 'ledgerId') {
       currentLedgerIdRef.current = value;
       fetchLedgerBalance(value);
@@ -232,32 +277,37 @@ const FormSectionMain = ({
               ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
               : 'grid-cols-1 sm:grid-cols-2'
               }`}>
-              <div className='flex gap-0.5 lg:gap-1 items-end flex-1'>
-                <div className='flex-1 min-w-0'>
-                  <SearchableDropdown
-                    name="employeeId"
-                    label={t('salesInvoice.form.label.formHeaderSection.salesMan')}
-                    options={employees?.map((data) => ({
-                      value: data.employeeId,
-                      label: data.employeeName,
-                    }))}
-                    value={formData.employeeId}
-                    onChange={(value) => handleDropdownChange('employeeId', value)}
-                    placeholder={t('salesInvoice.form.placeholders.formHeaderSection.salesMan')}
-                    searchPlaceholder="Sales man..."
-                    error={errors.employeeId}
-                    clearable={true}
-                    className='w-full mb-0.5'
-                    loading={loading.employees}
-                  />
+
+              {hasEmployeeAccess && (
+                <div className='flex gap-0.5 lg:gap-1 items-end flex-1'>
+                  <div className='flex-1 min-w-0'>
+                    <SearchableDropdown
+                      name="employeeId"
+                      label={t('salesInvoice.form.label.formHeaderSection.salesMan')}
+                      options={employees?.map((data) => ({
+                        value: data.employeeId,
+                        label: data.employeeName,
+                      }))}
+                      value={formData.employeeId}
+                      onChange={(value) => handleDropdownChange('employeeId', value)}
+                      placeholder={t('salesInvoice.form.placeholders.formHeaderSection.salesMan')}
+                      searchPlaceholder="Sales man..."
+                      error={errors.employeeId}
+                      clearable={true}
+                      className='w-full mb-0.5'
+                      loading={loading.employees}
+                    />
+                  </div>
+
+                  <div className='mb-0.5 flex-shrink-0'>
+                    <AddNewBtn
+                      icon={Plus}
+                      onClick={() => setEmployeeModalOpen(true)}
+                    />
+                  </div>
+
                 </div>
-                <div className='mb-0.5 flex-shrink-0'>
-                  <AddNewBtn
-                    icon={Plus}
-                    onClick={() => setEmployeeModalOpen(true)}
-                  />
-                </div>
-              </div>
+              )}
 
               <SearchableDropdown
                 name="pricingLevelId"
@@ -275,25 +325,27 @@ const FormSectionMain = ({
                 className="w-full"
                 loading={loading.pricingLevel}
               />
-              <SearchableDropdown
-                name="BatchId"
-                label={t('salesInvoice.form.label.formHeaderSection.BatchId')}
-                options={batches.map(batch => ({
-                  value: batch.batchid,
-                  label: batch.batchname
-                }))}
-                value={formData.BatchId}
-                onChange={(value) => handleDropdownChange('BatchId', value)}
-                placeholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
-                searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
-                clearable={true}
-                className="w-full"
-                loading={loading.batch}
-              />
+              {hasTransactionBatchAccess && (
+                <SearchableDropdown
+                  name="BatchId"
+                  label={t('salesInvoice.form.label.formHeaderSection.BatchId')}
+                  options={batches.map(batch => ({
+                    value: batch.transactionbatchid,
+                    label: batch.batchname
+                  }))}
+                  value={formData.BatchId}
+                  onChange={(value) => handleDropdownChange('BatchId', value)}
+                  placeholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
+                  searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
+                  clearable={true}
+                  className="w-full"
+                  loading={loading.batch}
+                />
+              )}
               <TextInput
                 name="partyRefNo"
                 label={t('salesInvoice.form.label.formHeaderSection.RefNo')}
-                type="number"
+                type="text"
                 value={formData.partyRefNo}
                 onChange={handleInputChange}
                 className="w-full"
@@ -497,14 +549,16 @@ const FormSectionMain = ({
           className='text-blue-600 dark:text-blue-400 border-b border-blue-600 dark:border-blue-400 w-fit cursor-pointer hover:text-blue-700 dark:hover:text-blue-300'
           onClick={() => setSalesAcModalOpen(true)}
         >
-          {t('salesInvoice.form.label.formHeaderSection.salesAcLabel')}: {formData.salesAccountName}
+          {t('salesInvoice.form.label.formHeaderSection.salesAcLabel')}: {formData?.salesAccountName}
         </p>
-        <p
-          className='text-blue-600 dark:text-blue-400 border-b border-blue-600 dark:border-blue-400 w-fit cursor-pointer hover:text-blue-700 dark:hover:text-blue-300'
-          onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
-        >
-          {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {currentCurrencyFromStore?.currencyName || "Select Currency"}
-        </p>
+        {financeSettings?.multiCurrency && (
+          <p
+            className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+            onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
+          >
+            {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {formData?.currencyName || currentCurrencyFromStore?.currencyName || "Select Currency"}
+          </p>
+        )}
       </div>
 
       {/* Sales Invoice Table */}
@@ -536,6 +590,8 @@ const FormSectionMain = ({
         handleChange={(field, value) => {
           handleDropdownChange(field, value);
         }}
+        currencyConvertionData={currencyConvertionData}
+
       />
       <SalesModeModal
         open={salesModeModalOpen}

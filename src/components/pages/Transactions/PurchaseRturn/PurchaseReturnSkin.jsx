@@ -2,7 +2,7 @@ import BreadCrumb from '@/components/common/BreadCrumb';
 import { Eraser, Loader2, Pencil, ReceiptText, SaveAll, SquarePen, Table } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import FormSectionMain from './FormSectionMain';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
@@ -12,11 +12,37 @@ import { useNavigate, useParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
 import useFormValidation from '@/lib/hooks/useFormValidation';
 import purchaseReturnPrintOne from '@/utils/prints/purchaseReturnPrints/purchaseReturnPrintOne';
+import purchaseReturnPrintTwo from '@/utils/prints/purchaseReturnPrints/purchaseReturnPrintTwo';
+import purchaseReturnPrintThree from '@/utils/prints/purchaseReturnPrints/purchaseReturnPrintThree';
+
+const RETURN_PRINT_HANDLERS = {
+    'Type 1': {
+        print: (d, branch, time, cur) => purchaseReturnPrintOne(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => purchaseReturnPrintOne(d, branch, time, null, cur),
+    },
+    'Type 2': {
+        print: (d, branch, time, cur) => purchaseReturnPrintTwo(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => purchaseReturnPrintTwo(d, branch, time, null, cur),
+    },
+    'Type 3': {
+        print: (d, branch, time, cur) => purchaseReturnPrintThree(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => purchaseReturnPrintThree(d, branch, time, null, cur),
+    },
+};
+const DEFAULT_RETURN_PRINT_TYPE = 'Type 1';
 // ✅ ADDED: Import timezone-safe date utilities
 import { parseDateFromAPI, parseLocalDate } from '../SalesQuotation/salesQuotationDateFormat';
 import { formatDateWithTime } from '@/lib/dateFormat';
+import PrintDropdown from '@/components/common/PrintDropdown';
+import { showToast } from '@/utils/toast';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const PurchaseReturnSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Purchase Return");
+    const { purchaseProducts: allProducts } = useSelector((state) => state.products);
+
     const { purchaseReturnmasterId } = useParams();
     const editMode = Boolean(purchaseReturnmasterId);
     const [fetchLoading, setFetchLoading] = useState(false)
@@ -31,14 +57,18 @@ const PurchaseReturnSkin = () => {
     const [godowns, setGodowns] = useState([]);
     const [currency, setCurrnecies] = useState([])
     const [invoiceId, setInvoiceId] = useState('');
-    const [alert, setAlert] = useState(null);
+
     const { userId, selectedBranchId, currentFinancialYear, currentCurrencyConversion, selectedBranchDetails, currentCurrency } = useAuth();
     const [time, setTime] = useState("");
-    const { generalSettings, saleSettings, financeSettings } = useSelector((state) => state.settings);
+    const { generalSettings, saleSettings, financeSettings, printSettings } = useSelector((state) => state.settings);
+    
+    const returnPrintSettings = printSettings?.["Purchase Return"];
+    const returnPrintTypes = Object.keys(returnPrintSettings?.types || {});
+    const returnPrintConfig = returnPrintSettings?.default || Object.values(returnPrintSettings?.types || {})[0];
     const [resetTableKey, setResetTableKey] = useState(0);
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
     const [batches, setBatches] = useState([]);
-
+    const [isPrinting, setIsPrinting] = useState(false);
     const [billingAddress, setBlillingAddress] = useState(null);
     const [currentledgerBalance, setCurrentLedgerBalance] = useState('')
     const [otherChargeLedgers, setOtherChargLedgers] = useState([])
@@ -46,6 +76,7 @@ const PurchaseReturnSkin = () => {
     const [purchaseAccounts, setPurchaseAccounts] = useState([]);
     const [banks, setBanks] = useState([]);
     const [cash, setCash] = useState([]);
+    const [updateCustomerId, setUpdateCustomerId] = useState(null);
 
     useEffect(() => {
         const updateTime = () => {
@@ -70,7 +101,7 @@ const PurchaseReturnSkin = () => {
         date: new Date(),
         ledgerId: financeSettings.defaultPurchaseAccount || '',
         currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-        taxType: 'Applicable to product',
+        taxType: generalSettings?.taxType,
         GodownId: 1,
         purchaseMasterId: '',
         costCentreId: 1,
@@ -83,6 +114,7 @@ const PurchaseReturnSkin = () => {
         partyVatNo: '',
         partyRefNo: "",
         partyRefDate: "",
+          supplierData: {}, 
         purchaseAccount: "",
         orderMasterId: "",
         receiptMasterId: "",
@@ -140,7 +172,7 @@ const PurchaseReturnSkin = () => {
                 productDescription: "",
                 billDiscOnProduct: null,
                 AddCostonProduct: null,
-                otherchargeonproduct: null,
+                otherchargeOnProduct: null,
                 salesManId: null,
                 GodownId: null,
                 RackId: null,
@@ -148,6 +180,29 @@ const PurchaseReturnSkin = () => {
             }
         ]
     });
+
+    const [loadingSupplier, setLoadingSupplier] = useState(false);
+
+const fetchSupplierData = async (ledgerId) => {
+    if (!ledgerId) return;
+    setLoadingSupplier(true);
+    try {
+        const response = await axiosInstance.get(`get-account-ledger-byId/${ledgerId}`);
+        const data = response.data?.data;
+        if (data) {
+            setFormData((prev) => ({ ...prev, supplierData: data }));
+        }
+    } catch (error) {
+        console.error("Error fetching supplier data:", error);
+    } finally {
+        setLoadingSupplier(false);
+    }
+};
+
+// Refetch whenever the supplier changes (new / edit / clear)
+useEffect(() => {
+    fetchSupplierData(formData.ledgerId);
+}, [formData.ledgerId, resetTableKey]);
 
     const [baseDataloading, setBaseDataloading] = useState(false)
     useEffect(() => {
@@ -169,14 +224,132 @@ const PurchaseReturnSkin = () => {
             }
             return prev;
         });
-    }, [time]); // runs every second when time updates
+    }, [time]);
+    const buildInvoiceDataForPrint = useCallback((invoiceNumber, qrLink, overrideData) => {
+        const base = overrideData || formData;
+
+        const mergedCustomerData = {
+            ...(formData.customerData || {}),
+            ...(base.customerData || {}),
+        };
+
+        const rawDetails = base.purchaseDetails || [];
+
+        // ✅ Enrich with productName / productNameArb from allProducts by matching productCode
+        const enrichedDetails = rawDetails.map((detail, idx) => {
+            const matchedProduct = allProducts?.find(
+                (p) => p.productCode === detail.productCode
+            );
+
+            return {
+                ...detail,
+                productName: detail.productName || matchedProduct?.productName || '',
+                productNameArb: detail.productNameArb || matchedProduct?.productNameArb || '',
+                unitName: detail.unitName || formData.purchaseDetails?.[idx]?.unitName || detail.UnitName || matchedProduct?.unitName || '',
+            };
+        });
+
+        return {
+            ...base,
+            invoiceNo: base?.invoiceNo || base?.voucherNo || invoiceNumber,
+            supplierData: base.supplierData || formData.supplierData, 
+            taxType: formData.taxType || generalSettings?.taxType,
+            date: base.date,
+            purchaseDetails: enrichedDetails,
+            qr_link: qrLink || base.qr_link,
+            customerData: mergedCustomerData,
+        };
+    }, [formData, allProducts, generalSettings?.taxType]);
+
+    const runOrderOutput = useCallback((mode, invoiceDataForPrint) => {
+        const mappedType = formData.printType === 'a4' ? 'Type 1' : (formData.printType === 'a4_2' ? 'Type 2' : formData.printType);
+        const handlers = RETURN_PRINT_HANDLERS[mappedType];
+        const fn = handlers?.[mode] ?? RETURN_PRINT_HANDLERS[DEFAULT_RETURN_PRINT_TYPE][mode];
+        fn(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency);
+    }, [formData.printType, selectedBranchDetails, time, currentCurrency]);
+
+    const printToPrinterFn = useCallback((data) => runOrderOutput('print', data), [runOrderOutput]);
+    const printToPdfFn = useCallback((data) => runOrderOutput('pdf', data), [runOrderOutput]);
+    const fetchInvoiceDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`get-purchase-return-byId/${purchaseReturnmasterId}`);
+        const data = response.data.data;
+
+        const resolvedTaxData = taxData;
+
+        const purchaseDetailsWithProducts = (data.purchaseDetails || []).map((item) => {
+            const taxInfo = resolvedTaxData?.find(t => t.taxId === item?.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo?.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productname || item?.productName || '',
+                unitName: item?.unitName || item?.UnitName || '',
+                taxRate,
+                qty: parseFloat(item.qty) || 0,
+                freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                rate: parseFloat(item.rate) || 0,
+                discountPercentage: parseFloat(item.discountPercentage) || 0,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
+
+        return {
+            ...data,
+            date: data.date ? parseDateFromAPI(data.date) : formData.date,
+            purchaseDetails: purchaseDetailsWithProducts,
+        };
+    }, [purchaseReturnmasterId, taxData, formData.date]);
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this invoice?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchInvoiceDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+        } catch (error) {
+            console.error('Error fetching return for reprint:', error);
+            showToast.error('Failed to fetch return data for printing');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, fetchInvoiceDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchInvoiceDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+        } catch (error) {
+            console.error('Error fetching return for PDF reprint:', error);
+            showToast.error('Failed to fetch return data for PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [fetchInvoiceDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
     useEffect(() => {
         const getSalesRequiredData = async () => {
             setBaseDataloading(true)
             try {
                 const res = await axiosInstance.post('all-purchase-data', {
                     voucherType: "Purchase Return", branchId: selectedBranchId,
-                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Supplier"],
+                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Supplier", "Customer&Supplier"],
                     ledgerId: formData.ledgerId, currencyId: currentCurrency.currencyId
                 })
                 const data = res?.data?.data;
@@ -194,6 +367,13 @@ const PurchaseReturnSkin = () => {
                 setTaxData(data.taxMaster)
                 setBanks(data.bank)
                 setCash(data.cash)
+                setFormData(prev => ({
+                    ...prev,
+                    customerData: data?.customeraddress,
+                    BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : '',
+                    GodownId: data?.godowns?.length > 0 ? data.godowns[0].godownid : '',
+                    costCentreId: data?.costcentre?.length > 0 ? data.costcentre[0].costCentreId : '',
+                }));
                 const filteredCurrencies = data?.currencies?.filter(
                     c => c.branchid_conversion == selectedBranchId
                 ) || [];
@@ -223,45 +403,45 @@ const PurchaseReturnSkin = () => {
                     };
                 });
                 // ✅ Use the first supplier as default if no matching ledger found
-             const defaultLedger = matchingLedger || (data?.customersupplierLedgers?.length > 0 ? data.customersupplierLedgers[0] : null);
-
-if (!editMode) {
-    if (defaultLedger) {
-        setBlillingAddress({
-            name: defaultLedger.ledgerName || '',
-            email: defaultLedger.email || '',
-            phoneNo: defaultLedger.phoneNo || '',
-            vatNo: defaultLedger.tinNumber || '',
-            address: defaultLedger.address || ''
-        });
-        setFormData((prev) => ({
-            ...prev,
-            partyName: defaultLedger.ledgerName || '',
-            partyAddress: defaultLedger.address || '',
-            partyMobile: defaultLedger.phoneNo || '',
-            partyVatNo: defaultLedger.tinNumber || '',
-            customerData: defaultLedger,
-            BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : 1
-        }));
-    } else {
-        setBlillingAddress({ name: '', email: '', phoneNo: '', vatNo: '', address: '' });
-        setFormData((prev) => ({
-            ...prev,
-            partyName: '',
-            partyAddress: '',
-            partyMobile: '',
-            partyVatNo: '',
-            customerData: null,
-            BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : 1
-        }));
-    }
-} else {
-    // In edit mode, only update BatchId — getSalesById handles party/billing fields
-    setFormData((prev) => ({
-        ...prev,
-        BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : 1
-    }));
-}
+                const defaultLedger = matchingLedger || (data?.customersupplierLedgers?.length > 0 ? data.customersupplierLedgers[0] : null);
+                setUpdateCustomerId(defaultLedger?.ledgerId || null);
+                if (!editMode) {
+                    if (defaultLedger) {
+                        setBlillingAddress({
+                            name: defaultLedger.ledgerName || '',
+                            email: defaultLedger.email || '',
+                            phoneNo: defaultLedger.phoneNo || '',
+                            vatNo: defaultLedger.tinNumber || '',
+                            address: defaultLedger.address || ''
+                        });
+                        setFormData((prev) => ({
+                            ...prev,
+                            partyName: defaultLedger.ledgerName || '',
+                            partyAddress: defaultLedger.address || '',
+                            partyMobile: defaultLedger.phoneNo || '',
+                            partyVatNo: defaultLedger.tinNumber || '',
+                            customerData: defaultLedger,
+                            BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : 1
+                        }));
+                    } else {
+                        setBlillingAddress({ name: '', email: '', phoneNo: '', vatNo: '', address: '' });
+                        setFormData((prev) => ({
+                            ...prev,
+                            partyName: '',
+                            partyAddress: '',
+                            partyMobile: '',
+                            partyVatNo: '',
+                            customerData: null,
+                            BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : 1
+                        }));
+                    }
+                } else {
+                    // In edit mode, only update BatchId — getSalesById handles party/billing fields
+                    setFormData((prev) => ({
+                        ...prev,
+                        BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : 1
+                    }));
+                }
             } catch (error) {
                 console.error('error fetching default data', error)
             } finally {
@@ -310,10 +490,10 @@ if (!editMode) {
             date: new Date(),
             ledgerId: financeSettings.defaultPurchaseAccount || '',
             currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-            taxType: 'Applicable to product',
+            taxType: generalSettings?.taxType,
             costCentreId: 1,
             printAfterSave: true,
-            printType: 'a4',
+            printType: returnPrintSettings?.default || (returnPrintTypes.length > 0 ? returnPrintTypes[0] : 'Type 1'),
             BatchId: '',
             customerName: '',
             CustomerAddress: '',
@@ -321,6 +501,7 @@ if (!editMode) {
             customerVATNo: '',
             partyRefNo: "",
             partyRefDate: "",
+              supplierData: {},
             creditPeriod: "",
             purchaseAccount: "",
             exchangeRate: currentCurrencyConversion?.rate,
@@ -378,7 +559,7 @@ if (!editMode) {
                     productDescription: "",
                     billDiscOnProduct: null,
                     AddCostonProduct: null,
-                    otherchargeonproduct: null,
+                    otherchargeOnProduct: null,
                     salesManId: null,
                     GodownId: null,
                     RackId: null,
@@ -446,7 +627,7 @@ if (!editMode) {
                                 mrp: productData.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
@@ -464,6 +645,7 @@ if (!editMode) {
                         freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
                         rate: parseFloat(item.rate) || 0,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -477,7 +659,7 @@ if (!editMode) {
                         productDescription: item.productDescription,
                         billDiscOnProduct: item.billDiscOnProduct,
                         AddCostonProduct: item.AddCostonProduct,
-                        otherchargeonproduct: item.otherchargeonproduct,
+                        otherchargeOnProduct: item.otherchargeOnProduct,
                         salesManId: item.salesManId,
                         GodownId: item.GodownId,
                         RackId: item.RackId,
@@ -544,11 +726,12 @@ if (!editMode) {
                 postedDate: data.postedDate ? parseLocalDate(data.postedDate) : "",
                 branchId: data.branchId,
                 CreatedUser: data.CreatedUser,
-                vatLedgerId: data.vatLedgerId,
+                vatLedgerId: data.vatLedgerId||generalSettings?.taxLedgerId,
+
                 purchaseDetails: salesDetailsWithProducts,
             }));
 
-            await fetchGodown(data.GodownId);
+            // await fetchGodown(data.GodownId);
 
             setResetTableKey((prev) => prev + 1);
 
@@ -622,7 +805,7 @@ if (!editMode) {
                                 mrp: productData.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
@@ -640,6 +823,7 @@ if (!editMode) {
                         freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
                         rate: parseFloat(item.rate) || 0,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -653,7 +837,7 @@ if (!editMode) {
                         productDescription: item.productDescription,
                         billDiscOnProduct: item.billDiscOnProduct,
                         AddCostonProduct: item.AddCostonProduct,
-                        otherchargeonproduct: item.otherchargeonproduct,
+                        otherchargeOnProduct: item.otherchargeOnProduct,
                         salesManId: item.salesManId,
                         GodownId: item.GodownId,
                         RackId: item.RackId,
@@ -667,13 +851,13 @@ if (!editMode) {
                     };
                 })
             );
-setBlillingAddress({
-    name: data.partyName || '',
-    email: data.partyEmail || '',
-    phoneNo: data.partyMobile || '',
-    vatNo: data.partyVatNo || '',
-    address: data.partyAddress || ''
-});
+            setBlillingAddress({
+                name: data.partyName || '',
+                email: data.partyEmail || '',
+                phoneNo: data.partyMobile || '',
+                vatNo: data.partyVatNo || '',
+                address: data.partyAddress || ''
+            });
             setFormData((prev) => ({
                 ...prev,
                 // ✅ FIXED: Was "Purchase Invoice", should be "Purchase Return"
@@ -730,7 +914,7 @@ setBlillingAddress({
                 postedDate: data.postedDate ? parseLocalDate(data.postedDate) : "",
                 branchId: data.branchId,
                 CreatedUser: data.CreatedUser,
-                vatLedgerId: data.vatLedgerId,
+                vatLedgerId: data.vatLedgerId||generalSettings?.taxLedgerId,
                 purchaseDetails: salesDetailsWithProducts,
             }));
 
@@ -767,7 +951,7 @@ setBlillingAddress({
     const fetchCustomer = async () => {
         setLoading(prev => ({ ...prev, customers: true }));
         try {
-            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Supplier"], branchId: selectedBranchId });
+            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Supplier", "Customer&Supplier"], branchId: selectedBranchId });
             setCustomers(data.data);
         } catch (err) {
             console.error("Failed to fetch customers:", err);
@@ -820,31 +1004,29 @@ setBlillingAddress({
 
     const handleSave = useCallback(async () => {
         if (formData.BillBalanceAmount < 0) {
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: t("salesInvoice.alert.billBalanceAmtError"),
-            });
+            showToast.error(t("salesInvoice.alert.billBalanceAmtError"));
+            return;
+        }
+        
+        if (!formData.paymentMode || formData.paymentMode === 'null' || formData.paymentMode === 'NA') {
+            showToast.error("Please select a valid payment mode (Cash, Bank, or Credit).");
+            return;
+        }
+
+        if (formData.totalAmount <= 0) {
+            showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
             return;
         }
         if (!validateForm(formData, validationRules)) return;
         if (formData.paymentMode === 'credit' && formData.BillBalanceAmount <= 0) {
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: t("salesInvoice.alert.creditPaymentModeError"),
-            });
+            showToast.error(t("salesInvoice.alert.creditPaymentModeError"));
             return;
         }
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
             const errorMessage = validationErrors.join('\n');
 
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: errorMessage,
-            });
+            showToast.error(errorMessage);
             return;
         }
 
@@ -870,33 +1052,47 @@ setBlillingAddress({
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                vatLedgerId: generalSettings?.taxLedgerId,
+                ModifiedUser: editMode ? userId : null,
+                purchaseDetails: (formData.purchaseDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: editMode ? userId : null,
+                    ModifiedDate: editMode ? formatDateWithTime(new Date()) : null,
+                })),
             };
             const api = editMode ? `update-purchase-return/${purchaseReturnmasterId}` : 'save-purchase-return'
             const response = await axiosInstance.post(api, dataToSave);
 
             if (!response.data.error) {
-                setAlert({
-                    id: Date.now(),
-                    type: "success",
-                    message: t("saveSuccess"),
-                });
-                const savedInvoiceData = dataToSave;
+                showToast.success(t("saveSuccess"));
+
                 const invoiceNumber = editMode ? existingInvoiceNo : response.data.returnNo || invoiceId;
+                const freshReturnData = response?.data?.data?.payload?.purchaseReturnMaster; // ⚠️ confirm this key against your actual API response shape
 
                 if (formData.printAfterSave) {
-                    const invoiceDataForPrint = {
-                        ...savedInvoiceData,
-                        invoiceNo: invoiceNumber,
-                        date: savedInvoiceData.date || formData.date,
-                        purchaseDetails: savedInvoiceData.purchaseDetails || formData.purchaseDetails
-                    };
-
+                    const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceNumber, null, freshReturnData);
                     setTimeout(() => {
-                        if (formData.printType === 'a4') {
-                            purchaseReturnPrintOne(invoiceDataForPrint, selectedBranchDetails, time, null, currentCurrency);
-                        }
+                        printToPrinterFn(invoiceDataForPrint);
                     }, 500);
+                } else {
+                    const pdfResult = await Swal.fire({
+                        title: 'Print as PDF?',
+                        text: 'Do you want to download this return as a PDF?',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: 'Yes, Download PDF',
+                        cancelButtonText: 'No, Just Save',
+                    });
+
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceNumber, null, freshReturnData);
+                            printToPrinterFn(invoiceDataForPrint);
+                        }, 500);
+                    }
                 }
                 if (saleSettings.CloseAfterSave) {
                     navigate('/transaction/purchase-return/purchase-return-list')
@@ -921,22 +1117,38 @@ setBlillingAddress({
         }
     }, [formData, time, saleSettings, generalSettings, editMode]);
 
+    const ctrlSPressed = useRef(false);
+
     useEffect(() => {
+        if (editMode) return;
+
         const handleKeyDown = (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
                 e.preventDefault();
+
+                if (ctrlSPressed.current) return;
+
+                ctrlSPressed.current = true;
                 handleSave();
             }
         };
 
-        window.addEventListener('keydown', handleKeyDown);
+        const handleKeyUp = (e) => {
+            if (e.key.toLowerCase() === "s") {
+                ctrlSPressed.current = false;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
 
         return () => {
-            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
         };
-    }, [handleSave]);
+    }, [handleSave, editMode]);
 
-    if (fetchLoading || baseDataloading) {
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary ">
                 <BreadCrumb
@@ -958,10 +1170,11 @@ setBlillingAddress({
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary ">
-            {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+
             <BreadCrumb
                 routes={[
                     { title: t("purchaseReturn.breadcrumb.master"), url: "#" },
@@ -994,6 +1207,58 @@ setBlillingAddress({
                         loadingText: t("loadingText"),
                     },
                 ]}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        {!editMode && (
+                            <div className="flex items-center space-x-2">
+                                <Checkbox
+                                    id="printAfterSavePurchaseReturn"
+                                    checked={formData.printAfterSave || false}
+                                    onCheckedChange={(value) =>
+                                        setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                    }
+                                />
+                                <label
+                                    htmlFor="printAfterSavePurchaseReturn"
+                                    className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                                >
+                                    {t("salesInvoice.form.footerSection.otherDetails.label.printAfterSave") || "Print After Save"}
+                                </label>
+                            </div>
+                        )}
+                        {returnPrintTypes.length > 0 ? (
+                            <select
+                                name="printType"
+                                id="printType"
+                                className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
+                                value={formData.printType}
+                                onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
+                            >
+                                {returnPrintTypes.map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
+                            </select>
+                        ) : (
+                            <select
+                                name="printType"
+                                id="printType"
+                                className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
+                                value={formData.printType}
+                                onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
+                            >
+                                <option value="Type 1">A4</option>
+                                <option value="Type 2">A4 (Type 2)</option>
+                            </select>
+                        )}
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
             />
             <FormSectionMain
                 validationRules={validationRules}
@@ -1029,6 +1294,8 @@ setBlillingAddress({
                 purchaseAccounts={purchaseAccounts}
                 currency={currency}
                 loadPurchaseInvoiceData={loadPurchaseInvoiceData}
+                setUpdateCustomerId={setUpdateCustomerId}
+                updateCustomerId={updateCustomerId}
             />
         </div>
     )

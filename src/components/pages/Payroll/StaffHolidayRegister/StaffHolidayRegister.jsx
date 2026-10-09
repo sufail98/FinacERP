@@ -10,6 +10,8 @@ import useAuth from "@/redux/hook/auth/useAuth";
 import Swal from "sweetalert2";
 import { useTranslation } from "react-i18next";
 import FormattedDate from "@/components/common/FormattedDate";
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
 const StaffHolidayRegister = () => {
   const [open, setOpen] = useState(false);
@@ -20,6 +22,8 @@ const StaffHolidayRegister = () => {
   const [alert, setAlert] = useState(null);
   const { t } = useTranslation();
   const { selectedBranchId, user } = useAuth();
+
+   const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Staff Holiday Register");
 
   useEffect(() => {
     fetchData();
@@ -82,6 +86,12 @@ const StaffHolidayRegister = () => {
   }, [open]);
 
   const handleDelete = async (id) => {
+
+     if (!privileges?.can_delete) {
+            setAlert({ key: new Date(), type: "error", message: t("deletePermission") });
+            return;
+        }
+
     const result = await Swal.fire({
       title: t("delete.title"),
       text: t("delete.text"),
@@ -129,8 +139,9 @@ const StaffHolidayRegister = () => {
     { key: "narration", label: "Narration", sortable: true },
   ];
 
-  const actions = [
-    {
+  const actions = []
+  if(privileges?.can_edit){
+    actions.push({
       icon: <Edit className="h-4 w-4" />,
       onClick: (row) => {
         setSelectedId(row.holidayId);
@@ -140,44 +151,50 @@ const StaffHolidayRegister = () => {
       className:
         "text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300",
       tooltip: "Edit",
-    },
-    {
+    })
+  }
+  if(privileges?.can_delete){
+    actions.push(
+      {
       icon: <Trash2 className="h-4 w-4" />,
       className:
         "text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300",
       onClick: (row) => handleDelete(row.holidayId),
       tooltip: "Delete",
     },
-  ];
+    )
+  }
 
-  if (loading)
-    return (
-      <div>
-        <BreadCrumb
-          routes={[
-            { title: "Reports", url: "#" },
-            { title: "Staff Holiday Register", url: "#" },
-          ]}
-          heading={{
-            icon: CalendarDays,
-            title: "Staff Holiday Register",
-          }}
-          actions={[
-            {
-              label: "Create New",
-              type: "primary",
-              icon: Plus,
-              onClick: () => {
-                setMode("add");
-                setSelectedId(null);
-                setOpen(true);
-              },
-            },
-          ]}
-        />
-        <Preloader />
-      </div>
-    );
+  if (privilegeLoading || loading) {
+        return <div>
+            <BreadCrumb
+                routes={[
+                    { title: "Reports", url: "#" },
+                    { title: "Staff Holiday Register", url: "#" },
+                ]}
+                heading={{ icon: CalendarDays, title: "Staff Holiday Register" }}
+            />
+            <Preloader />
+        </div>
+    }
+
+     if (!hasAccess) {
+        return (
+            <div>
+                <BreadCrumb
+                    routes={[
+                        { title: "Reports", url: "#" },
+                        { title: "Staff Holiday Register", url: "#" },
+                    ]}
+                    heading={{ icon: CalendarDays, title: "Staff Holiday Register" }}
+                />
+                <NoAcessComponent message={message} />
+            </div>
+        );
+    }
+  
+
+
 
   return (
     <div>
@@ -198,18 +215,22 @@ const StaffHolidayRegister = () => {
           icon: CalendarDays,
           title: "Staff Holiday Register",
         }}
-        actions={[
-          {
-            label: `${t("createNewBtn")} (Ctrl+C)`,
-            type: "primary",
-            icon: Plus,
-            onClick: () => {
-              setMode("add");
-              setSelectedId(null);
-              setOpen(true);
+          actions={
+            privileges?.can_add ?
+            [
+            {
+              label: "Create New",
+              type: "primary",
+              icon: Plus,
+              onClick: () => {
+                setMode("add");
+                setSelectedId(null);
+                setOpen(true);
+              },
             },
-          },
-        ]}
+          ]
+        :[]
+        }
       />
 
       <div className="w-full bg-white dark:bg-[#1e1e1e] px-2 py-2 transition-colors">

@@ -11,10 +11,13 @@ import { Loader2 } from 'lucide-react'; // already likely imported
 import { useParams } from 'react-router-dom';
 import useAgainstModal from '@/lib/hooks/useAgainstModal';
 import AgainstModal from '../RecieptVoucher/AgainstModal';
+import LedgerCreationModal from '@/components/common/LedgerCreationModal';
 
-const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurrencyConversion, ledgers, costCenters: costCentres, onRowRemove, setLedgerBalance, ledgerBalance }, ref) => {
+const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurrencyConversion, ledgers, costCenters: costCentres, onRowRemove, setLedgerBalance, ledgerBalance, onLedgerCreated }, ref) => {
     const { t } = useTranslation();
+    const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
     const { financeSettings, generalSettings } = useSelector((state) => state.settings);
+
     const { selectedBranchId, currentCurrency } = useAuth();
     // ── Suggestion state (ledger search) ──
     const [suggestions, setSuggestions] = useState({});
@@ -67,15 +70,10 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
     // ─────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────
-    const isRowNotEmpty = (row) =>
-        row.ledgerId ||
-        (parseFloat(row.debit) || 0) > 0 ||
-        (parseFloat(row.credit) || 0) > 0 ||
-        row.Narration?.trim() ||
-        row.RefNo?.trim() ||
-        row.costCentreId;
+// A row only counts as a real entry if it has a ledger selected
+const isRowNotEmpty = (row) => Boolean(row.ledgerId);
 
-    const getValidRows = () => rows.filter(isRowNotEmpty);
+const getValidRows = () => rows.filter(isRowNotEmpty);
 
     useImperativeHandle(ref, () => ({ getValidRows }));
 
@@ -88,9 +86,10 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
         credit: '0',
         Narration: '',
         RefNo: '',
-        costCentreId: '',
+        costCentreId: costCentres?.[0]?.costCentreId || formData?.costCentreId || 1,
         currencyConversionId: currentCurrencyConversion?.currencyConversionId || null,
-        ledgerBalance: 0,
+        ledgerBalance: null,
+        _balanceFetched: true,
         billByBill: false,
     });
 
@@ -163,6 +162,29 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
         }
     };
 
+    useEffect(() => {
+        const syncRows = async () => {
+            if (formData?.journalDetails && formData.journalDetails.length > 0) {
+                let needsUpdate = false;
+                const newRows = await Promise.all(
+                    formData.journalDetails.map(async (row) => {
+                        if (row.ledgerId && row.ledgerId !== "" && row.ledgerId !== 0 && !row._balanceFetched) {
+                            const balance = await fetchLedgerBalance(row.ledgerId);
+                            needsUpdate = true;
+                            return { ...row, ledgerBalance: balance, _balanceFetched: true };
+                        }
+                        return row;
+                    })
+                );
+
+                if (needsUpdate) {
+                    updateFormData(newRows);
+                }
+            }
+        };
+        syncRows();
+    }, [formData?.journalDetails]);
+
     // ─────────────────────────────────────────────────────────────────
     // Ledger suggestion search
     // ─────────────────────────────────────────────────────────────────
@@ -197,6 +219,7 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
         // fetch balance
         const balance = await fetchLedgerBalance(ledger.ledgerId);
         updatedRows[rowIndex].ledgerBalance = balance;
+        updatedRows[rowIndex]._balanceFetched = true;
 
         // auto-add row if last
         const isLast = rowIndex === updatedRows.length - 1;
@@ -247,8 +270,10 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
             try {
                 const balance = await fetchLedgerBalance(value);
                 updatedRows[index].ledgerBalance = balance;  // store full object
+                updatedRows[index]._balanceFetched = true;
             } catch (err) {
                 updatedRows[index].ledgerBalance = null;
+                updatedRows[index]._balanceFetched = true;
             }
         }
 
@@ -264,8 +289,8 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
     // ─────────────────────────────────────────────────────────────────
     // Disabled helpers
     // ─────────────────────────────────────────────────────────────────
-    const isDebitDisabled = (row) => (parseFloat(row.credit) || 0) > 0;
-    const isCreditDisabled = (row) => (parseFloat(row.debit) || 0) > 0;
+    const isDebitDisabled = (row) => ((parseFloat(row.credit) || 0) > 0) || (row.billByBill && financeSettings?.MaintainBillbyBill);
+    const isCreditDisabled = (row) => ((parseFloat(row.debit) || 0) > 0) || (row.billByBill && financeSettings?.MaintainBillbyBill);
 
     // ─────────────────────────────────────────────────────────────────
     // Keyboard navigation
@@ -323,21 +348,20 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
                 return;
             }
 
-            // RefNo -> costCentreId (if exists) or next row ledger
-            if (field === 'RefNo') {
-                if (costCentres?.length > 0) {
-                    focusCell(rowIndex, 'costCentreId');
-                } else {
-                    // Move to next row's ledger
-                    if (rowIndex < rows.length - 1) {
-                        focusCell(rowIndex + 1, 'ledgerName');
-                    } else {
-                        // Last row, trigger add and focus new row
-                        setTimeout(() => focusCell(rowIndex + 1, 'ledgerName'), 150);
-                    }
-                }
-                return;
-            }
+      // RefNo -> costCentreId (if exists) or next row ledger
+if (field === 'RefNo') {
+    if (costCentres?.length > 0 && generalSettings?.costCentre) {
+        focusCell(rowIndex, 'costCentreId');
+    } else {
+        // Move to next row's ledger
+        if (rowIndex < rows.length - 1) {
+            focusCell(rowIndex + 1, 'ledgerName');
+        } else {
+            setTimeout(() => focusCell(rowIndex + 1, 'ledgerName'), 150);
+        }
+    }
+    return;
+}
 
             // costCentreId -> next row ledger
             if (field === 'costCentreId') {
@@ -421,7 +445,8 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
             />
 
             <div className="mt-4 bg-primary dark:bg-primary">
-                <table className="w-full border-collapse">
+                <div className="hidden md:block">
+                <table className="w-full min-w-[980px] border-collapse">
                     <thead className="bg-gray-400 dark:bg-black border-b-2 border-themed dark:border-themed">
                         <tr>
                             <th className="border border-themed dark:border-themed p-2 text-xs font-semibold text-center w-10">
@@ -442,7 +467,7 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
                             <th className="border border-themed dark:border-themed p-2 text-xs font-semibold text-left w-32">
                                 {t('journalVoucher.form.table.columns.referenceNo') || 'Ref No'}
                             </th>
-                            {costCentres?.length > 0 && (
+                            {(costCentres?.length > 0&&generalSettings?.costCentre) && (
                                 <th className="border border-themed dark:border-themed p-2 text-xs font-semibold text-left w-36">
                                     {t('journalVoucher.form.table.columns.costCentre') || 'Cost Centre'}
                                 </th>
@@ -471,39 +496,51 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
 
                                 {/* Ledger Name */}
                                 <td className="p-1 border border-themed dark:border-themed relative">
-                                    <input
-                                        ref={el => inputRefs.current[`${index}-ledgerName`] = el}
-                                        type="text"
-                                        autoComplete="off"
-                                        value={
-                                            inputValues[`${index}-ledgerName`] !== undefined
-                                                ? inputValues[`${index}-ledgerName`]
-                                                : row.ledgerName || ''
-                                        }
-                                        onFocus={() => {
-                                            setInputValues(prev => ({
-                                                ...prev,
-                                                [`${index}-ledgerName`]: row.ledgerName || ''
-                                            }));
-                                        }}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            setInputValues(prev => ({ ...prev, [`${index}-ledgerName`]: val }));
-                                            filterLedgers(val, index);
-                                        }}
-                                        onBlur={() => {
-                                            setTimeout(() => {
-                                                setInputValues(prev => {
-                                                    const s = { ...prev };
-                                                    delete s[`${index}-ledgerName`];
-                                                    return s;
-                                                });
-                                            }, 200);
-                                        }}
-                                        onKeyDown={(e) => handleKeyDown(e, index, 'ledgerName')}
-                                        placeholder={t('recieptVoucher.form.placeholders.selectLedger') || 'Search ledger…'}
-                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded bg-transparent"
-                                    />
+                                    <div className="flex items-start">
+                                        <div className="relative w-full">
+                                            <input
+                                                ref={el => inputRefs.current[`${index}-ledgerName`] = el}
+                                                type="text"
+                                                autoComplete="off"
+                                                value={
+                                                    inputValues[`${index}-ledgerName`] !== undefined
+                                                        ? inputValues[`${index}-ledgerName`]
+                                                        : row.ledgerName || ''
+                                                }
+                                                onFocus={() => {
+                                                    setInputValues(prev => ({
+                                                        ...prev,
+                                                        [`${index}-ledgerName`]: row.ledgerName || ''
+                                                    }));
+                                                }}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setInputValues(prev => ({ ...prev, [`${index}-ledgerName`]: val }));
+                                                    filterLedgers(val, index);
+                                                }}
+                                                onBlur={() => {
+                                                    setTimeout(() => {
+                                                        setInputValues(prev => {
+                                                            const s = { ...prev };
+                                                            delete s[`${index}-ledgerName`];
+                                                            return s;
+                                                        });
+                                                    }, 200);
+                                                }}
+                                                onKeyDown={(e) => handleKeyDown(e, index, 'ledgerName')}
+                                                placeholder={t('recieptVoucher.form.placeholders.selectLedger') || 'Search ledger…'}
+                                                className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded bg-transparent"
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsLedgerModalOpen(true)}
+                                            className="p-1 ml-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 shrink-0"
+                                            title="Create New Ledger"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
 
                                     {/* Balance display */}
                                     {financeSettings?.showLedgerbalance && (
@@ -561,12 +598,13 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
                                     <input
                                         ref={el => inputRefs.current[`${index}-debit`] = el}
                                         type="number"
+                                        min="0"
                                         step="0.01"
                                         name={`debit-${index}`}
                                         value={
                                             inputValues[`${index}-debit`] !== undefined
                                                 ? inputValues[`${index}-debit`]
-                                                : row.debit
+                                                : (row.debit === '' || row.debit == null ? '' : Number(row.debit).toFixed(generalSettings?.decimalPart ?? 2))
                                         }
                                         disabled={isDebitDisabled(row)}
                                         onFocus={(e) => {
@@ -585,7 +623,13 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
                                                 return s;
                                             });
                                         }}
-                                        onKeyDown={(e) => handleKeyDown(e, index, 'debit')}
+                                        onKeyDown={(e) => {
+                                    if (["-", "+", "e", "E"].includes(e.key)) {
+                                            e.preventDefault();
+                                                }
+
+                                                handleKeyDown(e, index, "debit");
+                                                        }}
                                         placeholder="0.00"
                                         className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right disabled:opacity-50 disabled:cursor-not-allowed bg-transparent"
                                     />
@@ -596,12 +640,13 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
                                     <input
                                         ref={el => inputRefs.current[`${index}-credit`] = el}
                                         type="number"
+                                        min="0"
                                         step="0.01"
                                         name={`credit-${index}`}
                                         value={
                                             inputValues[`${index}-credit`] !== undefined
                                                 ? inputValues[`${index}-credit`]
-                                                : row.credit
+                                                : (row.credit === '' || row.credit == null ? '' : Number(row.credit).toFixed(generalSettings?.decimalPart ?? 2))
                                         }
                                         disabled={isCreditDisabled(row)}
                                         onFocus={(e) => {
@@ -620,7 +665,13 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
                                                 return s;
                                             });
                                         }}
-                                        onKeyDown={(e) => handleKeyDown(e, index, 'credit')}
+                                        onKeyDown={(e) => {
+                                    if (["-", "+", "e", "E"].includes(e.key)) {
+                                            e.preventDefault();
+                                                }
+
+                                                handleKeyDown(e, index, "credit");
+                                                        }}
                                         placeholder="0.00"
                                         className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right disabled:opacity-50 disabled:cursor-not-allowed bg-transparent"
                                     />
@@ -655,7 +706,7 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
                                 </td>
 
                                 {/* Cost Centre */}
-                                {costCentres?.length > 0 && (
+                                {(costCentres?.length > 0 && generalSettings?.costCentre)&&(
                                     <td className="p-1 align-top border border-themed dark:border-themed">
                                         <select
                                             ref={el => inputRefs.current[`${index}-costCentreId`] = el}
@@ -727,6 +778,128 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
                         </tr>
                     </tfoot>
                 </table>
+                </div>
+
+                <div className="md:hidden space-y-3">
+                    {rows.map((row, index) => (
+                        <div
+                            key={index}
+                            className={`rounded-lg border border-themed dark:border-themed p-3 shadow-sm ${(index + 1) % 2 === 1
+                                ? 'bg-gray-100 dark:bg-gray-800'
+                                : 'bg-white dark:bg-gray-900'
+                                }`}
+                        >
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-semibold text-secondary dark:text-secondary">
+                                    {(t('journalVoucher.form.table.columns.slNo') || 'Sl No')} {row.lineIndex || index + 1}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                    {row.billByBill && financeSettings?.MaintainBillbyBill && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleAgainstClick(index, formData?.partyDetails)}
+                                            disabled={againstLoadingRow === index}
+                                            className="h-8 px-2 text-xs border border-themed dark:border-themed text-primary dark:text-primary rounded flex items-center gap-1 disabled:opacity-70"
+                                        >
+                                            {againstLoadingRow === index ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Against'}
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => deleteRow(index)}
+                                        className="h-8 w-8 p-0 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded flex items-center justify-center"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="relative">
+                                    <label className="block text-xs font-medium text-secondary dark:text-secondary mb-1">
+                                        {t('journalVoucher.form.table.columns.ledgerName') || 'Ledger Name'}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        autoComplete="off"
+                                        value={inputValues[`${index}-ledgerName`] !== undefined ? inputValues[`${index}-ledgerName`] : row.ledgerName || ''}
+                                        onFocus={() => setInputValues(prev => ({ ...prev, [`${index}-ledgerName`]: row.ledgerName || '' }))}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            setInputValues(prev => ({ ...prev, [`${index}-ledgerName`]: value }));
+                                            filterLedgers(value, index);
+                                        }}
+                                        onBlur={() => setTimeout(() => setInputValues(prev => {
+                                            const next = { ...prev };
+                                            delete next[`${index}-ledgerName`];
+                                            return next;
+                                        }), 200)}
+                                        onKeyDown={(e) => handleKeyDown(e, index, 'ledgerName')}
+                                        placeholder={t('recieptVoucher.form.placeholders.selectLedger') || 'Search ledger...'}
+                                        className="w-full px-2 py-1.5 text-sm border border-themed dark:border-themed rounded text-primary dark:text-primary bg-transparent focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    {financeSettings?.showLedgerbalance && (
+                                        <div className="flex items-center text-xs text-secondary dark:text-secondary mt-1 gap-2">
+                                            {t('contraVoucher.form.label.ledgerBalance') || 'Balance'}:{' '}
+                                            {row.ledgerBalance?.crordr !== undefined ? (
+                                                <CrDrLabel crordr={row.ledgerBalance.crordr} accountCalculationMethod={generalSettings?.AccountCalculationMethod} balance={row.ledgerBalance.currentbal} decimalPart={generalSettings?.decimalPart ?? 2} />
+                                            ) : <span className="font-semibold text-primary dark:text-primary">0.00</span>}
+                                        </div>
+                                    )}
+                                    {activeSuggRow === index && (suggestions[index] || []).length > 0 && (
+                                        <div className="absolute z-[100] left-0 right-0 bg-primary dark:bg-secondary border border-themed dark:border-themed rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
+                                            {(suggestions[index] || []).map((ledger, idx) => (
+                                                <div
+                                                    key={ledger.ledgerId}
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        selectLedger(index, ledger);
+                                                    }}
+                                                    className={`px-3 py-2 cursor-pointer text-sm border-b border-themed dark:border-themed ${selectedSuggIdx[index] === idx ? 'bg-blue-100 dark:bg-blue-900' : 'hover:bg-hover dark:hover:bg-hover'}`}
+                                                >
+                                                    <div className="font-medium text-primary dark:text-primary">{ledger.ledgerName}</div>
+                                                    {(ledger.address || ledger.phoneNo) && <div className="text-xs text-secondary dark:text-secondary">{[ledger.address, ledger.phoneNo].filter(Boolean).join(' | ')}</div>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="block text-xs font-medium text-secondary dark:text-secondary mb-1">{t('journalVoucher.form.table.columns.debit') || 'Debit'}</label>
+                                        <input type="number" min="0" step="0.01" value={inputValues[`${index}-debit`] !== undefined ? inputValues[`${index}-debit`] : (row.debit === '' || row.debit == null ? '' : Number(row.debit).toFixed(generalSettings?.decimalPart ?? 2))} disabled={isDebitDisabled(row)} onFocus={(e) => { setInputValues(prev => ({ ...prev, [`${index}-debit`]: row.debit })); setTimeout(() => e.target.select(), 0); }} onChange={(e) => { setInputValues(prev => ({ ...prev, [`${index}-debit`]: e.target.value })); handleCellChange(index, 'debit', e.target.value); }} onKeyDown={(e) => handleKeyDown(e, index, 'debit')} className="w-full px-2 py-1.5 text-sm border border-themed dark:border-themed rounded text-right bg-transparent disabled:opacity-50" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-secondary dark:text-secondary mb-1">{t('journalVoucher.form.table.columns.credit') || 'Credit'}</label>
+                                        <input type="number" min="0" step="0.01" value={inputValues[`${index}-credit`] !== undefined ? inputValues[`${index}-credit`] : (row.credit === '' || row.credit == null ? '' : Number(row.credit).toFixed(generalSettings?.decimalPart ?? 2))} disabled={isCreditDisabled(row)} onFocus={(e) => { setInputValues(prev => ({ ...prev, [`${index}-credit`]: row.credit })); setTimeout(() => e.target.select(), 0); }} onChange={(e) => { setInputValues(prev => ({ ...prev, [`${index}-credit`]: e.target.value })); handleCellChange(index, 'credit', e.target.value); }} onKeyDown={(e) => handleKeyDown(e, index, 'credit')} className="w-full px-2 py-1.5 text-sm border border-themed dark:border-themed rounded text-right bg-transparent disabled:opacity-50" />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="block text-xs font-medium text-secondary dark:text-secondary mb-1">{t('journalVoucher.form.table.columns.narration') || 'Narration'}</label>
+                                        <input type="text" value={row.Narration} onChange={(e) => handleCellChange(index, 'Narration', e.target.value)} onKeyDown={(e) => handleKeyDown(e, index, 'Narration')} placeholder={t('journalVoucher.form.placeholders.narration') || 'Narration'} className="w-full px-2 py-1.5 text-sm border border-themed dark:border-themed rounded bg-transparent" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-secondary dark:text-secondary mb-1">{t('journalVoucher.form.table.columns.referenceNo') || 'Ref No'}</label>
+                                        <input type="text" value={row.RefNo} onChange={(e) => handleCellChange(index, 'RefNo', e.target.value)} onKeyDown={(e) => handleKeyDown(e, index, 'RefNo')} placeholder={t('journalVoucher.form.placeholders.referenceNo') || 'Ref No'} className="w-full px-2 py-1.5 text-sm border border-themed dark:border-themed rounded bg-transparent" />
+                                    </div>
+                                </div>
+
+                                {costCentres?.length > 0 && generalSettings?.costCentre && (
+                                    <div>
+                                        <label className="block text-xs font-medium text-secondary dark:text-secondary mb-1">{t('journalVoucher.form.table.columns.costCentre') || 'Cost Centre'}</label>
+                                        <select value={row.costCentreId || ''} onChange={(e) => handleCellChange(index, 'costCentreId', e.target.value)} onKeyDown={(e) => handleKeyDown(e, index, 'costCentreId')} className="w-full px-2 py-1.5 text-sm border border-themed dark:border-themed rounded bg-transparent">
+                                            <option value="">{t('journalVoucher.form.placeholders.costCentre') || '— Cost Centre —'}</option>
+                                            {costCentres.map((cc) => <option key={cc.costCentreId} value={cc.costCentreId}>{cc.CostCentre || ''}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
 
                 {/* Add Row button */}
                 <div className="border-t border-themed dark:border-themed flex justify-end py-2 bg-primary dark:bg-primary">
@@ -740,6 +913,15 @@ const JournalVoucherFormTable = forwardRef(({ formData, setFormData, currentCurr
                     </button>
                 </div>
             </div>
+            
+            <LedgerCreationModal 
+                open={isLedgerModalOpen} 
+                handleClose={() => setIsLedgerModalOpen(false)} 
+                onSuccess={() => {
+                    setIsLedgerModalOpen(false);
+                    if (onLedgerCreated) onLedgerCreated();
+                }} 
+            />
         </>
     );
 });

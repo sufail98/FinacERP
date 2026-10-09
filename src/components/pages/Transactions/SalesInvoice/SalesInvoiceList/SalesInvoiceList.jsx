@@ -3,7 +3,7 @@ import BreadCrumb from '@/components/common/BreadCrumb'
 import Preloader from '@/components/common/Preloader'
 import axiosInstance from '@/lib/axiosConfig'
 import usePrivileges from '@/lib/hooks/usePrivileges'
-import { Eye, Plus, ReceiptText } from 'lucide-react'
+import { CreditCard, Eye, Landmark, Plus, ReceiptText, Wallet } from 'lucide-react'
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
@@ -24,8 +24,11 @@ const SalesInvoiceList = () => {
     const [customerSearch, setCustomerSearch] = useState('')
     const [fetchLoading, setFetchLoading] = useState(false)
     const { generalSettings, financeSettings } = useSelector((state) => state.settings);
+
+
     const { selectedBranchId, currentFinancialYear } = useAuth();
     const { privileges, loading: privilegeLoading } = usePrivileges("Sales Invoice");
+    const [taxType, setTaxType] = useState('Applicable to product');
     const debounceTimerRef = useRef(null);
     const customerDebounceTimerRef = useRef(null);
     const isInitialMount = useRef(true);
@@ -34,7 +37,10 @@ const SalesInvoiceList = () => {
         const today = new Date();
         return today.toISOString().split('T')[0];
     };
-
+    const handleTaxTypeChange = (value) => {
+        setTaxType(value);
+        setPage(1);
+    };
     // Initialize state from URL or localStorage
     const initializeFilters = useCallback(() => {
         // For HashRouter, hash comes after #
@@ -142,6 +148,9 @@ const SalesInvoiceList = () => {
             // Determine if we're searching by voucher code or customer name
             const isSearching = currentVoucherCode?.trim();
 
+            const currentTaxType =
+                params.taxType !== undefined ? params.taxType : taxType;
+
             const payload = {
                 fromDate: isSearching ? null : currentFromDate,
                 toDate: isSearching ? null : currentToDate,
@@ -149,7 +158,8 @@ const SalesInvoiceList = () => {
                 page: currentPage,
                 branchId: selectedBranchId,
                 vouchercode: currentVoucherCode?.trim() || null,
-                customername: currentCustomerSearch?.trim() || null
+                customername: currentCustomerSearch?.trim() || null,
+                taxType: currentTaxType,
             };
 
             const res = await axiosInstance.post('sales', payload);
@@ -191,7 +201,8 @@ const SalesInvoiceList = () => {
             voucherCode: initialFilters.voucherCode,
             customerSearch: initialFilters.customerSearch,
             fromDate: initialFilters.fromDate,
-            toDate: initialFilters.toDate
+            toDate: initialFilters.toDate,
+            taxType
         });
 
         // Mark initial mount as complete after fetch
@@ -237,7 +248,8 @@ const SalesInvoiceList = () => {
                 fromDate,
                 toDate,
                 voucherCode,
-                customerSearch
+                customerSearch,
+                taxType
             });
         }
     }, [voucherCode, customerSearch]);
@@ -309,7 +321,8 @@ const SalesInvoiceList = () => {
             fromDate,
             toDate,
             voucherCode: '',
-            customerSearch: ''
+            customerSearch: '',
+            taxType
         });
     };
 
@@ -338,7 +351,8 @@ const SalesInvoiceList = () => {
                 limit: 80,
                 page: 1,
                 voucherCode: '',
-                customerSearch: ''
+                customerSearch: '',
+                taxType
             });
         }, 0);
     };
@@ -392,12 +406,24 @@ const SalesInvoiceList = () => {
         };
     }, []);
 
+
     const columns = [
-        { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "right", width: "80px" },
-        { key: "invoiceNo", label: t("salesInvoice.list.columns.invoiceNo"), sortable: true, align: "left", width: "70px" },
+        { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "center", width: "50px" },
+        { key: "invoiceNo", label: t("salesInvoice.list.columns.invoiceNo"), sortable: true, align: "left", width: "60px" },
         { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "left", width: "120px" },
         { key: "LedgerName", label: t("salesInvoice.list.columns.cashParty"), sortable: true, align: "left", width: "180px" },
-        { key: "customerName", label: t("salesInvoice.list.columns.customerName"), sortable: true, align: "left", width: "170px" },
+
+        ...(generalSettings?.zatcaType?.trim() != "Phase 2"
+            ? [{
+                key: "customerName",
+                label: t("salesInvoice.list.columns.customerName"),
+                sortable: true,
+                align: "left",
+                width: "170px"
+            }]
+            : []),
+
+        { key: "paymentMode", label: t("salesInvoice.list.columns.paymentMode"), sortable: true, align: "left", width: "80px" },
         { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right", width: "150px" },
     ];
 
@@ -421,6 +447,47 @@ const SalesInvoiceList = () => {
                 </div>
             );
         }
+        if (key === "paymentMode") {
+            const paymentModes = {
+                cash: {
+                    label: "Cash",
+                    icon: Wallet,
+                    className: "bg-green-100 text-green-700 border-green-200",
+                },
+                bank: {
+                    label: "Bank",
+                    icon: Landmark,
+                    className: "bg-blue-100 text-blue-700 border-blue-200",
+                },
+                card: {
+                    label: "Bank",
+                    icon: Landmark,
+                    className: "bg-blue-100 text-blue-700 border-blue-200",
+                },
+                credit: {
+                    label: "Credit",
+                    icon: CreditCard,
+                    className: "bg-amber-100 text-amber-700 border-amber-200",
+                },
+            };
+
+            const mode = paymentModes[row.paymentMode];
+
+            if (!mode) return "-";
+
+            const Icon = mode.icon;
+
+            return (
+                <div className="flex justify-center">
+                    <span
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${mode.className}`}
+                    >
+                        <Icon className="h-3.5 w-3.5" />
+                        {mode.label}
+                    </span>
+                </div>
+            );
+        }
         return row[key] ?? "-";
     };
 
@@ -430,7 +497,7 @@ const SalesInvoiceList = () => {
             icon: <Eye className="h-4 w-4" />,
             onClick: handleEdit,
             className: "text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300",
-            tooltip: "Edit",
+            tooltip: "View",
         });
     }
 
@@ -494,9 +561,11 @@ const SalesInvoiceList = () => {
                     customerSearch={customerSearch}
                     onCustomerSearchChange={handleCustomerSearchChange}
                     onClearCustomerSearch={clearCustomerSearch}
-                    customerSearchPlaceholder={t("Search by Customer Name...")}
-                    customerSearchLabel={t("Customer Name")}
+                    customerSearchPlaceholder={t("Search by Customer Name and Number")}
+                    customerSearchLabel={t("Customer Name and Number")}
                     filterButtonText={t("common.show") || "Show"}
+                    taxType={taxType}
+                    onTaxTypeChange={handleTaxTypeChange}
                 />
 
                 <ContentTable

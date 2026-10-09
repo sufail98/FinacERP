@@ -8,6 +8,8 @@ import { PencilIcon, Plus } from 'lucide-react'
 
 import SalesModeModal from './SalesModeModal'
 import AddNewBtn from '@/components/common/AddNewBtn'
+import NormalSelectInput from '@/components/elements/theme/NormalSelectInput'
+
 import AddEmployeeModal from './AddEmployeeModal'
 import axiosInstance from '@/lib/axiosConfig'
 import ShippingAddressModal from './ShippingAddressModal'
@@ -20,6 +22,8 @@ import useFormValidation from '@/lib/hooks/useFormValidation'
 import DateInput from '../SalesQuotation/SalesQuotationDateInput'
 import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal'
 import AddCustomerModal from '@/components/elements/theme/AddCustomerModal'
+import DocumentUpload from '../../../common/DocumentUpload'
+import usePrivileges from '@/lib/hooks/usePrivileges'
 
 const FormSectionMain = ({
   existingInvoiceNo,
@@ -51,9 +55,18 @@ const FormSectionMain = ({
   cash,
   purchaseAccounts,
   currency,
-  getAginsteModeDetailes
+  getAginsteModeDetailes,
+  documents,
+  setDocuments,
+  existingDocuments,
+  setExistingDocuments,
+  removedDocuments,
+  setRemovedDocuments,
+  setUpdateCustomerId,
+  updateCustomerId
 
 }) => {
+  const { hasAccess: transactionBatchHasAccess } = usePrivileges("Transaction Batch");
   const { t } = useTranslation();
   const [loadingCustomer, setLoadingCustomer] = useState(false);
   const { generalSettings, purchaseSettings, financeSettings } = useSelector((state) => state.settings);
@@ -64,9 +77,10 @@ const FormSectionMain = ({
   const [shippingAddresOpen, setShippingAddressOpen] = useState(false);
   const [billingAddressOpen, setBilligAddressOpen] = useState(false);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
+  const [showTaxType, setShowTaxType] = useState(false);
+  const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
 
   const [shippingAdderess, setShippingAddress] = useState(null);
-  const [updateCustomerId, setUpdateCustomerId] = useState(null);
   const [quotationData, setQuotationData] = useState([]);
   const [fetchSalesAccountLoading, setSalesAcLoading] = useState(false);
   const [materialReceiptList, setMaterialReceiptList] = useState([]);
@@ -108,6 +122,46 @@ const FormSectionMain = ({
   }
 
   useEffect(() => {
+    fetchCurrencyConvertion()
+  }, [selectedBranchId])
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+
+    const date = new Date(dateString);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const MM = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+
+    const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+    return format
+      .replace('dd', dd)
+      .replace('MM', MM)
+      .replace('yyyy', yyyy);
+  };
+  const formatDecimal = (value) =>
+    Number(value || 0).toFixed(generalSettings.decimalPart);
+  const fetchCurrencyConvertion = async () => {
+    try {
+      const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+
+      const formattedData = response.data.data.map((item, index) => ({
+        ...item,
+        SNo: index + 1,
+        date: formatDate(item.date),
+        rate: item.rate !== null && item.rate !== undefined
+          ? formatDecimal(item.rate)
+          : formatDecimal(0),
+      }));
+
+      setCurrencyConvertionData(formattedData);
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
     if (formData.purchaseAccount && purchaseAccounts.length > 0) {
       const selectedAccount = purchaseAccounts.find(acc => acc.ledgerId === formData.purchaseAccount);
       if (selectedAccount) {
@@ -118,6 +172,17 @@ const FormSectionMain = ({
       }
     }
   }, [formData.purchaseAccount, purchaseAccounts]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.altKey && e.key === 'F10') {
+        e.preventDefault();
+        setShowTaxType(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const fetchCustomerData = async (ledgerId) => {
     setLoadingCustomer(true);
@@ -253,7 +318,7 @@ const FormSectionMain = ({
                 className="w-full"
                 format={generalSettings.dateformat}
                 min={currentFinancialYear?.fromDate}
-                max={currentFinancialYear?.toDate}
+                // max={currentFinancialYear?.toDate}
               />
 
               <TextInput
@@ -269,7 +334,7 @@ const FormSectionMain = ({
             </div>
 
             {/* Dynamic Grid Section */}
-            <div className={`grid gap-1 lg:gap-1.5 ${generalSettings?.costCentre
+            <div className={`grid gap-1 lg:gap-1.5 items-center ${generalSettings?.costCentre
               ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
               : 'grid-cols-1 sm:grid-cols-2'
               }`}>
@@ -295,7 +360,7 @@ const FormSectionMain = ({
               <TextInput
                 name="RefNo"
                 label={t('salesInvoice.form.label.formHeaderSection.RefNo')}
-                type="number"
+                type="text"
                 value={formData.RefNo}
                 onChange={handleInputChange}
                 error={errors.RefNo}
@@ -312,7 +377,8 @@ const FormSectionMain = ({
                 format={generalSettings.dateformat}
               />
 
-              <SearchableDropdown
+            {transactionBatchHasAccess&&(
+                <SearchableDropdown
                 name="BatchId"
                 label={t('salesInvoice.form.label.formHeaderSection.BatchId')}
                 options={batches?.map(batch => ({
@@ -327,6 +393,7 @@ const FormSectionMain = ({
                 clearable={true}
                 className="w-full"
               />
+            )}
 
               {purchaseSettings?.ActiveGodown && (
                 <SearchableDropdown
@@ -345,6 +412,31 @@ const FormSectionMain = ({
                   loading={loading.godowns}
                 />
               )}
+              {showTaxType && (
+                <NormalSelectInput
+                  name='taxType'
+                  label={t('salesInvoice.form.label.formHeaderSection.taxtype')}
+                  value={formData.taxType}
+                  options={[
+                    { value: "Applicable to product", label: "Applicable to product" },
+                    { value: "NA", label: "NA" },
+                  ]}
+                  onChange={(e) => handleDropdownChange(e.target.name, e.target.value)}
+                  placeholder={t('salesInvoice.form.placeholders.formHeaderSection.status')}
+                  searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.status')}
+                  readOnly={editMode}
+                />
+              )}
+              <div className="">
+                <DocumentUpload
+                  documents={documents}
+                  setDocuments={setDocuments}
+                  existingDocuments={existingDocuments}
+                  setExistingDocuments={setExistingDocuments}
+                  removedDocuments={removedDocuments}
+                  setRemovedDocuments={setRemovedDocuments}
+                />
+              </div>
             </div>
           </div>
 
@@ -359,7 +451,8 @@ const FormSectionMain = ({
               className="w-full"
               format={generalSettings.dateformat}
             />
-            <SearchableDropdown
+          
+              <SearchableDropdown
               name="AgainstNo"
               label={t('purchaseInvoice.form.label.AgainstNo')}
               options={salesModeOptions}
@@ -370,7 +463,10 @@ const FormSectionMain = ({
               error={errors.AgainstNo}
               clearable={true}
               className='w-full'
+              readOnly={editMode}
             />
+           
+            
 
             {formData.AgainstNo === 'Order' && (
               <SearchableDropdown
@@ -385,6 +481,7 @@ const FormSectionMain = ({
                 searchPlaceholder={t('purchaseInvoice.form.label.againstOrder')}
                 clearable={true}
                 className="w-full"
+                readOnly={editMode}
               />
             )}
             {formData.AgainstNo === 'Reciept' && (
@@ -400,6 +497,7 @@ const FormSectionMain = ({
                 searchPlaceholder={t('purchaseInvoice.form.label.againstReceipt')}
                 clearable={true}
                 className="w-full"
+                readOnly={editMode}
               />
             )}
           </div>
@@ -504,12 +602,14 @@ const FormSectionMain = ({
         >
           {t('salesInvoice.form.label.formHeaderSection.salesAcLabel')}: {formData.purchaseAccountName}
         </p>
-        <p
-          className='text-blue-600 dark:text-blue-400 border-b border-blue-600 dark:border-blue-400 w-fit cursor-pointer hover:text-blue-700 dark:hover:text-blue-300'
-          onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
-        >
-          {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {currentCurrencyFromStore?.currencyName || "Select Currency"}
-        </p>
+       {financeSettings?.multiCurrency && (
+  <p
+    className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+    onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
+  >
+    {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {formData?.currencyName || currentCurrencyFromStore?.currencyName || "Select Currency"}
+  </p>
+)}
       </div>
 
       {/* Sales Invoice Table */}
@@ -545,6 +645,7 @@ const FormSectionMain = ({
         handleChange={(field, value) => {
           handleDropdownChange(field, value);
         }}
+        currencyConvertionData={currencyConvertionData}
       />
       <SalesModeModal
         open={salesModeModalOpen}

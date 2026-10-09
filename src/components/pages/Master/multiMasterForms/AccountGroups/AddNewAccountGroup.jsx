@@ -183,12 +183,15 @@ const AddEditAccountGroupModal = ({
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    if (name === 'AccountGroupCode') {
-      setFormData((prev) => ({ ...prev, [name]: value.toUpperCase() }));
-      return;
-    }
+   let updatedValue = value;
 
-    setFormData((prev) => ({ ...prev, [name]: value }));
+     if (name === "AccountGroupCode") {
+       updatedValue = value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+     } else if (name === "accountGroupName") {
+       updatedValue = value.replace(/[^A-Za-z0-9 ]/g, "");
+     }
+
+    setFormData((prev) => ({ ...prev, [name]: updatedValue }));
   };
 
   const handleLedgerKeyDown = (e) => {
@@ -253,7 +256,7 @@ const AddEditAccountGroupModal = ({
         narration: formData.narration,
         LedgerNextNo: formData.LedgerNextNo,
         branchId: selectedBranchId,
-        CreatedUser: userId
+        ...(isEditMode ? { ModifiedUser: userId } : { CreatedUser: userId })
       };
 
       if (isEditMode) {

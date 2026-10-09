@@ -42,9 +42,9 @@ const PurchaseOrderReport = () => {
     };
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+       
         return {
-            fromDate: firstDayOfMonth.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -85,14 +85,17 @@ const PurchaseOrderReport = () => {
         { key: 'ledgername',         label: t('Supplier'),     align: 'left',   width: '160' },
         { key: 'costcentre',         label: t('Cost Centre'),  align: 'left',   width: '120' },
         { key: 'productcode',        label: t('Item Code'),    align: 'left',   width: '100' },
+        { key: 'barcode',        label: t('Bar Code'),    align: 'left',   width: '100' },
         { key: 'productname',        label: t('Product'),      align: 'left',   width: '200' },
         { key: 'unitname',           label: t('Unit'),         align: 'center', width: '70'  },
         { key: 'qty',                label: t('Qty'),          align: 'right',  width: '80'  },
         { key: 'rate',               label: t('Rate'),         align: 'right',  width: '100' },
         { key: 'grossamount',        label: t('Gross Amt'),    align: 'right',  width: '110' },
         { key: 'discountpercentage', label: t('Disc %'),       align: 'right',  width: '80'  },
-        { key: 'taxamount',          label: t('Tax Amt'),      align: 'right',  width: '100' },
         { key: 'netamount',          label: t('Net Amount'),   align: 'right',  width: '110' },
+        { key: 'taxamount',          label: t('Tax Amt'),      align: 'right',  width: '100' },
+        { key: 'amount',          label: t('Amount'),   align: 'right',  width: '110' },
+        { key: 'totalamount',          label: t('Total Amount'),   align: 'right',  width: '110' },
         { key: 'pendingstatus',      label: t('Status'),       align: 'center', width: '100' },
     ], [t]);
 
@@ -139,7 +142,7 @@ const PurchaseOrderReport = () => {
     // ─── Columns that get merged (rowspan) in Detailed mode ──────────────────────
     const mergedColumnsInDetailed = [
         'SNo', 'orderdate', 'orderno', 'ledgername', 'costcentre', 'pendingstatus',
-        'duedate', 'narration', 'createduser'
+        'duedate', 'narration', 'createduser','totalamount'
     ];
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────────
@@ -152,7 +155,7 @@ const PurchaseOrderReport = () => {
         try {
             const [suppliersRes, costCentreRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Supplier"],
+                    ledgerTypes: ["Supplier","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("cost-centres").catch(() => ({ data: { data: [] } }))
@@ -217,59 +220,72 @@ const PurchaseOrderReport = () => {
     };
 
     // ─── Footer totals ────────────────────────────────────────────────────────────
-    const footerData = useMemo(() => {
-        if (!reportData || !Array.isArray(reportData) || reportData.length === 0) return null;
+    // ─── Footer totals ────────────────────────────────────────────────────────────
+const footerData = useMemo(() => {
+    if (!reportData || !Array.isArray(reportData) || reportData.length === 0) return null;
 
-        const decimalPart = generalSettings?.decimalPart || 2;
+    const decimalPart = generalSettings?.decimalPart || 2;
 
-        const sumOf = (...keys) => reportData.reduce((acc, row) => {
-            for (const k of keys) {
-                const v = parseFloat(row[k]);
-                if (!isNaN(v)) return acc + v;
-            }
-            return acc;
-        }, 0);
-
-        if (filters.mode === 'Summary') {
-            return {
-                SNo:          '',
-                orderdate:    '',
-                orderno:      <strong>{t('Total')}</strong>,
-                ledgername:   '',
-                costcentre:   '',
-                subtotal:     sumOf('subtotal').toFixed(decimalPart),
-                billdiscount: sumOf('billdiscount').toFixed(decimalPart),
-                taxableamt:   sumOf('taxableamt').toFixed(decimalPart),
-                totaltax:     sumOf('totaltax').toFixed(decimalPart),
-                roundoff:     sumOf('roundoff').toFixed(decimalPart),
-                totalamount:  sumOf('totalamount').toFixed(decimalPart),
-                duedate:      '',
-                pendingstatus:''
-            };
+    const sumOf = (...keys) => reportData.reduce((acc, row) => {
+        for (const k of keys) {
+            const v = parseFloat(row[k]);
+            if (!isNaN(v)) return acc + v;
         }
+        return acc;
+    }, 0);
 
-        // Detailed mode — sum item-level numeric fields
+    // ✅ Sums a header-level field once per unique orderno (avoids double count in Detailed)
+    const sumUniqueByOrder = (key) => {
+        const seen = new Set();
+        return reportData.reduce((acc, row) => {
+            if (seen.has(row.orderno)) return acc;
+            seen.add(row.orderno);
+            const v = parseFloat(row[key]);
+            return isNaN(v) ? acc : acc + v;
+        }, 0);
+    };
+
+    if (filters.mode === 'Summary') {
         return {
-            SNo:                '',
-            orderdate:          '',
-            orderno:            <strong>{t('Total')}</strong>,
-            ledgername:         '',
-            costcentre:         '',
-            productcode:        '',
-            productname:        '',
-            unitname:           '',
-            qty:                sumOf('qty').toFixed(3),
-            rate:               '',
-            grossamount:        sumOf('grossamount').toFixed(decimalPart),
-            discountpercentage: '',
-            taxamount:          sumOf('taxamount').toFixed(decimalPart),
-            netamount:          sumOf('netamount', 'amount').toFixed(decimalPart),
-            pendingstatus:      '',
-            duedate:            '',
-            narration:          '',
-            createduser:        ''
+            SNo:          '',
+            orderdate:    '',
+            orderno:      <strong>{t('Total')}</strong>,
+            ledgername:   '',
+            costcentre:   '',
+            subtotal:     sumOf('subtotal').toFixed(decimalPart),
+            billdiscount: sumOf('billdiscount').toFixed(decimalPart),
+            taxableamt:   sumOf('taxableamt').toFixed(decimalPart),
+            totaltax:     sumOf('totaltax').toFixed(decimalPart),
+            roundoff:     sumOf('roundoff').toFixed(decimalPart),
+            totalamount:  sumOf('totalamount').toFixed(decimalPart), // ✅ each row = one order, safe to sum directly
+            duedate:      '',
+            pendingstatus:''
         };
-    }, [reportData, generalSettings?.decimalPart, t, filters.mode]);
+    }
+
+    // Detailed mode — sum item-level numeric fields, but dedupe header-level totalamount
+    return {
+        SNo:                '',
+        orderdate:          '',
+        orderno:            <strong>{t('Total')}</strong>,
+        ledgername:         '',
+        costcentre:         '',
+        productcode:        '',
+        productname:        '',
+        unitname:           '',
+        qty:                sumOf('qty').toFixed(3),
+        rate:               '',
+        grossamount:        sumOf('grossamount').toFixed(decimalPart),
+        discountpercentage: '',
+        taxamount:          sumOf('taxamount').toFixed(decimalPart),
+        netamount:          sumOf('netamount', 'amount').toFixed(decimalPart),
+        totalamount:        sumUniqueByOrder('totalamount').toFixed(decimalPart), // ✅ dedupe fix
+        pendingstatus:      '',
+        duedate:            '',
+        narration:          '',
+        createduser:        ''
+    };
+}, [reportData, generalSettings?.decimalPart, t, filters.mode]);
 
     // ─── Cell renderer ────────────────────────────────────────────────────────────
     const renderCell = (key, row) => {

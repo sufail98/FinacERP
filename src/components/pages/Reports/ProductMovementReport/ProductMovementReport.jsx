@@ -15,19 +15,19 @@ import useReportExport from '@/hooks/useReportExport';
 import { useNavigate } from 'react-router-dom';
 
 export const ProductMovementReport = () => {
+    const { allProducts: productData } = useSelector((state) => state.products)
     const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState(null);
     const [alert, setAlert] = useState(null);
     const [dropdownLoading, setDropdownLoading] = useState(false)
     const navigate = useNavigate();
-    const [productData, setProductData] = useState([]);
     const [partyData, setPartyData] = useState([]);
     const [godownData, setGodownData] = useState([]);
 
 
     const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Product Movement Report");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Product Movement");
     const { generalSettings } = useSelector((state) => state.settings);
 
     // Use the unified export hook
@@ -79,8 +79,7 @@ export const ProductMovementReport = () => {
     const fetchDropdownData = async () => {
         setDropdownLoading(true)
         try {
-            const [productRes, partyRes, godownRes] = await Promise.all([
-                axiosInstance.get("products-grid-fill?branchId=" + selectedBranchId).catch(() => ({ data: { data: [] } })),
+            const [partyRes, godownRes] = await Promise.all([
                 axiosInstance.post("account-ledgers", {
                     group_ids: [5, 6, 28, 29],
                     branchId: selectedBranchId
@@ -88,7 +87,7 @@ export const ProductMovementReport = () => {
                 axiosInstance.get(`godowns/${selectedBranchId}`).catch(() => ({ data: { data: [] } }))
             ]);
 
-            setProductData(productRes.data.data || []);
+            // setProductData(productRes.data.data || []);
             setPartyData(partyRes.data.data || []);
             setGodownData(godownRes.data.data || []);
         } catch (error) {
@@ -117,7 +116,7 @@ export const ProductMovementReport = () => {
             voucherType: filters.voucherType,
             productCode: filters.productCode,
             party: filters.party || null,
-            branchId: parseInt(selectedBranchId) || 1,
+            branchId:null,
             godownId: filters.godownId ? parseInt(filters.godownId) : null
         };
 

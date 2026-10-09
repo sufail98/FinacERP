@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import AlertBox from "@/components/common/AlertBox";
 import { useSelector } from "react-redux";
 import Swal from "sweetalert2";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const style = {
   position: "absolute",
@@ -145,7 +146,12 @@ const StaffHolidayRegisterForm = ({
 
   const handleInputChange = (e) => {
     setFinalError("");
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const{name,value} = e.target
+    let updatedValue = value
+    if(["holidayName"].includes(name)){
+      updatedValue = sanitize.lettersSpace(value)
+    }
+    setFormData({ ...formData, [name]: updatedValue });
   };
 
   // Ctrl+S shortcut
@@ -223,6 +229,7 @@ const StaffHolidayRegisterForm = ({
       narration: formData.narration,
       branchId: selectedBranchId,
       CreatedUser: user?.userId,
+      ModifiedUser: mode === "edit" ?  user?.userId : null,
     };
 
     try {

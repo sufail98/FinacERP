@@ -70,6 +70,21 @@ const formatDate = (date) => {
     return `${day}-${month}-${year}`;
 };
 
+const getPrintedDateTime = () => {
+    const now = new Date();
+    const datePart = now.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+    });
+    const timePart = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+    return `${datePart} ${timePart}`;
+};
+
 /**
  * Generate QR code data for Saudi Arabia ZATCA compliance
  */
@@ -201,11 +216,15 @@ const generateQRCodeDataURL = async (data) => {
  * Generate thermal invoice HTML
  */
 const generateThermalHTML = async (invoiceData, branchData, time, currentCurrency) => {
-    
+
+
     const isNA = invoiceData.taxType === 'NA';
 
     const state = store.getState().settings;
     const generalSettings = state.generalSettings;
+    const salesSettings = state.saleSettings;
+    const showLineDiscount = salesSettings?.showLineDiscount || false;
+    const activateRoundoff = Boolean(generalSettings.RoundOff)
     const showCurrencyPrefix = generalSettings.showCurrencyprefix;
     const currencySymbol = currentCurrency ? currentCurrency.currencySymbol : '';
     const fmt = (num) =>
@@ -235,7 +254,10 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
         totalTax = 0,
         totalAmount = 0,
         narration = '',
-        ledgerBalance = 0  // ← Added ledgerBalance
+        ledgerBalance = 0,
+        othercharge = 0,
+        roundOff = 0,
+
     } = invoiceData;
 
     // ✅ Check if customer name contains 'cash' (case-insensitive)
@@ -252,7 +274,7 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Tax Credit Note - ${invoiceNo}</title>
+            <title>INVOICE - ${invoiceNo}</title>
             <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
                 @media print {
@@ -298,7 +320,7 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
 
                 .invoice-title {
                     font-size: 14px;
-                    font-weight: bold;
+                    font-weight: semi-bold;
                     text-align: center;
                     margin: 5px 0;
                 }
@@ -460,13 +482,13 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
             <!-- Invoice Title -->
             <div class="invoice-title">
                 ${isNA
-                    ? 'ESTIMATE'
-                    : (invoiceData.formType === 'Tax Invoice' ? 'Tax Invoice' : 'Simplified Tax Invoice')}
+            ? 'ESTIMATE'
+            : (invoiceData.formType === 'Tax Invoice' ? 'Tax Invoice' : 'Simplified Tax Invoice')}
             </div>
             <div class="invoice-title" style="font-size: 14px;">
                 ${isNA
-                    ? 'تقدير'
-                    : (invoiceData.formType === 'Tax Invoice' ? 'فاتورة ضريبية' : 'فاتورة ضريبية مبسطة')}
+            ? 'تقدير'
+            : (invoiceData.formType === 'Tax Invoice' ? 'فاتورة ضريبية' : 'فاتورة ضريبية مبسطة')}
             </div>
 
             <!-- Invoice Info -->
@@ -484,6 +506,10 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
                 <div class="info-row">
                     <span class="info-label">Payment: <span style="font-weight:300">${paymentMode === 'cash' ? 'Cash' : 'Credit'}</span></span>
                     <span class="info-label">Time: <span style="font-weight:300">${time || ''}</span></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Printed On:</span>
+                    <span style="font-weight:300">${getPrintedDateTime()}</span>
                 </div>
             </div>
 
@@ -526,17 +552,32 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
                 </thead>
                 <tbody>
                     ${salesDetails.map((item, index) => {
-                        const hasArabicName = item.productNameArb && item.productNameArb.trim() !== '';
-                        const rowSpan = hasArabicName ? 3 : 2;
-                        const detailColspan = isNA ? 4 : 5;
+                const hasArabicName = item.productNameArb && item.productNameArb.trim() !== '';
+                const hasDescription = item.productDescription && item.productDescription.trim() !== '';
+                const rowSpan = 2 + (hasArabicName ? 1 : 0) + (hasDescription ? 1 : 0);
+                const detailColspan = isNA ? 4 : 5;
 
-                        return `
+                const discPercent = Number(item.discountPercentage || 0);
+                const grossAmt = Number(item.qty || 0) * Number(item.rate || 0);
+                const discAmt = Number(item.descAmt) > 0
+                    ? Number(item.descAmt)
+                    : (grossAmt * discPercent) / 100;
+                const hasLineDiscount = showLineDiscount && (discPercent > 0 || discAmt > 0);
+
+                return `
                         <tr>
-                            <td rowspan="${rowSpan}" style="text-align: center; vertical-align: middle; font-weight: bold; font-size: 11px; border-right: 1px solid #ddd;">${index + 1}</td>
-                            <td colspan="${detailColspan}" style="padding: 3px 2px 0px 2px; border: none;">
-                                <div class="product-name" style="font-size: 11px;">${item.productName || ''}</div>
+        <td rowspan="${rowSpan}" style="text-align: center; vertical-align: middle; font-weight: bold; font-size: 11px; border-right: 1px solid #ddd;">${index + 1}</td>
+        <td colspan="${detailColspan}" style="padding: 3px 2px 0px 2px; border: none;">
+            <div class="product-name" style="font-size: 11px;">${item.productName || ''}</div>
+        </td>
+    </tr>
+   ${hasDescription ? `
+                        <tr>
+                            <td colspan="${detailColspan}" style="padding: 0px 2px 0px 2px; border: none;">
+                                <div class="product-code" style="text-align: left; font-size: 9px;">${item.productDescription}</div>
                             </td>
                         </tr>
+                        ` : ''}
                         ${hasArabicName ? `
                         <tr>
                             <td colspan="${detailColspan}" style="padding: 0px 2px 2px 2px; border: none;">
@@ -544,15 +585,22 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
                             </td>
                         </tr>
                         ` : ''}
-                        <tr style="border-bottom: 1px dashed #ccc;">
-                            <td style="text-align: left; font-size:11px; padding: 2px;">${item.productCode || item.barcode || 'N/A'}</td>
-                            <td style="text-align: center; font-size: 11px;">${item.qty || 0}</td>
-                            <td style="text-align: center; font-size: 11px;">${Number(item.rate || 0).toFixed(2)}</td>
-                            ${!isNA ? `<td style="text-align: center; font-size: 11px;">${Number(item.taxAmount || 0).toFixed(2)}</td>` : ''}
-                            <td style="text-align: right; font-size: 11px; font-weight: bold;">${Number(item.amount || 0).toFixed(2)}</td>
-                        </tr>
+    <tr style="border-bottom: ${hasLineDiscount ? 'none' : '1px dashed #ccc'};">
+        <td style="text-align: left; font-size:11px; padding: 2px;">${item.productCode || item.barcode || 'N/A'}</td>
+        <td style="text-align: center; font-size: 11px;">${item.qty || 0}</td>
+        <td style="text-align: center; font-size: 11px;">${Number(item.rate || 0).toFixed(2)}</td>
+        ${!isNA ? `<td style="text-align: center; font-size: 11px;">${Number(item.taxAmount || 0).toFixed(2)}</td>` : ''}
+        <td style="text-align: right; font-size: 11px; font-weight: bold;">${Number(item.amount || 0).toFixed(2)}</td>
+    </tr>
+    ${hasLineDiscount ? `
+    <tr style="border-bottom: 1px dashed #ccc;">
+        <td colspan="${detailColspan + 1}" style="text-align: right; padding: 0px 2px 2px 2px; border: none;">
+            <span class="vat-info">Disc: ${discPercent.toFixed(2)}% (-${discAmt.toFixed(2)})</span>
+        </td>
+    </tr>
+    ` : ''}
                         `;
-                    }).join('')}
+            }).join('')}
                 </tbody>
             </table>
 
@@ -562,18 +610,36 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
                     <span>Sub Total:</span>
                     <span>${fmt(subTotal)}</span>
                 </div>
-                ${billDiscount > 0 ? `
-                <div class="total-row">
+                  ${Number(othercharge) !== 0 ? ` <div class="total-row">
+                    <span>Other Charge:</span>
+                    <span>${fmt(othercharge)}</span>
+                </div>` : ""}
+                  ${((salesSettings?.showBillDiscountAmount || salesSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0) ? `
+                                <div class="total-row">
                     <span>Discount:</span>
                     <span>- ${fmt(billDiscount)}</span>
+                </div> ` : ""}
+              
+                <div class="total-row">
+                    <span>Taxable Amount:</span>
+                    <span>${fmt(
+                Number(subTotal || 0) -
+                Number(invoiceData?.billDiscount || 0) +
+                Number(othercharge || 0)
+            )}</span>
                 </div>
-                ` : ''}
+
                 ${!isNA ? `
                 <div class="total-row">
                     <span>VAT Amount:</span>
                     <span>${fmt(totalTax)}</span>
                 </div>
                 ` : ''}
+                ${(activateRoundoff && Number(roundOff) !== 0) ? `
+                               <div class="total-row">
+                               <span>Round Off:</span>
+                                <span >${fmt(roundOff)}</span>
+                            </div> ` : ""}
                 <div class="total-row grand-total">
                     <span>GRAND TOTAL:</span>
                     <span>${fmt(totalAmount)}</span>
@@ -598,9 +664,9 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
             ${!isNA ? `
             <div class="qr-section">
                 ${qrCodeSVG
-                    ? qrCodeSVG
-                    : `<img src="${qrCodeDataURL}" alt="QR Code">`
-                }
+                ? qrCodeSVG
+                : `<img src="${qrCodeDataURL}" alt="QR Code">`
+            }
             </div>
             ` : ''}
 
@@ -625,7 +691,7 @@ const generateThermalHTML = async (invoiceData, branchData, time, currentCurrenc
  * Main thermal print invoice function - SILENT PRINT
  */
 export const printThermalInvoice = async (invoiceData, branchData, time, currentCurrency, qrLink) => {
-    
+
     // ✅ generateThermalHTML is now async (because of QR generation)
     const invoiceHTML = await generateThermalHTML(invoiceData, branchData, time, currentCurrency);
 
@@ -634,16 +700,46 @@ export const printThermalInvoice = async (invoiceData, branchData, time, current
         try {
             const savedPrinter = await getPrinterPreference('thermal');
             const result = await printSilent(invoiceHTML, savedPrinter, 'thermal');
-            
+
             if (result.success) {
                 // console.log('✅ [THERMAL] Printed successfully!');
             } else {
                 console.error('❌ [THERMAL] Print failed:', result.error);
             }
-            
+
             return result;
         } catch (error) {
             console.error('❌ [THERMAL] Error:', error);
+            return { success: false, error: error.message };
+        }
+    } else {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(invoiceHTML);
+            printWindow.document.close();
+            printWindow.onload = () => {
+                printWindow.print();
+            };
+        }
+        return { success: true };
+    }
+};
+export const saveInvoiceThermalAsPDF = async (invoiceData, branchData, time, currentCurrency) => {
+    const invoiceHTML = await generateThermalHTML(invoiceData, branchData, time, currentCurrency);
+    const invoiceNumber = invoiceData.invoiceNo || 'invoice';
+    const filename = `${invoiceNumber}_v3.pdf`;
+
+    if (isElectron()) {
+        try {
+            const result = await window.electronAPI.savePDF(invoiceHTML, filename);
+            if (result.success) {
+                return result;
+            } else {
+                console.error('❌ [SALES INVOICE TWO] PDF save failed:', result.error);
+                return result;
+            }
+        } catch (error) {
+            console.error('❌ [SALES INVOICE TWO] Error saving PDF:', error);
             return { success: false, error: error.message };
         }
     } else {

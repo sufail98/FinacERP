@@ -6,26 +6,23 @@ import axiosInstance from '@/lib/axiosConfig';
 import usePrivileges from '@/lib/hooks/usePrivileges';
 import useAuth from '@/redux/hook/auth/useAuth';
 import { BookOpen } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import AddressBookFilters from './AddressBookFilters';
-import AddressBookContentTable from './AddressBookContentTable';
 import useReportExport from '@/hooks/useReportExport';
-import ContentTable from '@/components/common/ContentTable';
 import { useSelector } from 'react-redux';
 
 const AddressBookReport = ({ type }) => {
     const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
-      const { generalSettings, } = useSelector((state) => state.settings);
-    
+    const { generalSettings } = useSelector((state) => state.settings);
+
     const [reportData, setReportData] = useState(null);
     const { selectedBranchId } = useAuth();
     const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges(
         type === 'customer' ? "Customer Address Book" : "Supplier Address Book"
     );
 
-    // Use the unified export hook
     const {
         exportGenericToExcel,
         exportGenericToPdf,
@@ -39,13 +36,13 @@ const AddressBookReport = ({ type }) => {
         email: ''
     });
 
-    // Column definitions
+    // Column definitions - added 'source' column
     const allColumns = [
-        { key: 'ledgerCode', label: t("cusSuppAddressBook.columns.ledgerCode"), defaultVisible: false, minWidth: '80px' },
+        { key: 'source', label: t("cusSuppAddressBook.columns.source") || 'Source', defaultVisible: true, minWidth: '90px' },
+        // { key: 'ledgerCode', label: t("cusSuppAddressBook.columns.ledgerCode"), defaultVisible: false, minWidth: '80px' },
         { key: 'ledgerName', label: t("cusSuppAddressBook.columns.ledgerName"), defaultVisible: true, minWidth: '150px' },
         { key: 'nameArb', label: t("cusSuppAddressBook.columns.nameArb"), defaultVisible: false, minWidth: '130px' },
         { key: 'ledgerType', label: t("cusSuppAddressBook.columns.ledgerType"), defaultVisible: false, minWidth: '80px' },
-        // { key: 'source', label: t("cusSuppAddressBook.columns.source"), defaultVisible: false, minWidth: '80px' },
         { key: 'phoneNo', label: t("cusSuppAddressBook.columns.phoneNo"), defaultVisible: true, minWidth: '110px' },
         { key: 'faxNo', label: t("cusSuppAddressBook.columns.faxNo"), defaultVisible: false, minWidth: '100px' },
         { key: 'email', label: t("cusSuppAddressBook.columns.email"), defaultVisible: true, minWidth: '160px' },
@@ -58,26 +55,17 @@ const AddressBookReport = ({ type }) => {
         { key: 'Country', label: t("cusSuppAddressBook.columns.Country"), defaultVisible: false, minWidth: '90px' },
         { key: 'PostboxNo', label: t("cusSuppAddressBook.columns.PostboxNo"), defaultVisible: false, minWidth: '80px' },
         { key: 'AdditionalNo', label: t("cusSuppAddressBook.columns.AdditionalNo"), defaultVisible: false, minWidth: '90px' },
-        // { key: 'tinNumber', label: t("cusSuppAddressBook.columns.tinNumber"), defaultVisible: true, minWidth: '100px' },
-        // { key: 'panNumber', label: t("cusSuppAddressBook.columns.panNumber"), defaultVisible: false, minWidth: '100px' },
-        // { key: 'cstNumber', label: t("cusSuppAddressBook.columns.cstNumber"), defaultVisible: false, minWidth: '100px' },
-        // { key: 'accountNo', label: t("cusSuppAddressBook.columns.accountNo"), defaultVisible: false, minWidth: '100px' },
         { key: 'creditLimit', label: t("cusSuppAddressBook.columns.creditLimit"), defaultVisible: false, minWidth: '100px' },
         { key: 'creditPeriod', label: t("cusSuppAddressBook.columns.creditPeriod"), defaultVisible: false, minWidth: '90px' },
         { key: 'creditLimitStatus', label: t("cusSuppAddressBook.columns.creditLimitStatus"), defaultVisible: false, minWidth: '80px' },
         { key: 'openingBalance', label: t("cusSuppAddressBook.columns.openingBalance"), defaultVisible: false, minWidth: '100px' },
         { key: 'crOrDr', label: t("cusSuppAddressBook.columns.crOrDr"), defaultVisible: false, minWidth: '60px' },
-        // { key: 'bankname', label: t("cusSuppAddressBook.columns.bankname"), defaultVisible: false, minWidth: '120px' },
-        // { key: 'bankBranchName', label: t("cusSuppAddressBook.columns.bankBranchName"), defaultVisible: false, minWidth: '120px' },
-        // { key: 'bankaccname', label: t("cusSuppAddressBook.columns.bankaccname"), defaultVisible: false, minWidth: '120px' },
-        // { key: 'ibanno', label: t("cusSuppAddressBook.columns.ibanno"), defaultVisible: false, minWidth: '140px' },
-        // { key: 'bankSwiftCode', label: t("cusSuppAddressBook.columns.bankSwiftCode"), defaultVisible: false, minWidth: '100px' },
         { key: 'pricingLevelId', label: t("cusSuppAddressBook.columns.pricingLevelId"), defaultVisible: false, minWidth: '80px' },
         { key: 'currencyId', label: t("cusSuppAddressBook.columns.currencyId"), defaultVisible: false, minWidth: '70px' },
-        // { key: 'routeId', label: t("cusSuppAddressBook.columns.routeId"), defaultVisible: false, minWidth: '70px' },
-        // { key: 'areaId', label: t("cusSuppAddressBook.columns.areaId"), defaultVisible: false, minWidth: '70px' },
-        // { key: 'marketId', label: t("cusSuppAddressBook.columns.marketId"), defaultVisible: false, minWidth: '70px' },
-        // { key: 'narration', label: t("cusSuppAddressBook.columns.narration"), defaultVisible: false, minWidth: '150px', wrap: true },
+        // Employee-specific columns
+        { key: 'employeeCode', label: 'Emp Code', defaultVisible: false, minWidth: '90px' },
+        { key: 'employeeName', label: 'Employee Name', defaultVisible: false, minWidth: '150px' },
+        { key: 'voucherNo', label: 'Voucher No', defaultVisible: false, minWidth: '90px' },
     ];
 
     const [visibleColumns, setVisibleColumns] = useState(() => {
@@ -95,17 +83,18 @@ const AddressBookReport = ({ type }) => {
         }));
     };
 
-    const fetchReport = async () => {
+   const fetchReport = async (overrideFilters) => {
         setLoading(true);
         const groupId = type === 'customer' ? "44" : "43";
+        const f = overrideFilters || filters;
 
         const requestPayload = {
             branchId: String(selectedBranchId),
             groupId: groupId,
-            name: filters.name || "",
-            address: filters.address || "",
-            phoneno: filters.phoneno || "",
-            email: filters.email || ""
+            name: f.name || "",
+            address: f.address || "",
+            phoneno: f.phoneno || "",
+            email: f.email || ""
         };
 
         try {
@@ -114,20 +103,30 @@ const AddressBookReport = ({ type }) => {
 
             const flattenedData = rawData.map((item) => {
                 const d = item?.data || {};
+                const source = item?.source;
 
-                const branchArray = Array.isArray(d.branchId) ? d.branchId : [];
-                const branchEntry = branchArray.find(
-                    (b) => b.branchId === Number(selectedBranchId)
-                );
+                if (source === 'Ledger') {
+                    const branchArray = Array.isArray(d.branchId) ? d.branchId : [];
+                    const branchEntry = branchArray.find(
+                        (b) => b.branchId === Number(selectedBranchId)
+                    );
+
+                    return {
+                        source,
+                        ...d,
+                        openingBalance: branchEntry?.openingBalance?.toFixed(generalSettings.decimalPart) ?? '',
+                        crOrDr: branchEntry?.crOrDr ?? d?.crOrDr ?? '',
+                    };
+                }
 
                 return {
-                    source: item?.source,
+                    source,
                     ...d,
-                    openingBalance: branchEntry?.openingBalance?.toFixed(generalSettings.decimalPart) ?? '',
-                    crOrDr: branchEntry?.crOrDr ?? d?.crOrDr ?? '',
+                    ledgerName: d.employeeName,
+                    ledgerCode: d.employeeCode,
+                    phoneNo: d.phoneNo,
                 };
             });
-
 
             setReportData(flattenedData);
         } catch (error) {
@@ -137,13 +136,50 @@ const AddressBookReport = ({ type }) => {
             setLoading(false);
         }
     };
+
+    /* ------------------------------ Debounced auto-fetch on filter change ------------------------------ */
+    const debounceRef = useRef(null);
+    const isFirstRun = useRef(true);
+
+     useEffect(() => {
+        setReportData(null);
+        setFilters({ name: '', address: '', phoneno: '', email: '' });
+        setSearchTerm('');
+        isFirstRun.current = true;
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+    }, [type]);
+
+    useEffect(() => {
+        // skip firing on initial mount (no filters typed yet)
+        if (isFirstRun.current) {
+            isFirstRun.current = false;
+            return;
+        }
+
+        const hasAnyFilter =
+            filters.name.trim() ||
+            filters.address.trim() ||
+            filters.phoneno.trim() ||
+            filters.email.trim();
+
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+
+        if (!hasAnyFilter) {
+            // all cleared — optionally clear results, or leave as-is
+            return;
+        }
+
+        debounceRef.current = setTimeout(() => {
+            fetchReport(filters);
+        }, 500); // 500ms debounce delay
+
+        return () => clearTimeout(debounceRef.current);
+    }, [filters]);
     /* ------------------------------ Export Configuration ------------------------------ */
 
     const getExportOptions = () => {
-        // Get only visible columns for export
         const visibleColumnsList = allColumns.filter(col => visibleColumns[col.key]);
 
-        // Prepare data for export
         const exportData = reportData.map((row, index) => {
             const exportRow = { SNo: index + 1 };
             visibleColumnsList.forEach(col => {
@@ -152,7 +188,6 @@ const AddressBookReport = ({ type }) => {
             return exportRow;
         });
 
-        // Prepare columns for export
         const exportColumns = [
             { key: 'SNo', label: '#', align: 'center', width: 8 },
             ...visibleColumnsList.map(col => ({
@@ -195,7 +230,6 @@ const AddressBookReport = ({ type }) => {
             alert(t('No data to export'));
             return;
         }
-        // Use landscape for address book due to many columns
         exportGenericToPdf({ ...getExportOptions(), orientation: 'landscape' });
     };
 
@@ -216,6 +250,7 @@ const AddressBookReport = ({ type }) => {
     const resetFilters = () => {
         setFilters({ name: '', address: '', phoneno: '', email: '' });
         setReportData(null);
+        setSearchTerm('');
     };
 
     const displayColumns = [
@@ -225,7 +260,22 @@ const AddressBookReport = ({ type }) => {
 
     const pageTitle = type === 'customer' ? t("cusSuppAddressBook.breadcrumb.custtitle") : t("cusSuppAddressBook.breadcrumb.supptitle");
 
-    /* ------------------------------ Loading State ------------------------------ */
+    /* ------------------------------ Local search state (since ContentTable's staticSearchable is no longer used) ------------------------------ */
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredData = React.useMemo(() => {
+        if (!reportData) return [];
+        if (!searchTerm.trim()) return reportData;
+        const term = searchTerm.toLowerCase();
+        return reportData.filter((row) =>
+            displayColumns.some((col) => {
+                const val = row[col.key];
+                return val !== undefined && val !== null && String(val).toLowerCase().includes(term);
+            })
+        );
+    }, [reportData, searchTerm, displayColumns]);
+
+    /* ------------------------------ Loading / No Access States ------------------------------ */
 
     if (privilegeLoading) {
         return (
@@ -238,8 +288,6 @@ const AddressBookReport = ({ type }) => {
             </div>
         );
     }
-
-    /* ------------------------------ No Access State ------------------------------ */
 
     if (!hasAccess) {
         return (
@@ -313,12 +361,92 @@ const AddressBookReport = ({ type }) => {
                         resetFilters={resetFilters}
                     />
 
-                    <ContentTable
-                        columns={displayColumns}
-                        data={reportData}
-                        loading={loading}
-                        staticSearchable
-                    />
+                    {/* Custom table replacing ContentTable */}
+                    <div className="bg-white dark:bg-[#1e1e1e] rounded border border-gray-200 dark:border-gray-700 mt-2">
+                        <div className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                                {t('Total Records')}: {filteredData.length}
+                            </div>
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder={t('Search') || 'Search...'}
+                                className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 w-48 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                        </div>
+
+                        {loading ? (
+                            <Preloader />
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs border-collapse">
+                                    <thead>
+                                        <tr className="bg-gray-50 dark:bg-[#252525] border-b border-gray-200 dark:border-gray-700">
+                                            {displayColumns.map((col) => (
+                                                <th
+                                                    key={col.key}
+                                                    style={{ minWidth: col.minWidth }}
+                                                    className="text-left px-2 py-1.5 font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap"
+                                                >
+                                                    {col.label}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filteredData && filteredData.length > 0 ? (
+                                            filteredData.map((row, index) => (
+                                                <tr
+                                                    key={index}
+                                                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                                >
+                                                    {displayColumns.map((col) => {
+                                                        if (col.key === 'SNo') {
+                                                            return (
+                                                                <td key={col.key} className="px-2 py-1 text-gray-600 dark:text-gray-400">
+                                                                    {index + 1}
+                                                                </td>
+                                                            );
+                                                        }
+                                                        if (col.key === 'source') {
+                                                            const isEmployee = row.source === 'Employee';
+                                                            return (
+                                                                <td key={col.key} className="px-2 py-1">
+                                                                    <span
+                                                                        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${isEmployee
+                                                                                ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                                                                                : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                                                            }`}
+                                                                    >
+                                                                        {row.source}
+                                                                    </span>
+                                                                </td>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <td
+                                                                key={col.key}
+                                                                className={`px-2 py-1 text-gray-700 dark:text-gray-300 ${col.wrap ? 'whitespace-normal' : 'whitespace-nowrap'}`}
+                                                            >
+                                                                {row[col.key] ?? ''}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={displayColumns.length} className="px-2 py-4 text-center text-gray-400">
+                                                    {reportData === null ? t('Generate a report to view data') : t('No data found')}
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

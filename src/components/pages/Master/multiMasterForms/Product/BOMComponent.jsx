@@ -74,6 +74,13 @@ const BOMComponent = ({
     //     }
     // };
 
+    const sanitizeNumericInput = (value) => {
+        if (value === null || value === undefined) return '';
+        if (typeof value !== 'string') return String(value);
+
+        return value.replace(/[^\d]/g, '');
+    };
+
     const handleBOMChange = useCallback((id, field, value) => {
         setBomRows(prev =>
             prev.map(row => {
@@ -83,7 +90,9 @@ const BOMComponent = ({
                 // on re-render without object reference equality issues.
                 const stored = (field === "rawMaterial" && value && typeof value === "object")
                     ? value.value
-                    : value;
+                    : field === "qty"
+                        ? sanitizeNumericInput(value)
+                        : value;
                 return { ...row, [field]: stored };
             })
         );
@@ -99,10 +108,20 @@ const BOMComponent = ({
 
     const removeBOMRow = useCallback((id) => {
         setBomRows(prev => {
-            if (prev.length <= 1) return prev;
+
+            if (prev.length <= 1){
+                 return prev.map((row) =>
+                   row.id === id
+                     ? { ...row, rawMaterial: "", qty: "", unit: "" }
+                     : row,
+                 );
+            }
             return prev.filter(row => row.id !== id);
         });
     }, []);
+
+
+    
 
     useEffect(() => {
         fetchUnit();
@@ -206,7 +225,8 @@ const BOMComponent = ({
 
                                             <td className="px-2 py-1 border-r border-gray-300 dark:border-gray-600">
                                                 <input
-                                                    type="number"
+                                                    type="text"
+                                                    inputMode="numeric"
                                                     value={row.qty}
                                                     onChange={(e) =>
                                                         handleBOMChange(row.id, "qty", e.target.value)
@@ -242,7 +262,7 @@ const BOMComponent = ({
                                                         type="button"
                                                         onClick={() => removeBOMRow(row.id)}
                                                         className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        disabled={bomRows.length === 1}
+                                                        // disabled={bomRows.length === 1}
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>

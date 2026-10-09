@@ -10,10 +10,16 @@ import Preloader from "@/components/common/Preloader"
 import { useNavigate } from "react-router-dom"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { showToast } from "@/utils/toast"
+import { getSystemId } from "@/utils/systemId"
+import { refreshProductsByType } from "@/redux/slice/productSlice"
+import PasswordModal from "./PasswordModal"
+import usePrivileges from "@/lib/hooks/usePrivileges"
 
 const SalesSettings = () => {
     const { selectedBranchId } = useAuth()
-    const { saleSettings } = useSelector((state) => state.settings)
+    const { saleSettings } = useSelector((state) => state.settings);
+  const {  hasAccess:godownAccess } = usePrivileges("Godown");
+
 
     const [settings, setSettings] = useState(saleSettings || {});
     const dispatch = useDispatch()
@@ -23,6 +29,19 @@ const SalesSettings = () => {
     const navigate = useNavigate()
     const [bankLedger, setBankLedger] = useState([])
     const [ledgerData, setLedgerData] = useState([]);
+    const [systemId, setSystemId] = useState("")
+
+    // Password Modal States
+    const [showPasswordModal, setShowPasswordModal] = useState(false)
+    const [pendingSave, setPendingSave] = useState(false)
+
+    useEffect(() => {
+        const fetchSystemId = async () => {
+            const id = await getSystemId()
+            setSystemId(id)
+        }
+        fetchSystemId()
+    }, [])
 
     /* ================================================================
        REFETCH SALES SETTINGS & UPDATE REDUX
@@ -31,7 +50,7 @@ const SalesSettings = () => {
     const fetchAndUpdateSettings = useCallback(async () => {
         try {
             const res = await axiosInstance.get("sales-settings");
-  
+
             if (!res.error && res?.data?.data?.length > 0) {
                 const branchSettings = res.data.data.find(
                     (item) => Number(item.branchId) === Number(selectedBranchId)
@@ -42,7 +61,6 @@ const SalesSettings = () => {
 
                 // Update local state
                 setSettings(branchSettings);
-
 
                 return branchSettings;
             }
@@ -62,27 +80,47 @@ const SalesSettings = () => {
         fetchAndUpdateSettings();
     }, [])
 
+    /**
+     * Handle Save Button Click - Show password modal
+     */
+    const handleSaveClick = () => {
+        setShowPasswordModal(true)
+        setPendingSave(true)
+    }
+
+    /**
+     * Handle Password Modal Confirmation
+     */
+    const handlePasswordConfirm = (verified) => {
+        if (verified && pendingSave) {
+            performSave()
+            setPendingSave(false)
+        }
+    }
+
     /* ================================================================
        SAVE HANDLER — after success always refetch & update Redux
     ================================================================ */
-    const handleSave = async () => {
+    const performSave = async () => {
         try {
-
             setSaving(true)
             const res = await axiosInstance.post(
                 `update-sales-setting/${settings.SalesSettingsId}`,
                 {
                     ...settings,
-                    branchId: selectedBranchId
+                    branchId: selectedBranchId,
+                    systemId
                 }
             )
 
             if (!res.data.error) {
-
                 showToast.success("Sales settings updated successfully")
 
                 // ✅ Refetch & update Redux with fresh server data
                 await fetchAndUpdateSettings();
+                dispatch(refreshProductsByType('purchase'))
+                dispatch(refreshProductsByType('sales'))
+                dispatch(refreshProductsByType('inventory'))
             }
         } catch (error) {
             console.error("Error updating sales settings:", error)
@@ -134,7 +172,6 @@ const SalesSettings = () => {
     const fetchLedgerData = async () => {
         try {
             const response = await axiosInstance.get(`all-account-ledgers/${selectedBranchId}`);
-            
             setLedgerData(response.data.data || []);
         } catch (error) {
             console.error("Error fetching ledgers:", error);
@@ -145,17 +182,39 @@ const SalesSettings = () => {
         return <div><Preloader /></div>
     }
 
+    // Reusable heading row for grouping sections
+    const SectionHeading = ({ title }) => (
+        <tr className="bg-blue-50 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-700">
+            <td className="px-4 py-3 font-bold text-gray-900 dark:text-gray-100" colSpan="2">
+                {title}
+            </td>
+        </tr>
+    )
+
     return (
-        <div className="flex flex-col min-h-screen bg-white dark:bg-[#121212] transition-colors">
+        <div className="flex flex-col min-h-screen bg-white dark:bg-[#121212] transition-colors pb-20">
             <div className="flex-1 overflow-y-auto p-2 pb-20 space-y-2">
                 <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Sales Settings</h3>
 
                 {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
 
+                {/* Password Modal */}
+                <PasswordModal 
+                    open={showPasswordModal}
+                    onOpenChange={setShowPasswordModal}
+                    onConfirm={handlePasswordConfirm}
+                />
+
                 {/* Settings Table */}
                 <div className="overflow-x-auto">
                     <table className="w-[50%]">
                         <tbody>
+
+                            {/* ============================================================
+                                GRID SETTINGS
+                            ============================================================ */}
+                            <SectionHeading title="Grid Settings" />
+
                             <tr className="border-b border-gray-200 dark:border-gray-700">
                                 <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Product Description Column</td>
                                 <td className="px-4 py-3">
@@ -179,17 +238,6 @@ const SalesSettings = () => {
                                 </td>
                             </tr>
                             <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Customer Balance In Print</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.showCustomerBalanceBill}
-                                        onCheckedChange={() => toggleSetting("showCustomerBalanceBill")}
-                                    />
-                                </td>
-                            </tr>
-                            <tr className="border-b border-gray-200 dark:border-gray-700">
                                 <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Size</td>
                                 <td className="px-4 py-3">
                                     <Checkbox
@@ -201,24 +249,24 @@ const SalesSettings = () => {
                                 </td>
                             </tr>
                             <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Ask for Confirmation When Adding Same Product</td>
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Weight Column</td>
                                 <td className="px-4 py-3">
                                     <Checkbox
                                         className="border-gray-500 dark:border-gray-600 
                                                  data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.askConfirmationWithSameProduct}
-                                        onCheckedChange={() => toggleSetting("askConfirmationWithSameProduct")}
+                                        checked={settings.WeightVisible}
+                                        onCheckedChange={() => toggleSetting("WeightVisible")}
                                     />
                                 </td>
                             </tr>
                             <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Print After Save</td>
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Origin Column</td>
                                 <td className="px-4 py-3">
                                     <Checkbox
                                         className="border-gray-500 dark:border-gray-600 
                                                  data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.printAfterSave}
-                                        onCheckedChange={() => toggleSetting("printAfterSave")}
+                                        checked={settings.OriginVisible}
+                                        onCheckedChange={() => toggleSetting("OriginVisible")}
                                     />
                                 </td>
                             </tr>
@@ -230,6 +278,17 @@ const SalesSettings = () => {
                                                  data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
                                         checked={settings.showStockCount}
                                         onCheckedChange={() => toggleSetting("showStockCount")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Stock In Product Loockup</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.showStockInproductLookUp}
+                                        onCheckedChange={() => toggleSetting("showStockInproductLookUp")}
                                     />
                                 </td>
                             </tr>
@@ -255,39 +314,6 @@ const SalesSettings = () => {
                                     </Select>
                                 </td>
                             </tr>
-                            <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Default Bank Account for Invoice Print</td>
-                                <td className="px-4 py-3">
-                                    <Select
-                                        value={settings.DefaultBankAccountForInvoicePrint || ""}
-                                        onValueChange={(value) => handleSelectChange('DefaultBankAccountForInvoicePrint', value)}
-                                    >
-                                        <SelectTrigger className="w-full bg-white dark:bg-[#242424] 
-                                      border-gray-500 dark:border-gray-600
-                                      text-gray-900 dark:text-gray-100">
-                                            <SelectValue placeholder="Select Bank Account" />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-white dark:bg-[#1e1e1e]  border-gray-500 dark:border-gray-600">
-                                            {bankLedger.length > 0 ? (
-                                                bankLedger.map((ledger) => (
-                                                    <SelectItem
-                                                        key={ledger.ledgerId}
-                                                        value={Number(ledger.ledgerId)} // ✅ Convert to string
-                                                        className="text-gray-900 dark:text-gray-100 hover:bg-blue-50 dark:hover:bg-blue-900/30"
-                                                    >
-                                                        {ledger.ledgerName}
-                                                    </SelectItem>
-                                                ))
-                                            ) : (
-                                                <div className="px-2 py-2 text-sm text-gray-500 dark:text-gray-400">
-                                                    No Bank Accounts Available
-                                                </div>
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                </td>
-                            </tr>
-                            
                             <tr className="border-b border-gray-200 dark:border-gray-700">
                                 <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Grid Focusing Barcode To Next</td>
                                 <td className="px-4 py-3">
@@ -357,6 +383,226 @@ const SalesSettings = () => {
                                 </td>
                             </tr>
                             <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Free Qty Column</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.showFeeQtyColumn}
+                                        onCheckedChange={() => toggleSetting("showFeeQtyColumn")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Line Discount</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.showLineDiscount}
+                                        onCheckedChange={() => toggleSetting("showLineDiscount")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Grid Fixed Height</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.gridFixedHeight}
+                                        onCheckedChange={() => toggleSetting("gridFixedHeight")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show PartNo</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.ShowPartNo}
+                                        onCheckedChange={() => toggleSetting("ShowPartNo")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Purchase Rate</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.showPurchaserate}
+                                        onCheckedChange={() => toggleSetting("showPurchaserate")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Purchase Rate With Shortkey</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.PurchaseRateIsWithShortkey}
+                                        onCheckedChange={() => toggleSetting("PurchaseRateIsWithShortkey")}
+                                    />
+                                </td>
+                            </tr>
+
+                            {/* ============================================================
+                                INVOICE / PRINT SETTINGS
+                            ============================================================ */}
+                            <SectionHeading title="Invoice & Print Settings" />
+
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Enable Date change (Sale & Return)</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.CanChangeDate}
+                                        onCheckedChange={() => toggleSetting("CanChangeDate")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Customer Balance In Print</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.showCustomerBalanceBill}
+                                        onCheckedChange={() => toggleSetting("showCustomerBalanceBill")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Print After Save</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.printAfterSave}
+                                        onCheckedChange={() => toggleSetting("printAfterSave")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Default Bank Account for Invoice Print</td>
+                                <td className="px-4 py-3">
+                                    <Select
+                                        value={settings.DefaultBankAccountForInvoicePrint || ""}
+                                        onValueChange={(value) => handleSelectChange('DefaultBankAccountForInvoicePrint', value)}
+                                    >
+                                        <SelectTrigger className="w-full bg-white dark:bg-[#242424] 
+                                      border-gray-500 dark:border-gray-600
+                                      text-gray-900 dark:text-gray-100">
+                                            <SelectValue placeholder="Select Bank Account" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-white dark:bg-[#1e1e1e]  border-gray-500 dark:border-gray-600">
+                                            {bankLedger.length > 0 ? (
+                                                bankLedger.map((ledger) => (
+                                                    <SelectItem
+                                                        key={ledger.ledgerId}
+                                                        value={Number(ledger.ledgerId)}
+                                                        className="text-gray-900 dark:text-gray-100 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                                                    >
+                                                        {ledger.ledgerName}
+                                                    </SelectItem>
+                                                ))
+                                            ) : (
+                                                <div className="px-2 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                                    No Bank Accounts Available
+                                                </div>
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Additional Fields in Sales Invoice</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.ShowAdditionalFieldsInSalesInvoice}
+                                        onCheckedChange={() => toggleSetting("ShowAdditionalFieldsInSalesInvoice")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Bill Profit</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.showBillProfit}
+                                        onCheckedChange={() => toggleSetting("showBillProfit")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Bill Discount Amount</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.showBillDiscountAmount}
+                                        onCheckedChange={() => toggleSetting("showBillDiscountAmount")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Bill Discount %</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.showBillDiscountPerc}
+                                        onCheckedChange={() => toggleSetting("showBillDiscountPerc")}
+                                    />
+                                </td>
+                            </tr>
+
+                            {/* ============================================================
+                                PAYMENT SETTINGS
+                            ============================================================ */}
+                            <SectionHeading title="Payment Settings" />
+
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Payment Grid in Sales Order</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.showPaymentGridInSalesOrder}
+                                        onCheckedChange={() => toggleSetting("showPaymentGridInSalesOrder")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Payment Mode Change In Customer Change</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.PaymentModeChangeInCustomerChange}
+                                        onCheckedChange={() => toggleSetting("PaymentModeChangeInCustomerChange")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Validate Sales Price with Purchase Price</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
+                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
+                                        checked={settings.validatePurchaseRate}
+                                        onCheckedChange={() => toggleSetting("validatePurchaseRate")}
+                                    />
+                                </td>
+                            </tr>
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
                                 <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Default Payment Mode</td>
                                 <td className="px-4 py-3">
                                     <Select
@@ -370,9 +616,11 @@ const SalesSettings = () => {
                                         </SelectTrigger>
                                         <SelectContent className="bg-white dark:bg-[#1e1e1e] 
                                                                   border-gray-500 dark:border-gray-600">
+                                            <SelectItem value="null" className="text-gray-900 dark:text-gray-100 
+                                                                                       hover:bg-blue-50 dark:hover:bg-blue-900/30">NA</SelectItem>
                                             <SelectItem value="cash" className="text-gray-900 dark:text-gray-100 
                                                                                        hover:bg-blue-50 dark:hover:bg-blue-900/30">Cash</SelectItem>
-                                            <SelectItem value="card" className="text-gray-900 dark:text-gray-100 
+                                            <SelectItem value="bank" className="text-gray-900 dark:text-gray-100 
                                                                                    hover:bg-blue-50 dark:hover:bg-blue-900/30">Bank</SelectItem>
                                             <SelectItem value="credit" className="text-gray-900 dark:text-gray-100 
                                                                                    hover:bg-blue-50 dark:hover:bg-blue-900/30">Credit</SelectItem>
@@ -427,88 +675,12 @@ const SalesSettings = () => {
                                 </td>
                             </tr>
 
-                            <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Free Qty Column</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.showFeeQtyColumn}
-                                        onCheckedChange={() => toggleSetting("showFeeQtyColumn")}
-                                    />
-                                </td>
-                            </tr>
+                            {/* ============================================================
+                                RETENTION SETTINGS
+                            ============================================================ */}
+                            <SectionHeading title="Retention Settings" />
 
                             <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Line Discount</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.showLineDiscount}
-                                        onCheckedChange={() => toggleSetting("showLineDiscount")}
-                                    />
-                                </td>
-                            </tr>
-                            <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Payment Grid in Sales Order</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.showPaymentGridInSalesOrder}
-                                        onCheckedChange={() => toggleSetting("showPaymentGridInSalesOrder")}
-                                    />
-                                </td>
-                            </tr>
-                            <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Additional Fields in Sales Invoice</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.ShowAdditionalFieldsInSalesInvoice}
-                                        onCheckedChange={() => toggleSetting("ShowAdditionalFieldsInSalesInvoice")}
-                                    />
-                                </td>
-                            </tr>
-
-                            <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Purchase Rate</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.showPurchaserate}
-                                        onCheckedChange={() => toggleSetting("showPurchaserate")}
-                                    />
-                                </td>
-                            </tr>
-                            <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Grid Fixed Height</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.gridFixedHeight}
-                                        onCheckedChange={() => toggleSetting("gridFixedHeight")}
-                                    />
-                                </td>
-                            </tr>
-
-                            <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show PartNo</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.ShowPartNo}
-                                        onCheckedChange={() => toggleSetting("ShowPartNo")}
-                                    />
-                                </td>
-                            </tr>
-
-                            <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
                                 <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Sales Retention</td>
                                 <td className="px-4 py-3">
                                     <Checkbox
@@ -536,7 +708,7 @@ const SalesSettings = () => {
                                                 ledgerData.map((ledger) => (
                                                     <SelectItem
                                                         key={ledger.ledgerId}
-                                                        value={Number(ledger.ledgerId)} // ✅ Convert to string
+                                                        value={Number(ledger.ledgerId)}
                                                         className="text-gray-900 dark:text-gray-100 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                                                     >
                                                         {ledger.ledgerName}
@@ -552,42 +724,24 @@ const SalesSettings = () => {
                                 </td>
                             </tr>
 
-                            <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Bill Profit</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.showBillProfit}
-                                        onCheckedChange={() => toggleSetting("showBillProfit")}
-                                    />
-                                </td>
-                            </tr>
-
-                            <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Bill Discount Amount</td>
-                                <td className="px-4 py-3">
-                                    <Checkbox
-                                        className="border-gray-500 dark:border-gray-600 
-                                                 data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.showBillDiscountAmount}
-                                        onCheckedChange={() => toggleSetting("showBillDiscountAmount")}
-                                    />
-                                </td>
-                            </tr>
+                            {/* ============================================================
+                                BEHAVIOR SETTINGS
+                            ============================================================ */}
+                            <SectionHeading title="Behavior Settings" />
 
                             <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Bill Discount %</td>
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Ask for Confirmation When Adding Same Product</td>
                                 <td className="px-4 py-3">
                                     <Checkbox
                                         className="border-gray-500 dark:border-gray-600 
                                                  data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                        checked={settings.showBillDiscountPerc}
-                                        onCheckedChange={() => toggleSetting("showBillDiscountPerc")}
+                                        checked={settings.askConfirmationWithSameProduct}
+                                        onCheckedChange={() => toggleSetting("askConfirmationWithSameProduct")}
                                     />
                                 </td>
                             </tr>
-                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                         
+                               <tr className="border-b border-gray-200 dark:border-gray-700">
                                 <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Godown</td>
                                 <td className="px-4 py-3">
                                     <Checkbox
@@ -598,8 +752,8 @@ const SalesSettings = () => {
                                     />
                                 </td>
                             </tr>
-
-                            <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
+                         
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
                                 <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Close After Save</td>
                                 <td className="px-4 py-3">
                                     <Checkbox
@@ -610,6 +764,7 @@ const SalesSettings = () => {
                                     />
                                 </td>
                             </tr>
+
                         </tbody>
                     </table>
                 </div>
@@ -623,7 +778,7 @@ const SalesSettings = () => {
                                  hover:bg-gray-100 dark:hover:bg-[#242424]">
                     Back
                 </Button>
-                <Button className="main-bg text-white" onClick={handleSave} disabled={saving}>
+                <Button className="main-bg text-white" onClick={handleSaveClick} disabled={saving}>
                     {saving ? "Saving..." : "Save"}
                 </Button>
             </div>

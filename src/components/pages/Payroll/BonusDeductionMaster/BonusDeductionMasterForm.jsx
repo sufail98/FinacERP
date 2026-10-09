@@ -142,14 +142,32 @@ const BonusDeductionMasterForm = () => {
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
-  const handleDetailChange = (index, field, value) => {
-    const updated = [...details];
-    updated[index][field] = value;
-    setDetails(updated);
+ const handleDetailChange = (index, field, value) => {
+   if (field === "bonus") {
+    // Allow empty value while typing
+    if (value !== "" && !/^\d*\.?\d{0,2}$/.test(value)) {
+      return;
+    }
+  }
+  setDetails((prev) => {
+    const updated = [...prev];
+    updated[index] = { ...updated[index], [field]: value };
+    return updated;
+  });
 
-    const errKey = `detail_${index}_${field}`;
-    if (errors[errKey]) setErrors((prev) => ({ ...prev, [errKey]: "" }));
-  };
+  if (field === "employeeId") {
+    const isDuplicate = details.some(
+      (d, i) => i !== index && d.employeeId === value
+    );
+
+    setErrors((prev) => ({
+      ...prev,
+      [`detail_${index}_employeeId`]: isDuplicate
+        ? "This employee already has a bonus/deduction row"
+        : undefined,
+    }));
+  }
+};
 
   const addDetailRow = () => {
     setDetails([
@@ -411,7 +429,7 @@ const BonusDeductionMasterForm = () => {
               <div className="text-red-500 text-xs font-semibold">{errors.details}</div>
             )}
 
-            <div className="overflow-x-auto">
+            <div className="">
               <table className="w-full text-left border-collapse border border-gray-100 dark:border-gray-800">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-[#252525] border-b border-gray-150 dark:border-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -439,7 +457,13 @@ const BonusDeductionMasterForm = () => {
 
                         <td className="px-3 py-2 min-w-[180px]">
                           <SearchableDropdown
-                            options={employees}
+                            options={employees.filter(
+                              (emp) =>
+        emp.value === detail.employeeId || // keep the current row's own selection visible
+        !details.some(
+          (d, i) => i !== index && d.employeeId === emp.value
+        )
+                            )}
                             value={detail.employeeId}
                             onChange={(val) => handleDetailChange(index, "employeeId", val)}
                             error={employeeError}
@@ -460,6 +484,11 @@ const BonusDeductionMasterForm = () => {
                               onChange={(e) =>
                                 handleDetailChange(index, "bonus", e.target.value)
                               }
+                                 onKeyDown={(e) => {
+                                if (e.key === "-" || e.key === "e" || e.key === "E") {
+                                  e.preventDefault();
+                                }
+                              }}
                               onBlur={(e) => {
                                 const val = Number(e.target.value);
                                 handleDetailChange(index, "bonus", isNaN(val) ? 0 : val);
@@ -491,6 +520,9 @@ const BonusDeductionMasterForm = () => {
                               className="w-full max-w-[130px] bg-transparent border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-right font-mono outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                               value={detail.deduction === 0 ? "" : detail.deduction}
                               placeholder="0.00"
+                               onKeyDown={(e) => {
+                              if(e.key === "-" || e.key === "+") e.preventDefault()
+                            }}
                               onChange={(e) =>
                                 handleDetailChange(index, "deduction", e.target.value)
                               }
@@ -512,6 +544,7 @@ const BonusDeductionMasterForm = () => {
                             onChange={(e) =>
                               handleDetailChange(index, "deductionNarration", e.target.value)
                             }
+                           
                           />
                         </td>
 

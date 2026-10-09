@@ -93,6 +93,13 @@ const BarcodeTable = ({
         return row.unit || row.conversion || row.barcode;
     };
 
+    const sanitizeConversionInput = (value) => {
+        if (value === null || value === undefined) return '';
+        if (typeof value !== 'string') return String(value);
+
+        return value.replace(/[^\d]/g, '');
+    };
+
     const shouldAddNewRow = (updatedRows) => {
         const lastRow = updatedRows[updatedRows.length - 1];
         return hasRowData(lastRow);
@@ -103,6 +110,10 @@ const BarcodeTable = ({
 
         if (field === "barcode") {
             newValue = value.replace(/[\\/:*?"<>|]/g, "");
+        }
+
+        if (field === "conversion") {
+            newValue = sanitizeConversionInput(value);
         }
 
         let updatedRows = barcodeRows.map((row) => {
@@ -371,9 +382,8 @@ const BarcodeTable = ({
                                 </td>
                                 <td className="px-2 py-1 border-r border-gray-300 dark:border-gray-600 relative">
                                     <input
-                                        type="number"
-                                        step="any"
-                                        //   inputMode="decimal"
+                                        type="text"
+                                        inputMode="numeric"
                                         onFocus={(e) => e.target.select()}
                                         value={row.conversion}
                                         onChange={(e) => handleBarcodeChange(row.id, 'conversion', e.target.value)}

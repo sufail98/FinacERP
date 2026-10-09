@@ -1,3 +1,5 @@
+
+
 import { useEffect, useState, useRef } from 'react';
 import { EllipsisVertical, Plus, PlusIcon, RefreshCcw, Trash2 } from 'lucide-react';
 import axiosInstance from '@/lib/axiosConfig';
@@ -10,101 +12,72 @@ import PropTypes from 'prop-types';
 import ProductFormModal from '../../Master/multiMasterForms/Product/ProductFormModal';
 import { refreshProductsByType } from '@/redux/slice/productSlice';
 import EditProuctDetailsModal from '../SalesInvoice/EditProuctDetailsModal';
-
 const safeParsePrice = (val) => {
     if (val === null || val === undefined || val === '') return 0;
     if (typeof val === 'string' && val.trim().toLowerCase() === 'nan') return 0;
     const parsed = parseFloat(val);
     return isNaN(parsed) ? 0 : parsed;
 };
-
 const safeDisplayValue = (value, decimalPart) => {
     const parsed = safeParsePrice(value);
     return parsed.toFixed(decimalPart || 2);
 };
+const safeDisplayValueCustom = (value, decimalPart) => {
+    const parsed = customRoundDecimal(value, decimalPart);
+    return parsed.toFixed(decimalPart);
+};
+// Add this utility function at the top of your file
+const customRoundDecimal = (value, decimalPart) => {
+    if (value === null || value === undefined || value === '') return 0;
+    const parsed = parseFloat(value);
+    if (isNaN(parsed)) return 0;
 
-const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, godowns, otherChargeLedgers }) => {
+    const multiplier = Math.pow(10, decimalPart);
+    const wholePart = Math.floor(parsed);
+    const decimalValue = parsed - wholePart;
+    const roundedDecimal = Math.round(decimalValue * multiplier) / multiplier;
+    return wholePart + roundedDecimal;
+};
+const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, otherChargeLedgers }) => {
+
     const { t } = useTranslation();
     const [taxData, setTaxData] = useState([]);
     const [editProductModalOpen, setEditProductModalOpen] = useState(false);
     const [selectedProductCode, setSelectedProductCode] = useState(null);
-    const { selectedBranchId, } = useAuth();
-    const { generalSettings, saleSettings, inventorySettings } = useSelector((state) => state.settings);
-    const [rowErrors, setRowErrors] = useState({});
-    const shoBottomDeailsOnRow = saleSettings.showProductDetails || false
+    const { selectedBranchId } = useAuth();
+    const { generalSettings, saleSettings } = useSelector((state) => state.settings);
+    const [inputValues, setInputValues] = useState({});
+    const dispatch = useDispatch()
+    const [isTableFocused, setIsTableFocused] = useState(false);
+    const [showPurchaseRate, setShowPurchaseRate] = useState({});
+    const shoBottomDeailsOnRow = saleSettings?.showProductDetails || false;
     const askConfirmationWithSameProduct = saleSettings?.askConfirmationWithSameProduct || false;
+    const ledgerPricingAlert = saleSettings?.ledgerPricingAlert || 'cashCustomer';
     const [suggestions, setSuggestions] = useState({});
     const [loadingProducts, setLoadingProducts] = useState({});
     const [activeSuggestionRow, setActiveSuggestionRow] = useState(null);
     const suggestionRef = useRef(null);
     const inputRefs = useRef({});
     const [isInitialized] = useState(false);
-    const { salesProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products)
-
+    const { salesProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products);
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState({});
     const [selectingProduct, setSelectingProduct] = useState({});
-    const [productModalOpen, setProductModalOpen] = useState(false);
     const [scrollPosition, setScrollPosition] = useState(0);
-    const [inputValues, setInputValues] = useState({});
+    const [productModalOpen, setProductModalOpen] = useState(false);
+    const [focusedRowId, setFocusedRowId] = useState(null);
+    const [rowErrors, setRowErrors] = useState({});
     const [isUpdatingFromDuplicate, setIsUpdatingFromDuplicate] = useState(false);
-    const dispatch = useDispatch()
     const [pendingFocusRowId, setPendingFocusRowId] = useState(null);
     const [pendingFocusField, setPendingFocusField] = useState('qty');
-
-    const [focusedRowId, setFocusedRowId] = useState(null);
-    const [isTableFocused, setIsTableFocused] = useState(false);
-    const handleInputFocus = (rowId) => {
-        setFocusedRowId(rowId);
-        setIsTableFocused(true);
-    };
-
-    const handleInputBlur = () => {
-        setTimeout(() => {
-            const activeElement = document.activeElement;
-            if (!activeElement?.closest('table')) {
-                setIsTableFocused(false);
-                setFocusedRowId(null);
-            }
-        }, 100);
-    };
-
-    const getCurrentProductCode = () => {
-        if (focusedRowId && isTableFocused) {
-            const currentRow = rows.find(row => row.id === focusedRowId);
-            return currentRow?.productCode || null;
-        }
-        return null;
-    };
-
-    // 🔧 FIX: Track first render to prevent pricingLevel useEffect from overwriting saved rates
+    // 🔧 FIX 2: Track first render to prevent pricingLevel useEffect from overwriting saved rates
     const isFirstRender = useRef(true);
+    const isTaxTypeFirstRender = useRef(true);
+    const [productModalRowId, setProductModalRowId] = useState(null);
+    const [selectedRowIdForEdit, setSelectedRowIdForEdit] = useState(null);
 
-    // Auto-scroll when suggestion dropdown opens/closes
-    useEffect(() => {
-        if (activeSuggestionRow) {
-            setScrollPosition(window.scrollY);
-            setTimeout(() => {
-                const activeRow = document.querySelector(`[data-suggestion-row="${activeSuggestionRow}"]`);
-                if (activeRow) {
-                    const rect = activeRow.getBoundingClientRect();
-                    const scrollOffset = window.scrollY + rect.top - 100;
-                    window.scrollTo({
-                        top: scrollOffset,
-                        behavior: 'smooth'
-                    });
-                }
-            }, 100);
-        } else if (scrollPosition > 0) {
-            window.scrollTo({
-                top: scrollPosition,
-                behavior: 'smooth'
-            });
-            setScrollPosition(0);
-        }
-    }, [activeSuggestionRow]);
-
+    // Helper function to calculate descAmt properly during edit mode initialization
     const calculateInitialDescAmt = (item) => {
-        // 🔧 FIX: Check the correct API field name "discountAmount" FIRST (matching Sales Quotation)
+        // 🔧 FIX 1: Check the correct API field name "discountAmount" FIRST
         if (parseFloat(item.discountAmount)) {
             return parseFloat(item.discountAmount);
         }
@@ -140,34 +113,34 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 productName: item.productName || '',
                 productNameArb: item.productNameArb || '',
                 productCode: item.productCode || '',
-                purchaseRate: parseFloat(item.PurchaseRate) || 0,
-                qty: parseFloat(item.qty) || 1,
+                deliveryNoteDetails1Id: item.deliveryNoteDetails1Id || '',
                 orderDetails1Id: item.orderDetails1Id || '',
                 quotationDetailsId: item.quotationDetailsId || '',
                 proformaDetails1Id: item.proformaDetails1Id || '',
-                freeQty: parseFloat(item.freeQty) || 0,
                 ConversionFactor: item.ConversionFactor || 0,
-                unitName: item.unitName || item.productDetails?.UnitName || '',
-                unit: item.unitId || 1,
+                billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
+                purchaseRate: parseFloat(item.PurchaseRate) || 0,
+                qty: parseFloat(item.qty) || 1,
+                freeQty: parseFloat(item.freeQty) || 0,
+                unit: item.unitId || 2,
                 salesRate: safeParsePrice(item.inclusiveRate),
                 salesRateWithoutTax: safeParsePrice(item.rate),
                 lineDiscountWithTax: item.lineDiscountWithTax || null,
                 taxRate: parseFloat(item.taxRate) || 0,
                 desc: parseFloat(item.discountPercentage) || 0,
-                descAmt: calculateInitialDescAmt(item),
-                grossAmount: parseFloat(item.grossAmount) || 0,
-                netValue: parseFloat(item.netAmount) || 0,
+                descAmt: safeParsePrice(item.descAmt) || 0,
+                amount: parseFloat(item.amount) || 0,          // use saved value
+                netValue: parseFloat(item.netAmount) || 0,     // use saved value  
+                grossAmount: parseFloat(item.grossAmount) || 0, // use saved value
+                taxAmt: parseFloat(item.taxAmount) || 0,
                 tax: parseFloat(item.taxId) || 0,
                 taxId: item.taxId || null,
-                taxAmt: parseFloat(item.taxAmount) || 0,
-                amount: parseFloat(item.amount) || 0,
+                salesTaxes: item.salesTaxes || [],
                 taxType: item.taxType || 'Excluded',
                 salesManId: item.salesManId || formData.employeeId || null,
-                GodownId: item.GodownId || formData.GodownId || 1,
-                Remark: item.Remark || '',
+                GodownId: item.GodownId || formData.GodownId || null,
                 otherchargeonproduct: parseFloat(item.otherchargeonproduct) || 0,
-
-                billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
+                Remark: item.Remark || '',
                 productDetails: item.productDetails || {
                     productCode: item.productCode || '',
                     barcode: item.barcode || '',
@@ -176,7 +149,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     mrp: '',
                     purchase: item.PurchaseRate || '',
                     productDescription: item.productDescription || '',
-                    UnitName: item.unitName || ''
+                    UnitName: ''
                 },
                 availableUnits: item.availableUnits || []
             }));
@@ -185,15 +158,19 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 id: index + 1,
                 sn: index + 1,
                 barcodeInput: '',
+                productName: '',
+                productNameArb: '',
+                deliveryNoteDetails1Id: '',
                 orderDetails1Id: '',
                 quotationDetailsId: '',
                 proformaDetails1Id: '',
-                billDiscOnProduct: 0,
-                productName: '',
-                productNameArb: '',
                 productCode: '',
+                salesRateWithoutTax: 0,
+                billDiscOnProduct: 0,
                 ConversionFactor: 0,
                 purchaseRate: 0,
+                lineDiscountWithTax: 0,
+                salesTaxes: [],
                 qty: 1,
                 freeQty: 0,
                 taxRate: 0,
@@ -201,18 +178,17 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 salesRate: 0,
                 desc: 0,
                 descAmt: 0,
-                grossAmount: 0,
+                grossAmount: 0,  // ← NEW FIELD
                 netValue: 0,
                 tax: 0,
-                Remark: '',
                 taxId: null,
                 taxAmt: 0,
                 amount: 0,
                 taxType: 'Excluded',
                 salesManId: formData.employeeId || null,
-                GodownId: formData.GodownId || 1,
-                lineDiscountWithTax: 0,
-                salesRateWithoutTax: 0,
+                GodownId: formData.GodownId || null,
+                otherchargeonproduct: 0,
+                Remark: '',
                 productDetails: {
                     productCode: '',
                     barcode: '',
@@ -226,15 +202,41 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
         }
     });
 
+
+    // Auto-scroll when suggestion dropdown opens/closes
     useEffect(() => {
-        fetchTaxData()
+        if (activeSuggestionRow) {
+            setScrollPosition(window.scrollY);
+            setTimeout(() => {
+                const activeRow = document.querySelector(`[data-suggestion-row="${activeSuggestionRow}"]`);
+                if (activeRow) {
+                    const rect = activeRow.getBoundingClientRect();
+                    const scrollOffset = window.scrollY + rect.top - 100;
+                    window.scrollTo({
+                        top: scrollOffset,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 100);
+        } else if (scrollPosition > 0) {
+            window.scrollTo({
+                top: scrollPosition,
+                behavior: 'smooth'
+            });
+            setScrollPosition(0);
+        }
+    }, [activeSuggestionRow]);
+
+    useEffect(() => {
+        fetchTaxData();
     }, []);
 
-    // AFTER
+    // Listen for bill discount changes from footer
+    // REPLACE existing billDiscount useEffect
     useEffect(() => {
         if (formData.deliveryDetails && formData.deliveryDetails.length > 0) {
             let hasChanges = false;
-            const updatedRows = rows.map((row) => {
+            const updatedRows = rows.map((row, index) => {
                 const detail = formData.deliveryDetails.find(
                     d => d.productCode === row.productCode && d.SlNo === row.sn
                 );
@@ -264,73 +266,30 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
     }, [formData.deliveryDetails]);
 
     useEffect(() => {
-        setRows(prevRows => prevRows.map(row => {
-            if (!row.productCode) return row;
-
-            const taxApplicableNow = generalSettings?.ActivateTax && formData.taxType === 'Applicable to product';
-            const taxRate = safeParsePrice(row.taxRate);
-            const taxMultiplier = 1 + (taxRate / 100);
-
-            let newSalesRate = safeParsePrice(row.salesRate);
-            let newSalesRateWithoutTax = safeParsePrice(row.salesRateWithoutTax);
-
-            if (!taxApplicableNow) {
-                if (generalSettings?.taxincluded === true) {
-                    // Price was inclusive with tax — switching to NA
-                    // Keep the inclusive price as-is for both; total stays the same
-                    newSalesRate = safeParsePrice(row.salesRate);
-                    newSalesRateWithoutTax = safeParsePrice(row.salesRate);
-                } else {
-                    // Price was ex-tax — switching to NA
-                    // Use the ex-tax rate for both; no tax added
-                    newSalesRate = safeParsePrice(row.salesRateWithoutTax);
-                    newSalesRateWithoutTax = safeParsePrice(row.salesRateWithoutTax);
-                }
-            } else {
-                // Switching back TO applicable
-                if (generalSettings?.taxincluded === true) {
-                    newSalesRate = safeParsePrice(row.salesRate);
-                    newSalesRateWithoutTax = taxMultiplier !== 0
-                        ? newSalesRate / taxMultiplier
-                        : newSalesRate;
-                } else {
-                    newSalesRateWithoutTax = safeParsePrice(row.salesRateWithoutTax);
-                    newSalesRate = newSalesRateWithoutTax * taxMultiplier;
-                }
-            }
-
-            return calculateRow({
-                ...row,
-                salesRate: newSalesRate,
-                salesRateWithoutTax: newSalesRateWithoutTax,
-            });
-        }));
-    }, [formData.taxType]);
-    useEffect(() => {
         if (propRows && propRows.length > 0 && isInitialized) {
             const mappedRows = propRows.map((item, index) => ({
                 id: index + 1,
                 sn: index + 1,
-                barcodeInput: item.barcode || '',
                 productName: item.productName || '',
                 productNameArb: item.productNameArb || '',
                 productCode: item.productCode || '',
-                purchaseRate: parseFloat(item.PurchaseRate) || 0,
+                deliveryNoteDetails1Id: item.deliveryNoteDetails1Id,
+                orderDetails1Id: item.orderDetails1Id,
+                quotationDetailsId: item.quotationDetailsId,
+                proformaDetails1Id: item.proformaDetails1Id,
                 ConversionFactor: item.ConversionFactor || 0,
+                purchaseRate: parseFloat(item.PurchaseRate) || 0,
+
                 qty: parseFloat(item.qty) || 1,
                 freeQty: parseFloat(item.freeQty) || 0,
-                orderDetails1Id: item.orderDetails1Id || '',
-                quotationDetailsId: item.quotationDetailsId || '',
-                proformaDetails1Id: item.proformaDetails1Id || '',
                 unit: item.unitId || 2,
+                lineDiscountWithTax: item?.lineDiscountWithTax || null,
                 salesRate: safeParsePrice(item.inclusiveRate),
                 salesRateWithoutTax: safeParsePrice(item.rate),
-                lineDiscountWithTax: item.lineDiscountWithTax || null,
                 desc: parseFloat(item.discountPercentage) || 0,
                 descAmt: calculateInitialDescAmt(item),
-                grossAmount: parseFloat(item.grossAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,  // ← NEW FIELD
                 netValue: parseFloat(item.netAmount) || 0,
-                Remark: item.Remark || '',
                 tax: parseFloat(item.taxAmount) || 0,
                 taxRate: parseFloat(item.taxRate) || 0,
                 taxId: item.taxId || null,
@@ -338,8 +297,8 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 amount: parseFloat(item.amount) || 0,
                 taxType: item.taxType || 'Excluded',
                 salesManId: item.salesManId || formData.employeeId || null,
-                GodownId: item.GodownId || null,
-
+                GodownId: item.GodownId || formData.GodownId || null,
+                barcodeInput: item.barcode || '',
                 productDetails: rows[index]?.productDetails || {
                     productCode: item.productCode || '',
                     barcode: item.barcode || '',
@@ -355,12 +314,12 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
         }
     }, [propRows, editMode]);
 
-    // Update initial focus useEffect
+    const hasDoneInitialFocus = useRef(false);
 
-    // Update initial focus useEffect
     useEffect(() => {
-        if (!editMode) {
+        if (!editMode && !hasDoneInitialFocus.current) {
             if (!productsLoading && allProducts?.length > 0) {
+                hasDoneInitialFocus.current = true; // mark done, never refocus row 1 again
                 const timer = setTimeout(() => {
                     const focusField = saleSettings?.focusAfterSalesRate === 'barcode' ? 'barcode' : 'productName';
                     focusInput(1, focusField);
@@ -369,27 +328,44 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             }
         }
     }, [productsLoading, allProducts]);
+
+    const wasLoadingRef = useRef(false);
+
+    useEffect(() => {
+        if (productsLoading) {
+            wasLoadingRef.current = true;
+        }
+    }, [productsLoading]);
+
+    useEffect(() => {
+        if (pendingFocusRowId !== null && !productsLoading && wasLoadingRef.current) {
+            const id = pendingFocusRowId;
+            const field = pendingFocusField;
+            setPendingFocusRowId(null);
+            setPendingFocusField('qty');
+            wasLoadingRef.current = false;
+            requestAnimationFrame(() => focusInput(id, field));
+        }
+    }, [pendingFocusRowId, productsLoading]);
+
     const getEditableColumns = () => {
         const columns = ['barcode', 'productName', 'Remark', 'qty'];
-
-        if (saleSettings.showFeeQtyColumn) {
+        if (saleSettings?.showFeeQtyColumn) {
             columns.push('freeQty');
         }
-
-        columns.push('unit', 'salesRate');
-
+        columns.push('unit', 'beforeTax', 'salesRate');
         if (saleSettings?.showLineDiscount) columns.push('desc', 'descAmt', 'lineDiscWithTax');
-
-        if (generalSettings?.ActivateTax) {
+        if (generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') {
             columns.push('tax');
         }
-
-        if (inventorySettings.maintainGodown) {
-            columns.push('GodownId');
-        }
-
+        columns.push('amount');
         return columns;
     };
+    const getCurrentProductCode = () => {
+        if (focusedRowId && isTableFocused) { const currentRow = rows.find(row => row.id === focusedRowId); return currentRow?.productCode || null; }
+        return null;
+    };
+
 
     const validateRowSequence = () => {
         const errors = {};
@@ -397,19 +373,15 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
 
         rows.forEach((row, index) => {
             const isRowFilled = row.productCode && row.productCode.trim() !== '';
-
             const hasAnyData =
                 (row.productName && row.productName.trim() !== '') ||
                 (row.barcodeInput && row.barcodeInput.trim() !== '') ||
-                (row.Remark && row.Remark.trim() !== '') ||
                 row.qty > 0 ||
                 row.salesRate > 0;
 
             if (isRowFilled) {
                 hasFilledRow = true;
-
                 const missingFields = [];
-
                 if (!row.productName || row.productName.trim() === '') {
                     missingFields.push('Product Name');
                 }
@@ -422,7 +394,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 if (!row.unit) {
                     missingFields.push('Unit');
                 }
-
                 if (missingFields.length > 0) {
                     errors[row.id] = {
                         type: 'incomplete',
@@ -434,7 +405,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 const hasFilledRowsAfter = rows.slice(index + 1).some(r =>
                     r.productCode && r.productCode.trim() !== '',
                 );
-
                 if (hasFilledRowsAfter) {
                     errors[row.id] = { type: 'skipped', message: 'Row skipped', fields: [] };
                 }
@@ -477,8 +447,30 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             return calculateRow(updatedRow, 'descAmt');
         }));
     };
+    useEffect(() => {
+        const handleGlobalKeyDown = (e) => {
+            if (e.key === 'F4') {
+                e.preventDefault();
+                if (focusedRowId) setShowPurchaseRate(prev => ({ ...prev, [focusedRowId]: !prev[focusedRowId] }));
+            }
 
+            if (e.ctrlKey && e.key === 'F2') {
+                e.preventDefault();
+                if (focusedRowId) {
+                    const currentRow = rows.find(r => r.id === focusedRowId);
+                    if (currentRow?.productCode) {
+                        setSelectedProductCode(currentRow.productDetails?.productCode || currentRow.productCode);
+                        setSelectedRowIdForEdit(currentRow.id);
+                        setEditProductModalOpen(true);
+                    }
+                }
+            }
+        };
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }, [focusedRowId, rows]);
     const handleKeyDown = (e, rowId, currentField) => {
+
         if (currentField === 'barcode' && e.key === 'Enter') {
             e.preventDefault();
             const row = rows.find(r => r.id === rowId);
@@ -499,7 +491,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             focusInput(rowId, 'beforeTax'); // ← changed from 'salesRate'
             return;
         }
-
         // After the existing beforeTax → salesRate chain, add:
         if (currentField === 'descAmt' && e.key === 'Enter') {
             e.preventDefault();
@@ -511,7 +502,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             focusInput(rowId, 'amount');
             return;
         }
-
         // ── NEW ──
         if (currentField === 'beforeTax' && e.key === 'Enter') {
             e.preventDefault();
@@ -523,22 +513,35 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             e.preventDefault();
             const currentRowIndex = rows.findIndex(row => row.id === rowId);
             const currentRow = rows[currentRowIndex];
-            if (!currentRow.salesRate || parseFloat(currentRow.salesRate) <= 0) {
-                Swal.fire({
-                    title: t("salesInvoice.alert.invalidSalesRatetitle") || "Invalid Sales Rate",
-                    text: t("salesInvoice.alert.invalidSalesRatetext") || "Please enter a valid sales rate greater than 0",
-                    icon: "warning",
-                    confirmButtonColor: "#3085d6",
-                    confirmButtonText: t("okBtn") || "OK",
+
+            // if (!currentRow.salesRate || parseFloat(currentRow.salesRate) <= 0) {
+            //     Swal.fire({
+            //         title: t("salesInvoice.alert.invalidSalesRatetitle") || "Invalid Sales Rate",
+            //         text: t("salesInvoice.alert.invalidSalesRatetext") || "Please enter a valid sales rate greater than 0",
+            //         icon: "warning",
+            //         confirmButtonColor: "#3085d6",
+            //         confirmButtonText: t("okBtn") || "OK",
+            //     });
+            //     return;
+            // }
+
+            // ✅ Commit salesRate inputValue before moving focus
+            const currentVal = inputValues[`${rowId}-salesRate`];
+            if (currentVal !== undefined) {
+                const committed = customRoundDecimal(currentVal, 2);
+                handleInputChange(rowId, 'salesRate', committed);
+                setInputValues(prev => {
+                    const s = { ...prev };
+                    delete s[`${rowId}-salesRate`];
+                    return s;
                 });
-                return;
             }
 
             if (currentRowIndex < rows.length - 1) {
                 const nextRowId = rows[currentRowIndex + 1].id;
-                if (saleSettings.focusAfterSalesRate === 'productName') {
+                if (saleSettings?.focusAfterSalesRate === 'productName') {
                     focusInput(nextRowId, 'productName');
-                } else if (saleSettings.focusAfterSalesRate === 'barcode') {
+                } else if (saleSettings?.focusAfterSalesRate === 'barcode') {
                     focusInput(nextRowId, 'barcode');
                 } else {
                     focusInput(nextRowId, 'productName');
@@ -552,7 +555,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             }
             return;
         }
-
         if (currentField === 'productName' && activeSuggestionRow === rowId && suggestions[rowId]?.length > 0) {
             const currentIndex = selectedSuggestionIndex[rowId] ?? -1;
             const maxIndex = suggestions[rowId].length - 1;
@@ -565,7 +567,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     scrollSuggestionIntoView(rowId, nextIndex);
                     return;
                 }
-
                 case 'ArrowUp': {
                     e.preventDefault();
                     const prevIndex = currentIndex > 0 ? currentIndex - 1 : maxIndex;
@@ -573,7 +574,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     scrollSuggestionIntoView(rowId, prevIndex);
                     return;
                 }
-
                 case 'Enter': {
                     e.preventDefault();
                     if (currentIndex >= 0 && currentIndex <= maxIndex) {
@@ -583,7 +583,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     }
                     return;
                 }
-
                 case 'Escape': {
                     e.preventDefault();
                     setActiveSuggestionRow(null);
@@ -591,12 +590,17 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     setSelectedSuggestionIndex(prev => ({ ...prev, [rowId]: -1 }));
                     return;
                 }
-
                 default:
                     break;
             }
         }
-
+        if (currentField === 'productName' && e.key === 'Enter') {
+            const row = rows.find(r => r.id === rowId);
+            if (!row?.productCode || row.productCode.trim() === '') {
+                e.preventDefault();
+                return; // do nothing — don't create a new row, don't move focus
+            }
+        }
         const editableColumns = getEditableColumns();
         const currentRowIndex = rows.findIndex(row => row.id === rowId);
         const currentFieldIndex = editableColumns.indexOf(currentField);
@@ -614,7 +618,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     targetField = editableColumns[0];
                 }
                 break;
-
             case 'ArrowLeft':
                 e.preventDefault();
                 if (currentFieldIndex > 0) {
@@ -624,21 +627,18 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     targetField = editableColumns[editableColumns.length - 1];
                 }
                 break;
-
             case 'ArrowDown':
                 e.preventDefault();
                 if (currentRowIndex < rows.length - 1) {
                     targetRowId = rows[currentRowIndex + 1].id;
                 }
                 break;
-
             case 'ArrowUp':
                 e.preventDefault();
                 if (currentRowIndex > 0) {
                     targetRowId = rows[currentRowIndex - 1].id;
                 }
                 break;
-
             case 'Enter':
                 e.preventDefault();
                 if (currentRowIndex < rows.length - 1) {
@@ -652,7 +652,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     return;
                 }
                 break;
-
             default:
                 return;
         }
@@ -670,12 +669,12 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
         }
     };
 
-
     useEffect(() => {
         setRows(prevRows =>
             prevRows.map(row => ({
                 ...row,
                 salesManId: formData.employeeId || null,
+                GodownId: formData.GodownId || null
             }))
         );
     }, [formData.employeeId, formData.GodownId]);
@@ -687,7 +686,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 setSuggestions({});
             }
         };
-
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
@@ -698,21 +696,21 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
         );
 
         const deliveryDetails = filledRows.map((row, index) => ({
-            deliveryNoteDetails1Id: "",
+            deliveryNoteDetails1Id: row.deliveryNoteDetails1Id,
+            orderDetails1Id: row.orderDetails1Id,
+            quotationDetailsId: row.quotationDetailsId,
+            proformaDetails1Id: row.proformaDetails1Id,
             SlNo: index + 1,
-            orderDetails1Id: row.orderDetails1Id || '',
-            quotationDetailsId: row.quotationDetailsId || '',
-            proformaDetails1Id: row.proformaDetails1Id || '',
             productCode: row.productCode,
-            productName: row.productName,
-            productNameArb: row.productNameArb,
+            productName: row.productName || '',
+            productNameArb: row.productNameArb || '',
             qty: row.qty || null,
-            freeQty: null,
-            rate: row.salesRateWithoutTax ? parseFloat(Number(row.salesRateWithoutTax).toFixed(4)) : null,
-            inclusiveRate: row.salesRate ? parseFloat(Number(row.salesRate).toFixed(2)) : null,
+            freeQty: row.freeQty || null,
+            rate: row.salesRateWithoutTax ? parseFloat(Number(row.salesRateWithoutTax)) : null,
+            inclusiveRate: row.salesRate ? parseFloat(Number(row.salesRate)) : null,
             lineDiscountWithTax: row.lineDiscountWithTax || null,
             unitId: row.unit || null,
-            unitName: row.productDetails?.UnitName || row.unitName || '',
+            unitName: row.productDetails?.UnitName || '',
             discountPercentage: row.desc || null,
             taxId: row.taxId || null,
             taxRate: row.taxRate || null,
@@ -731,13 +729,15 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             AddCostonProduct: null,
             otherchargeonproduct: row.otherchargeonproduct || 0,
             salesManId: formData.employeeId,
-            GodownId: row.GodownId || 1,
+            GodownId: row.GodownId || formData.GodownId || 1,
             RackId: null,
             branchId: selectedBranchId
         }));
 
         const taxableAmt = filledRows.reduce((sum, row) => sum + row.netValue, 0);
-        const totalTax = filledRows.reduce((sum, row) => sum + row.taxAmt, 0);
+        const totalTax = (generalSettings?.ActivateTax && formData.taxType === 'Applicable to product')
+            ? filledRows.reduce((sum, row) => sum + row.taxAmt, 0)
+            : 0;
         const totalAmount = filledRows.reduce((sum, row) => sum + row.amount, 0);
         const totalDiscount = filledRows.reduce((sum, row) => sum + row.descAmt, 0);
 
@@ -751,12 +751,33 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             totalDiscount: totalDiscount.toFixed(generalSettings.decimalPart)
         }));
     }, [rows, selectedBranchId]);
+    useEffect(() => {
+        const handleGlobalKeyDown = (e) => {
 
-    // 🔧 FIX: Skip on first render to preserve saved prices in edit mode (matching Sales Quotation)
+            if (e.ctrlKey && e.key === 'F2') {
+                e.preventDefault();
+                if (focusedRowId) {
+                    const currentRow = rows.find(r => r.id === focusedRowId);
+                    if (currentRow?.productCode) {
+                        setSelectedProductCode(currentRow.productDetails?.productCode || currentRow.productCode);
+                        setSelectedRowIdForEdit(currentRow.id);
+                        setEditProductModalOpen(true);
+                    }
+                }
+            }
+
+        };
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }, [focusedRowId, rows]);
+
+
+    // 🔧 FIX 2: Recalculate row prices ONLY when user CHANGES pricingLevel/branch
+    //           Skip on first render to preserve saved transaction prices
     useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false;
-            return;
+            return; // ← Skip on initial mount, preserves saved rate/amount from API
         }
 
         if (!allProducts || allProducts.length === 0) return;
@@ -793,7 +814,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 confirmButtonText: t("salesInvoice.alert.addRowAfter.confirm"),
                 cancelButtonText: t("delete.cancel"),
             });
-
             if (!result.isConfirmed) return;
         }
         const index = rows.findIndex((row) => row.id === rowId);
@@ -807,6 +827,11 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             productCode: '',
             purchaseRate: 0,
             qty: 1,
+            deliveryNoteDetails1Id: '',
+            orderDetails1Id: '',
+            quotationDetailsId: '',
+            proformaDetails1Id: '',
+            ConversionFactor: 0,
             freeQty: 0,
             unit: 2,
             salesRate: 0,
@@ -814,20 +839,13 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             desc: 0,
             descAmt: 0,
             grossAmount: 0,
-            orderDetails1Id: '',
-            quotationDetailsId: '',
-            salesRateWithoutTax: 0,
-            proformaDetails1Id: '',
             netValue: 0,
             tax: 0,
             taxId: null,
-            ConversionFactor: 0,
             taxAmt: 0,
             amount: 0,
-            Remark: '',
             taxType: 'Excluded',
-            GodownId: formData.GodownId || 1,
-            salesManId: formData.employeeId || null,
+            Remark: '',
             productDetails: {
                 barcode: '',
                 partNo: '',
@@ -859,27 +877,53 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             console.error("Error fetching tax:", err);
         }
     };
-
-
     useEffect(() => {
-        const handleGlobalKeyDown = (e) => {
+        if (isTaxTypeFirstRender.current) {
+            isTaxTypeFirstRender.current = false;
+            return;
+        }
+        setRows(prevRows => prevRows.map(row => {
+            if (!row.productCode) return row;
 
-            if (e.ctrlKey && e.key === 'F2') {
-                e.preventDefault();
-                if (focusedRowId) {
-                    const currentRow = rows.find(r => r.id === focusedRowId);
-                    if (currentRow?.productCode) {
-                        setSelectedProductCode(currentRow.productDetails?.productCode || currentRow.productCode);
-                        setEditProductModalOpen(true);
-                    }
+            const taxApplicableNow = generalSettings?.ActivateTax && formData.taxType === 'Applicable to product';
+            const taxRate = safeParsePrice(row.taxRate);
+            const taxMultiplier = 1 + (taxRate / 100);
+
+            let newSalesRate = safeParsePrice(row.salesRate);
+            let newSalesRateWithoutTax = safeParsePrice(row.salesRateWithoutTax);
+
+            if (!taxApplicableNow) {
+                if (generalSettings?.taxincluded === true) {
+                    // Price was inclusive with tax — switching to NA
+                    // Keep the inclusive price as-is for both; total stays the same
+                    newSalesRate = safeParsePrice(row.salesRate);
+                    newSalesRateWithoutTax = safeParsePrice(row.salesRate);
+                } else {
+                    // Price was ex-tax — switching to NA
+                    // Use the ex-tax rate for both; no tax added
+                    newSalesRate = safeParsePrice(row.salesRateWithoutTax);
+                    newSalesRateWithoutTax = safeParsePrice(row.salesRateWithoutTax);
+                }
+            } else {
+                // Switching back TO applicable
+                if (generalSettings?.taxincluded === true) {
+                    newSalesRate = safeParsePrice(row.salesRate);
+                    newSalesRateWithoutTax = taxMultiplier !== 0
+                        ? newSalesRate / taxMultiplier
+                        : newSalesRate;
+                } else {
+                    newSalesRateWithoutTax = safeParsePrice(row.salesRateWithoutTax);
+                    newSalesRate = newSalesRateWithoutTax * taxMultiplier;
                 }
             }
 
-        };
-        window.addEventListener('keydown', handleGlobalKeyDown);
-        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [focusedRowId, rows]);
-
+            return calculateRow({
+                ...row,
+                salesRate: newSalesRate,
+                salesRateWithoutTax: newSalesRateWithoutTax,
+            });
+        }));
+    }, [formData.taxType]);
 
     const calculateRow = (row, updatedField = null) => {
         let gross, descAmt, netValue, taxAmt = 0, amount, descPercentage, salesRateWithoutTax = 0;
@@ -899,27 +943,25 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 return calculateRow({ ...row, salesRate: beforeTaxRate });
             }
 
-            const derivedSalesRate = generalSettings?.taxincluded === true
-                ? beforeTaxRate * taxMultiplier
-                : beforeTaxRate;
+            // beforeTax is always ex-tax, so always multiply up to get inclusive rate
+            const derivedSalesRate = Math.round(beforeTaxRate * taxMultiplier * 1e10) / 1e10;
 
-            return calculateRow({ ...row, salesRate: parseFloat(derivedSalesRate) });
+            return calculateRow({ ...row, salesRate: derivedSalesRate });
         }
-        // ← FIX: use stored salesRateWithoutTax when available,
-        //         back-calculate only when user is editing salesRate directly
-        // REPLACE the rateWithoutTax block in calculateRow
 
-        const rateWithoutTax = (row.salesRateWithoutTax && safeParsePrice(row.salesRateWithoutTax) > 0 && updatedField !== 'salesRate' && updatedField !== 'beforeTax')
+        const rateWithoutTax = (safeParsePrice(row.salesRateWithoutTax) > 0
+            && updatedField !== 'salesRate'
+            && updatedField !== 'beforeTax'
+            && updatedField !== 'amount')
             ? safeParsePrice(row.salesRateWithoutTax)
             : (!taxApplicable || taxMultiplier === 0)
                 ? salesRate
-                : (salesRate * 100) / (100 + taxPercentage);
+                : parseFloat(((salesRate * 100) / (100 + taxPercentage)));
 
         salesRateWithoutTax = safeParsePrice(rateWithoutTax);
-        salesRateWithoutTax = safeParsePrice(rateWithoutTax);
+
         if (updatedField === 'amount') {
             const inputAmount = parseFloat(row.amount) || 0;
-
             if (qty <= 0) return row;
 
             const existingDescAmt = parseFloat(row.descAmt) || 0;
@@ -946,16 +988,17 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 return {
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRate: parseFloat(calculatedSalesRate.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                    salesRate: parseFloat(calculatedSalesRate),
+                    // ✅ FIX: use freshly computed rateWithoutTaxCalc, not the stale outer rateWithoutTax
+                    salesRateWithoutTax: Math.round(rateWithoutTaxCalc * 1e10) / 1e10,
                     grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
-                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2))
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
-
             } else {
                 const netValueAfterBillDisc = inputAmount / taxMultiplier;
                 const netValueBeforeBillDisc = netValueAfterBillDisc + billDiscOnProduct - otherChargeOnProduct;
@@ -968,25 +1011,28 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
 
                 netValue = netValueBeforeBillDisc;
                 gross = netValue + existingDescAmt;
-
-                netValue = netValueAfterBillDisc + billDiscOnProduct;
-                gross = netValue + existingDescAmt;
-                const calculatedSalesRate = qty > 0 ? gross / qty : 0;
-                salesRateWithoutTax = calculatedSalesRate;
                 descPercentage = gross > 0 ? (existingDescAmt / gross) * 100 : 0;
+
+                // ✅ FIX: name honestly as the ex-tax rate, derive the inclusive rate from it
+                const calculatedRateWithoutTax = qty > 0 ? gross / qty : 0;
+                const calculatedSalesRate = calculatedRateWithoutTax * taxMultiplier;
+                salesRateWithoutTax = calculatedRateWithoutTax;
 
                 return {
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRate: parseFloat(calculatedSalesRate.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                    // ✅ FIX: salesRate is now truly the inclusive rate
+                    salesRate: parseFloat(calculatedSalesRate),
+                    // ✅ FIX: use the freshly computed ex-tax rate, not the stale outer one
+                    salesRateWithoutTax: Math.round(calculatedRateWithoutTax * 1e10) / 1e10,
                     grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
                     billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
-                    otherchargeonproduct: parseFloat((parseFloat(row.otherchargeonproduct || 0)).toFixed(generalSettings?.decimalPart || 2)),
+                    otherchargeonproduct: parseFloat(otherChargeOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
             }
         }
@@ -1013,7 +1059,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             }
 
             amount = netValueAfterBillDisc + taxAmt;
-
         } else {
             if (updatedField === 'descAmt') {
                 descAmt = parseFloat(row.descAmt) || 0;
@@ -1033,7 +1078,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             }
 
             amount = netValueAfterBillDisc + taxAmt;
-            amount = netValueAfterBillDisc + taxAmt + otherChargeOnProduct;
         }
 
         return {
@@ -1044,10 +1088,33 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
             amount: parseFloat(amount.toFixed(generalSettings?.decimalPart || 2)),
             descAmt: parseFloat(descAmt.toFixed(generalSettings?.decimalPart || 2)),
-            salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+            salesRateWithoutTax: Math.round(rateWithoutTax * 1e10) / 1e10,
             billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
-            otherchargeonproduct: parseFloat((parseFloat(row.otherchargeonproduct || 0)).toFixed(generalSettings?.decimalPart || 2)),
+            otherchargeonproduct: parseFloat(otherChargeOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+            lineDiscountWithTax: taxApplicable ? parseFloat((descAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
         };
+    };
+
+
+    const validateSalesPrice = (price, row) => {
+        const action = saleSettings?.ledgerPricingAlertAction || 'block'; // default to 'block'
+
+        // If ignore action, skip validation entirely
+        if (action === 'ignore') return { isValid: true, message: '', action: 'ignore' };
+
+        if (!ledgerPricingAlert || ledgerPricingAlert === 'none') return { isValid: true, message: '', action };
+        const maxPrice = safeParsePrice(row.maximumSellingPrice);
+        const minPrice = safeParsePrice(row.lowestSellingPrice);
+        const customerName = (formData.customerName || '').toLowerCase();
+        const includesCash = customerName.includes('cash');
+        let shouldValidate = false;
+        if (ledgerPricingAlert === 'always') shouldValidate = true;
+        else if (ledgerPricingAlert === 'cashCustomer') shouldValidate = includesCash;
+        else if (ledgerPricingAlert === 'creditCustomer') shouldValidate = !includesCash;
+        if (!shouldValidate || (maxPrice === 0 && minPrice === 0)) return { isValid: true, message: '', action };
+        if (maxPrice > 0 && price > maxPrice) return { isValid: false, message: `Price cannot exceed maximum selling price: ${maxPrice.toFixed(generalSettings.decimalPart)}`, action };
+        if (minPrice > 0 && price < minPrice) return { isValid: false, message: `Price cannot be less than lowest selling price: ${minPrice.toFixed(generalSettings.decimalPart)}`, action };
+        return { isValid: true, message: '', action };
     };
 
     const scrollSuggestionIntoView = (rowId, index) => {
@@ -1183,7 +1250,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             document.activeElement?.blur();
             const result = await Swal.fire({
                 title: t("salesInvoice.alert.duplicateProduct.title") || "Product Already Selected",
-                text: t("salesInvoice.alert.duplicateProduct.text") || "This product is already in the delivery note. What would you like to do?",
+                text: t("salesInvoice.alert.duplicateProduct.text") || "This product is already in the quotation. What would you like to do?",
                 icon: "warning",
                 showCancelButton: true,
                 showDenyButton: true,
@@ -1215,14 +1282,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             setPendingFocusBarcodeRowId(null);
         }
     }, [rows, pendingFocusBarcodeRowId]);
-    useEffect(() => {
-        if (pendingFocusRowId !== null) {
-            focusInput(pendingFocusRowId, pendingFocusField);
-            setPendingFocusRowId(null);
-            setPendingFocusField('qty');
-        }
-    }, [rows, pendingFocusRowId]);
-
 
 
     const selectProduct = async (rowId, product, selectedUnitId) => {
@@ -1289,7 +1348,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             const purchaseRate = product?.purchaseRate;
             const defaultTax = product.salesTaxes?.length > 0 ? product.salesTaxes[product.salesTaxes.length - 1] : null;
             const taxRate = safeParsePrice(defaultTax?.rate);
-
+            // REPLACE in both selectProduct and selectProductByBarcode
             const taxApplicable = generalSettings?.ActivateTax && formData.taxType === 'Applicable to product';
 
             let salesRate, salesRateWithoutTax;
@@ -1303,7 +1362,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 salesRateWithoutTax = taxMultiplier !== 0 ? productPrice / taxMultiplier : productPrice;
             } else {
                 salesRateWithoutTax = productPrice;
-                salesRate = productPrice * (1 + (taxRate / 100));
+                salesRate = parseFloat((productPrice * (1 + (taxRate / 100))));
             }
 
 
@@ -1322,8 +1381,8 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                         availableUnits: product.units || [],
                         unit: selectedUnitId || product.unitId || row.unit,
                         baseunitId: product.baseunitId || null,
-                        salesRate: safeParsePrice(salesRate.toFixed(generalSettings?.decimalPart || 2)),
-                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                        salesRate: safeParsePrice(salesRate),
+                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax),
                         taxId: defaultTax?.taxId || null,
                         tax: taxRate,
                         taxRate: taxRate,
@@ -1501,21 +1560,20 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             const defaultTax = product.salesTaxes?.length > 0 ? product.salesTaxes[0] : null;
             const taxRate = safeParsePrice(defaultTax?.rate);
 
-            const taxApplicable = generalSettings?.ActivateTax && formData.taxType === 'Applicable to product';
-
+            // Handle tax included/excluded pricing
             let salesRate, salesRateWithoutTax;
 
-            if (!taxApplicable) {
-                salesRate = productPrice;
-                salesRateWithoutTax = productPrice;
-            } else if (generalSettings?.taxincluded === true) {
+            if (generalSettings?.taxincluded === true) {
+                // Product price is tax-included
                 salesRate = productPrice;
                 const taxMultiplier = 1 + (taxRate / 100);
                 salesRateWithoutTax = taxMultiplier !== 0 ? productPrice / taxMultiplier : productPrice;
             } else {
+                // Product price is tax-excluded
                 salesRateWithoutTax = productPrice;
-                salesRate = productPrice * (1 + (taxRate / 100));
+                salesRate = parseFloat((productPrice * (1 + (taxRate / 100))));
             }
+
             const updatedRows = rows.map((row) => {
                 if (row.id === rowId) {
                     const updatedRow = {
@@ -1531,8 +1589,8 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                         availableUnits: product.units || [],
                         unit: product.unitId || row.unit,
                         baseunitId: product.baseunitId || null,
-                        salesRate: safeParsePrice(salesRate.toFixed(generalSettings?.decimalPart || 2)),
-                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                        salesRate: safeParsePrice(salesRate),
+                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax),
                         taxId: defaultTax?.taxId || null,
                         tax: taxRate,
                         taxRate: taxRate,
@@ -1555,66 +1613,71 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
 
             setRows(updatedRows);
 
-            // Focus next row barcode after barcode-based product selection
             setTimeout(() => {
-                const currentRowIndex = rows.findIndex(r => r.id === rowId);
+                const focusSetting = saleSettings?.GridFocusingBarcodeToNext;
 
-                if (currentRowIndex < rows.length - 1) {
-                    // Next row already exists — focus its barcode
-                    const nextRowId = rows[currentRowIndex + 1].id;
-                    focusInput(nextRowId, 'barcode');
+                if (focusSetting === 'ProductNameOnSameRow') {
+                    focusInput(rowId, 'productName');
                 } else {
-                    // Current row is the last row — add a new row and focus its barcode
-                    const newRowId = rows.length + 1;
-                    setRows(prev => [
-                        ...prev,
-                        {
-                            id: newRowId,
-                            sn: newRowId,
-                            barcodeInput: '',
-                            productName: '',
-                            productNameArb: '',
-                            deliveryNoteDetails1Id: '',
-                            orderDetails1Id: '',
-                            quotationDetailsId: '',
-                            proformaDetails1Id: '',
-                            productCode: '',
-                            ConversionFactor: 0,
-                            purchaseRate: 0,
-                            qty: 1,
-                            freeQty: 0,
-                            unit: 2,
-                            salesRate: 0,
-                            salesRateWithoutTax: 0,
-                            desc: 0,
-                            descAmt: 0,
-                            netValue: 0,
-                            tax: 0,
-                            taxRate: 0,
-                            taxId: null,
-                            taxAmt: 0,
-                            amount: 0,
-                            taxType: 'Excluded',
-                            salesManId: formData.employeeId || null,
-                            GodownId: formData.GodownId || null,
-                            baseunitId: null,
-                            maximumSellingPrice: 0,
-                            lowestSellingPrice: 0,
-                            lineDiscountWithTax: null,
-                            salesTaxes: [],
-                            productDetails: {
-                                barcode: '',
-                                partNo: '',
-                                brand: '',
-                                mrp: '',
-                                purchase: '',
-                                description: '',
-                                productCode: ''
+                    // Default: BarcodeInNextRow
+                    const currentRowIndex = rows.findIndex(r => r.id === rowId);
+
+                    if (currentRowIndex < rows.length - 1) {
+                        const nextRowId = rows[currentRowIndex + 1].id;
+                        focusInput(nextRowId, 'barcode');
+                    } else {
+                        const newRowId = rows.length + 1;
+                        setRows(prev => [
+                            ...prev,
+                            {
+                                id: newRowId,
+                                sn: newRowId,
+                                barcodeInput: '',
+                                productName: '',
+                                productNameArb: '',
+                                deliveryNoteDetails1Id: '',
+                                orderDetails1Id: '',
+                                quotationDetailsId: '',
+                                proformaDetails1Id: '',
+                                productCode: '',
+                                ConversionFactor: 0,
+                                purchaseRate: 0,
+                                qty: 1,
+                                freeQty: 0,
+                                unit: 2,
+                                salesRate: 0,
+                                salesRateWithoutTax: 0,
+                                desc: 0,
+                                descAmt: 0,
+                                netValue: 0,
+                                tax: 0,
+                                taxRate: 0,
+                                taxId: null,
+                                taxAmt: 0,
+                                amount: 0,
+                                taxType: 'Excluded',
+                                salesManId: formData.employeeId || null,
+                                GodownId: formData.GodownId || null,
+                                baseunitId: null,
+                                maximumSellingPrice: 0,
+                                lowestSellingPrice: 0,
+                                lineDiscountWithTax: null,
+                                salesTaxes: [],
+                                billDiscOnProduct: 0,
+                                otherchargeonproduct: 0,
+                                productDetails: {
+                                    barcode: '',
+                                    partNo: '',
+                                    brand: '',
+                                    mrp: '',
+                                    purchase: '',
+                                    description: '',
+                                    productCode: ''
+                                }
                             }
-                        }
-                    ]);
-                    // Set pending focus so the useEffect picks it up after rows update
-                    setPendingFocusBarcodeRowId(newRowId);
+                        ]);
+                        setPendingFocusBarcodeRowId(newRowId);
+                    }
                 }
             }, 100);
 
@@ -1622,139 +1685,12 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
             console.error("Error fetching product by barcode/product code:", err);
         }
     };
-
-    const handleProductUpdate = (productCode, updatedDescription) => {
-        setRows(prevRows =>
-            prevRows.map(row =>
-                row.productDetails.productCode === productCode
-                    ? {
-                        ...row,
-                        productDetails: {
-                            ...row.productDetails,
-                            productDescription: updatedDescription
-                        }
-                    }
-                    : row
-            )
-        );
-    };
-
-    const handleInputChange = (id, field, value, updatedField = null) => {
-        const updatedRows = rows.map(row => {
-            if (row.id === id) {
-                if (field === 'beforeTax') {
-                    const updatedRow = {
-                        ...row,
-                        salesRateWithoutTax: safeParsePrice(value),
-                        salesRate: row.salesRate
-                    };
-                    return calculateRow(updatedRow, 'beforeTax');
-                }
-
-                if (field === 'productName') {
-                    filterProducts(value, id);
-                }
-
-                // ── ADD THIS BLOCK ──
-                if (field === 'salesRate' && row.productCode) {
-                    const priceValue = safeParsePrice(value);
-                    const validation = validateSalesPrice(priceValue, row);
-                    if (!validation.isValid && validation.action === 'block') {
-                        Swal.fire({
-                            title: t("salesInvoice.alert.invalidPrice.title") || "Invalid Price",
-                            text: validation.message,
-                            icon: "warning",
-                            confirmButtonColor: "#3085d6",
-                            confirmButtonText: t("okBtn") || "OK",
-                        });
-                        return row;
-                    }
-                }
-                // ── END ADD ──
-
-                let updatedRow = { ...row, [field]: value };
-                const resolvedUpdatedField = updatedField !== null
-                    ? updatedField
-                    : field === 'salesRate' ? 'salesRate' : null;
-                return calculateRow(updatedRow, resolvedUpdatedField);
-            }
-            return row;
-        });
-
-        setRows(updatedRows);
-
-        const isLastRow = id === rows[rows.length - 1].id;
-        const hasInput = value !== '' && value !== 0;
-        if (isLastRow && hasInput) addRow();
-    };
-
-    const addRow = () => {
-        setRows(prevRows => {
-            const newRow = {
-                id: prevRows.length + 1,
-                sn: prevRows.length + 1,
-                barcodeInput: '',
-                orderDetails1Id: '',
-                quotationDetailsId: '',
-                proformaDetails1Id: '',
-                productName: '',
-                productCode: '',
-                purchaseRate: 0,
-                qty: 1,
-                freeQty: 0,
-                unit: 2,
-                salesRate: 0,
-                desc: 0,
-                descAmt: 0,
-                grossAmount: 0,
-                netValue: 0,
-                tax: 0,
-                salesRateWithoutTax: 0,
-                taxRate: 0,
-                Remark: '',
-                taxId: null,
-                taxAmt: 0,
-                amount: 0,
-                taxType: 'Excluded',
-                GodownId: formData.GodownId || 1,
-                salesManId: formData.employeeId || null,
-                productDetails: {
-                    barcode: '',
-                    partNo: '',
-                    brand: '',
-                    mrp: '',
-                    purchase: '',
-                    description: '',
-                    productCode: '',
-                }
-            };
-            return [...prevRows, newRow];
-        });
-    };
-
-    const validateSalesPrice = (price, row) => {
-        const action = saleSettings?.ledgerPricingAlertAction || 'block';
-
-        if (action === 'ignore') return { isValid: true, message: '', action: 'ignore' };
-
-        const ledgerPricingAlert = saleSettings?.ledgerPricingAlert || 'cashCustomer';
-        if (!ledgerPricingAlert || ledgerPricingAlert === 'none') return { isValid: true, message: '', action };
-
-        const maxPrice = safeParsePrice(row.maximumSellingPrice);
-        const minPrice = safeParsePrice(row.lowestSellingPrice);
-        const customerName = (formData.customerName || '').toLowerCase();
-        const includesCash = customerName.includes('cash');
-
-        let shouldValidate = false;
-        if (ledgerPricingAlert === 'always') shouldValidate = true;
-        else if (ledgerPricingAlert === 'cashCustomer') shouldValidate = includesCash;
-        else if (ledgerPricingAlert === 'creditCustomer') shouldValidate = !includesCash;
-
-        if (!shouldValidate || (maxPrice === 0 && minPrice === 0)) return { isValid: true, message: '', action };
-        if (maxPrice > 0 && price > maxPrice) return { isValid: false, message: `Price cannot exceed maximum selling price: ${maxPrice.toFixed(generalSettings.decimalPart)}`, action };
-        if (minPrice > 0 && price < minPrice) return { isValid: false, message: `Price cannot be less than lowest selling price: ${minPrice.toFixed(generalSettings.decimalPart)}`, action };
-
-        return { isValid: true, message: '', action };
+    const handleProductUpdate = (rowId, updatedDescription) => {
+        setRows(prevRows => prevRows.map(row =>
+            row.id === rowId
+                ? { ...row, productDetails: { ...row.productDetails, productDescription: updatedDescription } }
+                : row
+        ));
     };
 
     useEffect(() => {
@@ -1780,6 +1716,103 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
         }
     }, [selectedSuggestionIndex, activeSuggestionRow]);
 
+    const handleInputChange = (id, field, value, updatedField = null) => {
+
+        const updatedRows = rows.map(row => {
+
+            if (row.id === id) {
+                // ── NEW: map beforeTax field → salesRateWithoutTax, then recalculate ──
+                if (field === 'beforeTax') {
+                    // Explicitly set salesRateWithoutTax to the typed value
+                    const updatedRow = {
+                        ...row,
+                        salesRateWithoutTax: safeParsePrice(value),
+                        // Also sync salesRate so calculateRow's cache doesn't override
+                        salesRate: row.salesRate
+                    };
+                    return calculateRow(updatedRow, 'beforeTax');
+                }
+                if (field === 'productName') {
+                    filterProducts(value, id);
+                }
+                // Validate sales price when sales rate changes
+                if (field === 'salesRate' && row.productCode) {
+                    const priceValue = safeParsePrice(value);
+                    const validation = validateSalesPrice(priceValue, row);
+
+                    // Block entry if validation fails and action is 'block'
+                    if (!validation.isValid && validation.action === 'block') {
+                        Swal.fire({
+                            title: t("salesInvoice.alert.invalidPrice.title") || "Invalid Price",
+                            text: validation.message,
+                            icon: "warning",
+                            confirmButtonColor: "#3085d6",
+                            confirmButtonText: t("okBtn") || "OK",
+                        });
+                        return row; // Don't update if validation fails
+                    }
+                }
+                let updatedRow = { ...row, [field]: value };
+                const resolvedUpdatedField = updatedField ?? (field === 'salesRate' ? 'salesRate' : null);
+                return calculateRow(updatedRow, resolvedUpdatedField);
+            }
+            return row;
+        });
+
+        setRows(updatedRows);
+
+        if (field !== 'productName' && id === rows[rows.length - 1].id && value !== '' && value !== 0 && !isUpdatingFromDuplicate) {
+            const lastRow = rows[rows.length - 1];
+            if (lastRow.productName && lastRow.productName.trim() !== '') {
+                addRow();
+            }
+        }
+    };
+
+
+
+    const addRow = () => {
+        const newRow = {
+            id: rows.length + 1,
+            sn: rows.length + 1,
+            barcodeInput: '',
+            productName: '',
+            productNameArb: '',
+            productCode: '',
+            purchaseRate: 0,
+            qty: 1,
+            freeQty: 0,
+            unit: 2,
+            salesRate: 0,
+            desc: 0,
+            descAmt: 0,
+            grossAmount: 0,
+            deliveryNoteDetails1Id: '',
+            orderDetails1Id: '',
+            quotationDetailsId: '',
+            proformaDetails1Id: '',
+            netValue: 0,
+            salesRateWithoutTax: 0,
+            tax: 0,
+            taxRate: 0,
+            taxId: null,
+            taxAmt: 0,
+            amount: 0,
+            taxType: 'Excluded',
+            Remark: '',
+            productDetails: {
+                barcode: '',
+                partNo: '',
+                brand: '',
+                mrp: '',
+                purchase: '',
+                description: '',
+                productCode: '',
+            }
+        };
+        setRows([...rows, newRow]);
+    };
+
     const deleteRow = async (id) => {
         if (generalSettings?.askConfirmationRowRemove) {
             const result = await Swal.fire({
@@ -1792,7 +1825,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 confirmButtonText: t("delete.confirm"),
                 cancelButtonText: t("delete.cancel"),
             });
-
             if (!result.isConfirmed) return;
         }
         if (rows.length > 1) {
@@ -1807,29 +1839,27 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     sn: 1,
                     barcodeInput: '',
                     productName: '',
+                    productNameArb: '',
+                    productCode: '',
+                    purchaseRate: 0,
+                    qty: 1,
+                    deliveryNoteDetails1Id: '',
                     orderDetails1Id: '',
                     quotationDetailsId: '',
                     proformaDetails1Id: '',
-                    productCode: '',
-                    purchaseRate: 0,
-                    salesRateWithoutTax: 0,
-                    qty: 1,
                     freeQty: 0,
                     unit: 2,
                     salesRate: 0,
                     desc: 0,
                     descAmt: 0,
-                    grossAmount: 0,
+                    grossAmount: 0,  // ← NEW FIELD
                     netValue: 0,
                     tax: 0,
                     taxRate: 0,
-                    Remark: '',
                     taxId: null,
                     taxAmt: 0,
                     amount: 0,
                     taxType: 'Excluded',
-                    GodownId: formData.GodownId || 1,
-                    salesManId: formData.employeeId || null,
                     productDetails: {
                         barcode: '',
                         partNo: '',
@@ -1844,21 +1874,36 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
         }
     };
 
+    const handleInputFocus = (rowId) => {
+        setFocusedRowId(rowId);
+        setIsTableFocused(true);
+    };
+
+    const handleInputBlur = () => {
+        setTimeout(() => {
+            const activeElement = document.activeElement;
+            if (!activeElement?.closest('table')) {
+                setIsTableFocused(false);
+                setFocusedRowId(null);
+            }
+        }, 100);
+    };
+
+
     const calculateTotals = () => {
         const totalDiscount = rows.reduce((sum, row) => sum + row.descAmt, 0);
         const totalNetValue = rows.reduce((sum, row) => sum + row.netValue, 0);
 
-        const totalTax = generalSettings?.ActivateTax
+        // ← CHANGE: add taxType check
+        const totalTax = (generalSettings?.ActivateTax && formData.taxType === 'Applicable to product')
             ? rows.reduce((sum, row) => sum + row.taxAmt, 0)
             : 0;
-
-        const grandTotal = totalNetValue;
 
         return {
             totalDiscount: totalDiscount.toFixed(generalSettings.decimalPart),
             totalNetValue: totalNetValue.toFixed(generalSettings.decimalPart),
             totalTax: totalTax.toFixed(generalSettings.decimalPart),
-            grandTotal: grandTotal.toFixed(generalSettings.decimalPart)
+            grandTotal: totalNetValue.toFixed(generalSettings.decimalPart)
         };
     };
 
@@ -1878,15 +1923,14 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
         prevRowCountRef.current = currentCount;
     }, [rows]);
 
-
     return (
-        <div className="w-full min-h-[400px] bg-primary dark:bg-primary"
-            onBlur={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget)) {
-                    setIsTableFocused(false);
-                    setFocusedRowId(null);
-                }
-            }}
+        <div className="w-full min-h-[400px] bg-primary dark:bg-primary" onBlur={(e) => {
+            // Check if focus moved outside this entire component
+            if (!e.currentTarget.contains(e.relatedTarget)) {
+                setIsTableFocused(false);
+                setFocusedRowId(null);
+            }
+        }}
             onFocus={() => setIsTableFocused(true)}>
 
             <div>
@@ -1894,27 +1938,27 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                     <div
                         ref={rowRef}
                         className={`
-    w-full custom-scrollbar
-    ${saleSettings?.gridFixedHeight === true
+                                    w-full custom-scrollbar
+                                    ${saleSettings?.gridFixedHeight === true
                                 ? activeSuggestionRow
-                                    ? 'overflow-visible max-h-[1150px]'
+                                    ? 'overflow-visible max-h-[5150px]'
                                     : 'max-h-[250px] overflow-auto'
                                 : ''
                             }
-  `}
+    `}
                     >
                         <table className="w-full border-collapse table-fixed">
                             <colgroup>
                                 <col className="w-[40px]" />
                                 <col className="w-[116px]" />
-                                <col className="w-[300px]" />
+                                <col className="w-[440px]" />
                                 <col className="w-[120px]" />
                                 <col className="w-[50px]" />
-                                {saleSettings.showFeeQtyColumn && <col className="w-[80px]" />}
+                                {saleSettings?.showFeeQtyColumn && <col className="w-[80px]" />}
                                 <col className="w-[100px]" />
                                 <col className="w-[80px]" />
                                 {(generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') && (
-                                    <col className="w-[70px]" />
+                                    <col className="w-[110px]" />
                                 )}
                                 {/* After the descAmt col, inside showLineDiscount block */}
                                 {saleSettings?.showLineDiscount && (
@@ -1928,17 +1972,15 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                 )}
                                 <col className="w-[100px]" />
                                 {(generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') &&
-                                    (
-                                        <><col className="w-[90px]" />
-                                            <col className="w-[50px]" /></>
-                                    )}
-                                {inventorySettings.maintainGodown && <col className="w-[120px]" />}
+                                    (<><col className="w-[90px]" /><col className="w-[50px]" /></>)}
                                 <col className="w-[100px]" />
                                 <col className="w-[80px]" />
                             </colgroup>
                             <thead>
                                 <tr className="bg-gray-400 dark:bg-black border-b-2 border-themed dark:border-themed sticky top-0 z-10">
-                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[40px]">{t("salesInvoice.form.gridSection.columns.SN")}</th>
+                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[40px]">
+                                        {t("salesInvoice.form.gridSection.columns.SN")}
+                                    </th>
                                     <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[116px]">
                                         {t("salesInvoice.form.gridSection.columns.barcode")}
                                     </th>
@@ -1950,12 +1992,20 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                             className={`absolute right-1 top-1/2 -translate-y-1/2 text-secondary dark:text-secondary cursor-pointer transition-transform duration-300 ${productsLoading ? 'animate-spin text-blue-500 dark:text-blue-400' : ''}`}
                                         />
                                     </th>
-                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[120px]">{t("deliveryNote.form.label.remark")}</th>
-                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[50px]">{t("salesInvoice.form.gridSection.columns.qty")}</th>
-                                    {saleSettings.showFeeQtyColumn && (
-                                        <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[80px]">{t("salesInvoice.form.gridSection.columns.freeQty")}</th>
+                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[120px]">
+                                        {t("deliveryNote.form.label.remark")}
+                                    </th>
+                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[50px]">
+                                        {t("salesInvoice.form.gridSection.columns.qty")}
+                                    </th>
+                                    {saleSettings?.showFeeQtyColumn && (
+                                        <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[80px]">
+                                            {t("salesInvoice.form.gridSection.columns.freeQty")}
+                                        </th>
                                     )}
-                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">{t("salesInvoice.form.gridSection.columns.unit")}</th>
+                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">
+                                        {t("salesInvoice.form.gridSection.columns.unit")}
+                                    </th>
                                     <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[80px]">
                                         {t("salesInvoice.form.gridSection.columns.beforeTax") || "Before Tax"}
                                     </th>
@@ -1970,7 +2020,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                             <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[70px]">
                                                 {t("salesInvoice.form.gridSection.columns.discAmt")}
                                             </th>
-                                            {/* ── NEW ── */}
                                             {(generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') && (
                                                 <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[75px]">
                                                     {t("salesInvoice.form.gridSection.columns.discWithTax") || "Disc w/Tax"}
@@ -1978,16 +2027,19 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                             )}
                                         </>
                                     )}
-                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">{t("salesInvoice.form.gridSection.columns.netValue")}</th>
+                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">
+                                        {t("salesInvoice.form.gridSection.columns.netValue")}
+                                    </th>
                                     {(generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') && (<>
                                         <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[90px]">{t("salesInvoice.form.gridSection.columns.tax%")}</th>
                                         <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[50px]">{t("salesInvoice.form.gridSection.columns.taxAmt")}</th>
                                     </>)}
-                                    {inventorySettings.maintainGodown && (
-                                        <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[120px]">Godown</th>
-                                    )}
-                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">{t("salesInvoice.form.gridSection.columns.amount")}</th>
-                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[80px]">{t("salesInvoice.form.gridSection.columns.action")}</th>
+                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">
+                                        {t("salesInvoice.form.gridSection.columns.amount")}
+                                    </th>
+                                    <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[80px]">
+                                        {t("salesInvoice.form.gridSection.columns.action")}
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2009,6 +2061,8 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                 ref={el => inputRefs.current[`${row.id}-barcode`] = el}
                                                 type="text"
                                                 value={row.barcodeInput || ''}
+                                                onFocus={() => handleInputFocus(row.id)}
+                                                onBlur={handleInputBlur}
                                                 onChange={(e) => {
                                                     const updatedRows = rows.map(r =>
                                                         r.id === row.id ? { ...r, barcodeInput: e.target.value } : r
@@ -2016,10 +2070,9 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                     setRows(updatedRows);
                                                 }}
                                                 onKeyDown={(e) => handleKeyDown(e, row.id, 'barcode')}
-                                                className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded"
+                                                className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded  disabled:text-gray-500 disabled:cursor-not-allowed"
                                                 placeholder={t("salesInvoice.form.gridSection.barcodePlaceholder")}
                                                 autoComplete="off"
-                                                disabled={selectingProduct[row.id]}
                                             />
                                             {selectingProduct[row.id] && (
                                                 <div className="text-center mt-1">
@@ -2032,8 +2085,8 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                 <input
                                                     ref={el => inputRefs.current[`${row.id}-productName`] = el}
                                                     type="text"
-                                                    value={row.productName}
                                                     onFocus={() => handleInputFocus(row.id)}
+                                                    value={row.productName}
                                                     onChange={(e) => handleInputChange(row.id, 'productName', e.target.value)}
                                                     onKeyDown={(e) => handleKeyDown(e, row.id, 'productName')}
                                                     className="w-full px-2 py-0.5 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded placeholder:text-muted dark:placeholder:text-muted"
@@ -2071,7 +2124,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                                             setSelectedSuggestionIndex(prev => ({ ...prev, [row.id]: -1 }));
                                                                         }}
                                                                         className={`px-1 py-1 cursor-pointer border-b border-themed dark:border-themed last:border-b-0 relative ${selectedSuggestionIndex[row.id] === idx
-                                                                            ? 'bg-blue-100 dark:bg-blue-900 border-l-4 border-l-blue-600'
+                                                                            ? 'bg-[#4e23485f] dark:bg-blue-900 border-l-4 border-l-blue-600'
                                                                             : 'hover:bg-hover dark:hover:bg-hover'
                                                                             } ${selectingProduct[row.id] ? 'opacity-50 pointer-events-none' : ''}`}
                                                                     >
@@ -2109,7 +2162,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                                         setActiveSuggestionRow(null);
                                                                         setSuggestions({});
                                                                     }}
-                                                                    className="w-full px-3 py-2.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors flex items-center justify-center gap-2"
+                                                                    className="w-full px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors flex items-center justify-center gap-2"
                                                                 >
                                                                     <Plus size={16} />
                                                                     Add New Product
@@ -2147,7 +2200,11 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                     {saleSettings.showProductDescription && (
                                                         <div className='cursor-pointer'>
                                                             <EllipsisVertical
-                                                                onClick={() => { setSelectedProductCode(row.productDetails.productCode); setEditProductModalOpen(true); }}
+                                                                onClick={() => {
+                                                                    setSelectedProductCode(row.productDetails.productCode);
+                                                                    setSelectedRowIdForEdit(row.id);
+                                                                    setEditProductModalOpen(true);
+                                                                }}
                                                                 className="text-secondary dark:text-secondary"
                                                             />
                                                         </div>
@@ -2160,10 +2217,12 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                 ref={el => inputRefs.current[`${row.id}-Remark`] = el}
                                                 type="text"
                                                 value={row.Remark || ''}
+                                                onFocus={() => handleInputFocus(row.id)}
+                                                onBlur={handleInputBlur}
                                                 onChange={(e) => handleInputChange(row.id, 'Remark', e.target.value)}
                                                 onKeyDown={(e) => handleKeyDown(e, row.id, 'Remark')}
                                                 className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded placeholder:text-muted dark:placeholder:text-muted"
-                                                placeholder="Enter remark"
+                                                placeholder={t("deliveryNote.form.label.remark")}
                                                 autoComplete="off"
                                             />
                                         </td>
@@ -2173,6 +2232,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                 type="text"
                                                 value={inputValues[`${row.id}-qty`] !== undefined ? inputValues[`${row.id}-qty`] : row.qty}
                                                 onFocus={(e) => {
+                                                    handleInputFocus(row.id);
                                                     setInputValues(prev => ({ ...prev, [`${row.id}-qty`]: row.qty }));
                                                     setTimeout(() => e.target.select(), 0);
                                                 }}
@@ -2209,16 +2269,18 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                     }
                                                     handleKeyDown(e, row.id, 'qty');
                                                 }}
-                                                className="w-full px-1 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
+                                                disabled={!row.productCode || row.productCode.trim() === ''}
+                                                className="w-full px-1 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right  disabled:text-gray-500 disabled:cursor-not-allowed"
                                             />
                                         </td>
-                                        {saleSettings.showFeeQtyColumn && (
+                                        {saleSettings?.showFeeQtyColumn && (
                                             <td className="p-0.2 border border-themed dark:border-themed">
                                                 <input
                                                     ref={el => inputRefs.current[`${row.id}-freeQty`] = el}
                                                     type="text"
                                                     value={row.freeQty}
-                                                    onFocus={(e) => e.target.select()}
+                                                    onFocus={(e) => { handleInputFocus(row.id); e.target.select(); }}
+                                                    onBlur={handleInputBlur}
                                                     onChange={(e) => {
                                                         const value = e.target.value.replace(/[^0-9.]/g, '');
                                                         const validValue = value.split('.').length > 2
@@ -2227,7 +2289,8 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                         handleInputChange(row.id, 'freeQty', parseFloat(validValue) || 0);
                                                     }}
                                                     onKeyDown={(e) => handleKeyDown(e, row.id, 'freeQty')}
-                                                    className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
+                                                    disabled={!row.productCode || row.productCode.trim() === ''}
+                                                    className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right  disabled:text-gray-500 disabled:cursor-not-allowed"
                                                 />
                                             </td>
                                         )}
@@ -2240,13 +2303,13 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
 
                                                     // Find the product entry matching BOTH productCode AND the selected unitId
                                                     const productForUnit = allProducts.find(
-                                                        p => p.productCode === row.productCode && p.unitId === selectedUnitId
+                                                        p => p.productCode === row.productCode && (p.unitId || p.unitid) === selectedUnitId
                                                     );
                                                     // Fallback to any entry with matching productCode
                                                     const product = productForUnit || allProducts.find(p => p.productCode === row.productCode);
 
                                                     if (product) {
-                                                        const selectedUnit = row.availableUnits?.find(u => u.unitId === selectedUnitId);
+                                                        const selectedUnit = row.availableUnits?.find(u => (u.unitId || u.unitid) === selectedUnitId);
 
                                                         // conversionRate comes from the matched product entry, not from selectedUnit
                                                         const conversionFactor = safeParsePrice(productForUnit?.conversionRate || product.conversionRate || 1);
@@ -2288,7 +2351,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                             productDetails: {
                                                                 ...row.productDetails,
                                                                 barcode: product.barcode || row.productDetails.barcode,
-                                                                UnitName: selectedUnit?.unitName || row.productDetails.UnitName
+                                                                UnitName: selectedUnit?.unitName || selectedUnit?.unitname || selectedUnit?.UnitName || row.productDetails.UnitName
                                                             }
                                                         };
                                                         updatedRow = calculateRow(updatedRow);
@@ -2296,11 +2359,12 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                     }
                                                 }}
                                                 onKeyDown={(e) => handleKeyDown(e, row.id, 'unit')}
-                                                className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded"
+                                                disabled={!row.productCode || row.productCode.trim() === ''}
+                                                className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded  disabled:text-gray-500 disabled:cursor-not-allowed"
                                             >
                                                 {row.availableUnits?.map((unit) => (
-                                                    <option key={unit.unitId} value={unit.unitId}>
-                                                        {unit.unitName}
+                                                    <option key={unit.unitId || unit.unitid} value={unit.unitId || unit.unitid}>
+                                                        {unit.unitName || unit.unitname || unit.UnitName}
                                                     </option>
                                                 ))}
                                             </select>
@@ -2310,14 +2374,17 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                             <input
                                                 ref={el => inputRefs.current[`${row.id}-beforeTax`] = el}
                                                 type="text"
-                                                disabled={!row.productCode || row.productCode.trim() === ''}
                                                 value={
                                                     inputValues[`${row.id}-beforeTax`] !== undefined
                                                         ? inputValues[`${row.id}-beforeTax`]
-                                                        : Number(row.salesRateWithoutTax).toFixed(4)  // ← 4 decimal places
+                                                        : row.salesRateWithoutTax  // ← instead of Number(...).toFixed(4)
                                                 }
                                                 onFocus={(e) => {
-                                                    setInputValues(prev => ({ ...prev, [`${row.id}-beforeTax`]: row.salesRateWithoutTax }));
+                                                    handleInputFocus(row.id);
+                                                    setInputValues(prev => ({
+                                                        ...prev,
+                                                        [`${row.id}-beforeTax`]: row.salesRateWithoutTax  // ← fix here too
+                                                    }));
                                                     setTimeout(() => e.target.select(), 0);
                                                 }}
                                                 onChange={(e) => {
@@ -2326,22 +2393,24 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                         ? value.slice(0, value.lastIndexOf('.'))
                                                         : value;
                                                     setInputValues(prev => ({ ...prev, [`${row.id}-beforeTax`]: validValue }));
-                                                    handleInputChange(row.id, 'beforeTax', parseFloat(validValue) || 0);
+                                                    handleInputChange(row.id, 'beforeTax', validValue);  // ← use customRoundDecimal
                                                 }}
                                                 onBlur={(e) => {
-                                                    const value = parseFloat(e.target.value) || 0;
+                                                    const value = e.target.value;  // ← use customRoundDecimal
                                                     handleInputChange(row.id, 'beforeTax', value);
                                                     setInputValues(prev => {
                                                         const s = { ...prev };
                                                         delete s[`${row.id}-beforeTax`];
                                                         return s;
                                                     });
+                                                    handleInputBlur();
                                                 }}
                                                 onKeyDown={(e) => {
                                                     if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key))
                                                         handleKeyDown(e, row.id, 'beforeTax');
                                                 }}
-                                                className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
+                                                disabled={!row.productCode || row.productCode.trim() === ''}
+                                                className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right  disabled:text-gray-500 disabled:cursor-not-allowed"
                                             />
                                         </td>
                                         {(generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') && (
@@ -2349,14 +2418,14 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                 <input
                                                     ref={el => inputRefs.current[`${row.id}-salesRate`] = el}
                                                     type="text"
-                                                    disabled={!row.productCode || row.productCode.trim() === ''}
                                                     onFocus={(e) => {
+                                                        handleInputFocus(row.id);
                                                         setInputValues(prev => ({ ...prev, [`${row.id}-salesRate`]: row.salesRate }));
                                                         setTimeout(() => e.target.select(), 0);
                                                     }}
                                                     value={inputValues[`${row.id}-salesRate`] !== undefined
                                                         ? inputValues[`${row.id}-salesRate`]
-                                                        : Number(row.salesRate).toFixed(2)}
+                                                        : Number(row.salesRate)}  // ← 2 decimal places
                                                     onKeyDown={(e) => {
                                                         if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                                                             handleKeyDown(e, row.id, 'salesRate');
@@ -2372,12 +2441,13 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                         handleInputChange(row.id, 'salesRate', numValue || 0);
                                                     }}
                                                     onBlur={(e) => {
-                                                        const value = parseFloat(e.target.value) || 0;
-
-                                                        // ── ADD THIS BLOCK ──
+                                                        const value = e.target.value;
                                                         const validation = validateSalesPrice(value, row);
+
+                                                        // Handle based on action type
                                                         if (!validation.isValid) {
                                                             if (validation.action === 'block') {
+                                                                // Block: Show alert and reset value
                                                                 Swal.fire({
                                                                     title: "Price Validation",
                                                                     text: validation.message,
@@ -2393,6 +2463,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                                 });
                                                                 return;
                                                             } else if (validation.action === 'warn') {
+                                                                // Warn: Show alert but allow entry
                                                                 Swal.fire({
                                                                     title: "Price Validation Warning",
                                                                     text: validation.message,
@@ -2400,25 +2471,28 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                                     confirmButtonColor: "#3085d6",
                                                                     confirmButtonText: "OK"
                                                                 });
+                                                                // Continue to save the value
                                                             }
+                                                            // If 'ignore', no alert shown
                                                         }
-                                                        // ── END ADD ──
 
                                                         handleInputChange(row.id, 'salesRate', value);
                                                         setInputValues(prev => {
-                                                            const newState = { ...prev };
-                                                            delete newState[`${row.id}-salesRate`];
-                                                            return newState;
+                                                            const s = { ...prev };
+                                                            delete s[`${row.id}-salesRate`];
+                                                            return s;
                                                         });
+                                                        handleInputBlur();
                                                     }}
-                                                    className={`w-full px-2 py-1 text-sm text-primary dark:text-primary rounded text-right ${rowErrors[row.id]?.fields?.includes('Sales Rate') || (row.productCode && row.salesRate <= 0)
+                                                    disabled={!row.productCode || row.productCode.trim() === ''}
+                                                    className={`w-full px-2 py-1 text-sm text-primary dark:text-primary rounded text-right disabled:text-gray-500 disabled:cursor-not-allowed ${rowErrors[row.id]?.fields?.includes('Sales Rate') || (row.productCode && safeParsePrice(row.salesRate) <= 0)
                                                         ? 'border-2 border-red-500 focus:ring-2 focus:ring-red-500'
                                                         : 'border-0 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400'
                                                         }`}
                                                 />
                                                 {saleSettings?.showLineDiscount && (
                                                     <span className="text-xs text-muted dark:text-muted text-right block">
-                                                        Gross: {Number(row.grossAmount).toFixed(generalSettings?.decimalPart || 2)}
+                                                        Gross: {Number(row.grossAmount).toFixed(generalSettings.decimalPart)}
                                                     </span>
                                                 )}
                                             </td>
@@ -2431,7 +2505,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                         ref={el => inputRefs.current[`${row.id}-desc`] = el}
                                                         type="number"
                                                         min={0} max={99}
-                                                        disabled={!row.productCode || row.productCode.trim() === ''}
                                                         value={row.desc}
                                                         onFocus={(e) => e.target.select()}
                                                         onChange={(e) => {
@@ -2445,7 +2518,8 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                             handleInputChange(row.id, "desc", num);
                                                         }}
                                                         onKeyDown={(e) => handleKeyDown(e, row.id, 'desc')}
-                                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
+                                                        disabled={!row.productCode || row.productCode.trim() === ''}
+                                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right  disabled:text-gray-500 disabled:cursor-not-allowed"
                                                     />
                                                 </td>
                                                 <td className="p-0.2 border border-themed dark:border-themed">
@@ -2453,7 +2527,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                         // onBlur={handleInputBlur}
                                                         ref={el => inputRefs.current[`${row.id}-descAmt`] = el}
                                                         type="number"
-                                                        disabled={!row.productCode || row.productCode.trim() === ''}
                                                         value={row.descAmt}
                                                         onFocus={(e) => e.target.select()}
                                                         onChange={(e) => {
@@ -2471,57 +2544,65 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                             handleInputChange(row.id, "descAmt", num, 'descAmt');
                                                         }}
                                                         onKeyDown={(e) => handleKeyDown(e, row.id, 'descAmt')}
-                                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
+                                                        disabled={!row.productCode || row.productCode.trim() === ''}
+                                                        className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right  disabled:text-gray-500 disabled:cursor-not-allowed"
                                                     />
                                                 </td>
 
-                                                {/* ── NEW: Discount with Tax cell ── */}
                                                 {(generalSettings?.ActivateTax && formData.taxType === 'Applicable to product') && (
-                                                    <td className="p-0.2 border border-themed dark:border-themed">
-                                                        <input
-                                                            ref={el => inputRefs.current[`${row.id}-lineDiscWithTax`] = el}
-                                                            type="text"
-                                                            disabled={!row.productCode || row.productCode.trim() === ''}
-                                                            value={
-                                                                inputValues[`${row.id}-lineDiscWithTax`] !== undefined
-                                                                    ? inputValues[`${row.id}-lineDiscWithTax`]
-                                                                    : (row.lineDiscountWithTax != null
-                                                                        ? safeDisplayValue(row.lineDiscountWithTax, generalSettings?.decimalPart)
-                                                                        : '0.00') // Changed from '' to '0.00'
-                                                            }
-                                                            placeholder="w/tax"
-                                                            onFocus={(e) => {
-                                                                // handleInputFocus(row.id);
-                                                                setInputValues(prev => ({
-                                                                    ...prev,
-                                                                    [`${row.id}-lineDiscWithTax`]: row.lineDiscountWithTax ?? '0' // Changed from '' to '0'
-                                                                }));
-                                                                setTimeout(() => e.target.select(), 0);
-                                                            }}
-                                                            onChange={(e) => {
-                                                                const raw = e.target.value.replace(/[^0-9.]/g, '');
-                                                                const valid = raw.split('.').length > 2
-                                                                    ? raw.slice(0, raw.lastIndexOf('.'))
-                                                                    : raw;
-                                                                setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: valid }));
-                                                                handleLineDiscWithTaxChange(row.id, valid);
-                                                            }}
-                                                            onBlur={(e) => {
-                                                                handleLineDiscWithTaxChange(row.id, safeParsePrice(e.target.value));
-                                                                setInputValues(prev => {
-                                                                    const s = { ...prev };
-                                                                    delete s[`${row.id}-lineDiscWithTax`];
-                                                                    return s;
-                                                                });
-                                                                // handleInputBlur();
-                                                            }}
-                                                            onKeyDown={(e) => {
-                                                                if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key))
-                                                                    handleKeyDown(e, row.id, 'lineDiscWithTax');
-                                                            }}
-                                                            className="w-full px-2 py-1 text-sm border-0  focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
-                                                        />
-                                                    </td>
+                                                    <>
+                                                        {/* ── NEW: Discount with Tax cell ── */}
+                                                        <td className="p-0.2 border border-themed dark:border-themed">
+                                                            <input
+                                                                ref={el => inputRefs.current[`${row.id}-lineDiscWithTax`] = el}
+                                                                type="text"
+                                                                value={
+                                                                    inputValues[`${row.id}-lineDiscWithTax`] !== undefined
+                                                                        ? inputValues[`${row.id}-lineDiscWithTax`]
+                                                                        : (row.lineDiscountWithTax != null
+                                                                            ? safeDisplayValue(row.lineDiscountWithTax, generalSettings?.decimalPart)
+                                                                            : '0.00') // Changed from '' to '0.00'
+                                                                }
+                                                                placeholder="w/tax"
+                                                                onFocus={(e) => {
+                                                                    handleInputFocus(row.id);
+                                                                    setInputValues(prev => ({
+                                                                        ...prev,
+                                                                        [`${row.id}-lineDiscWithTax`]: row.lineDiscountWithTax ?? '0' // Changed from '' to '0'
+                                                                    }));
+                                                                    setTimeout(() => e.target.select(), 0);
+                                                                }}
+                                                                onChange={(e) => {
+                                                                    const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                                                    const valid = raw.split('.').length > 2
+                                                                        ? raw.slice(0, raw.lastIndexOf('.'))
+                                                                        : raw;
+
+                                                                    const grossWithTax = safeParsePrice(row.qty) * safeParsePrice(row.salesRate);
+                                                                    let num = safeParsePrice(valid);
+                                                                    if (num > grossWithTax) num = grossWithTax;
+                                                                    const finalValue = num.toString();
+
+                                                                    setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: finalValue }));
+                                                                    handleLineDiscWithTaxChange(row.id, finalValue);
+                                                                }}
+                                                                onBlur={(e) => {
+                                                                    handleLineDiscWithTaxChange(row.id, safeParsePrice(e.target.value));
+                                                                    setInputValues(prev => {
+                                                                        const s = { ...prev };
+                                                                        delete s[`${row.id}-lineDiscWithTax`];
+                                                                        return s;
+                                                                    });
+                                                                    // handleInputBlur();
+                                                                }}
+                                                                onKeyDown={(e) => {
+                                                                    if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key))
+                                                                        handleKeyDown(e, row.id, 'lineDiscWithTax');
+                                                                }}
+                                                                disabled={!row.productCode || row.productCode.trim() === ''}
+                                                                className="w-full px-2 py-1 text-sm border-0  focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right  disabled:text-gray-500 disabled:cursor-not-allowed"
+                                                            />
+                                                        </td></>
                                                 )}
                                             </>
                                         )}
@@ -2530,6 +2611,9 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                 <span className="text-sm font-medium text-primary">
                                                     {row.netValue.toFixed(generalSettings.decimalPart)}
                                                 </span>
+                                                {showPurchaseRate[row.id] && row.purchaseRate !== undefined && row.purchaseRate !== null && (
+                                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">PRate: {safeDisplayValue(row.purchaseRate, generalSettings.decimalPart)}</span>
+                                                )}
                                             </div>
                                         </td>
 
@@ -2555,7 +2639,6 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                                 }
                                                                 return r;
                                                             });
-
                                                             setRows(updatedRows);
                                                         }}
                                                         onKeyDown={(e) => handleKeyDown(e, row.id, 'tax')}
@@ -2578,32 +2661,15 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                 </td>
                                             </>
                                         )}
-                                        {inventorySettings.maintainGodown && (
-                                            <td className="p-0.2 border border-themed dark:border-themed">
-                                                <select
-                                                    ref={el => inputRefs.current[`${row.id}-GodownId`] = el}
-                                                    value={Number(row.GodownId) || 1}
-                                                    onChange={(e) => handleInputChange(row.id, 'GodownId', parseInt(e.target.value))}
-                                                    onKeyDown={(e) => handleKeyDown(e, row.id, 'GodownId')}
-                                                    className="w-full px-2 py-1 text-sm border-0 bg-primary dark:bg-secondary text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded"
-                                                >
-                                                    {godowns?.map((godown) => (
-                                                        <option key={godown.GodownId} value={Number(godown.GodownId) || 1}>
-                                                            {godown.GodownName}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                        )}
                                         <td className="p-0.2 border border-themed">
                                             <input
                                                 ref={el => inputRefs.current[`${row.id}-amount`] = el}
                                                 type="text"
-                                                disabled={!row.productCode || row.productCode.trim() === ''}
                                                 value={inputValues[`${row.id}-amount`] !== undefined
                                                     ? inputValues[`${row.id}-amount`]
                                                     : Number(row.amount).toFixed(generalSettings?.decimalPart || 2)}
                                                 onFocus={(e) => {
+                                                    handleInputFocus(row.id);
                                                     setInputValues(prev => ({ ...prev, [`${row.id}-amount`]: row.amount }));
                                                     e.target.select();
                                                 }}
@@ -2626,7 +2692,8 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                                     });
                                                 }}
                                                 onKeyDown={(e) => handleKeyDown(e, row.id, 'amount')}
-                                                className="w-full px-2 py-1 text-sm border-0 text-red-700 dark:text-red-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right font-bold"
+                                                disabled={!row.productCode || row.productCode.trim() === ''}
+                                                className="w-full px-2 py-1 text-sm border-0 text-red-700 dark:text-red-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right font-bold  disabled:text-gray-500 disabled:cursor-not-allowed"
                                             />
                                         </td>
                                         <td className="border border-themed dark:border-themed text-center">
@@ -2688,7 +2755,7 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                                 <div className="w-px bg-gray-300 dark:bg-gray-600" />
                                 <div className="flex flex-col items-end gap-0.5">
                                     <span className="text-muted dark:text-muted font-medium">
-                                        {isLoss ? 'Loss' : 'Profit'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                        {isLoss ? 'Loss' : 'Pf value'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                                             {profit.toFixed(generalSettings?.decimalPart || 2)}
                                         </span>
                                         <span className={`text-xs ${isLoss ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`}>
@@ -2730,34 +2797,42 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
                 open={editProductModalOpen}
                 handleClose={() => {
                     setEditProductModalOpen(false);
+                    setSelectedRowIdForEdit(null);
                     if (focusedRowId) focusInput(focusedRowId, 'productName');
                 }}
                 productCode={selectedProductCode}
                 initialDescription={
-                    rows.find(r => r.productDetails?.productCode === selectedProductCode)
+                    rows.find(r => r.id === selectedRowIdForEdit)
                         ?.productDetails?.productDescription || ''
                 }
-                onSuccess={(updatedDescription) => handleProductUpdate(selectedProductCode, updatedDescription)}
+                onSuccess={(updatedDescription) => handleProductUpdate(selectedRowIdForEdit, updatedDescription)}
             />
             <DeliveryNoteFooterSection
                 totals={totals}
                 formData={formData}
                 setFormData={setFormData}
                 otherChargeLedgers={otherChargeLedgers}
-
                 getCurrentProductCode={getCurrentProductCode}
                 isTableFocused={isTableFocused}
                 onFocus={() => setIsTableFocused(true)}
             />
             <ProductFormModal
                 open={productModalOpen}
-                onClose={() => setProductModalOpen(false)}
+                onClose={() => {
+                    setProductModalOpen(false);
+                    setProductModalRowId(null); // ✅ clear on cancel too
+                }}
                 productCode={null}
                 viewMode={false}
                 modalMode={true}
                 onSuccess={() => {
-                    setProductModalOpen(false)
-                    dispatch(refreshProductsByType('sales'))
+                    setProductModalOpen(false);
+                    dispatch(refreshProductsByType('sales'));
+                    if (productModalRowId !== null) {
+                        setPendingFocusField('productName');
+                        setPendingFocusRowId(productModalRowId);
+                    }
+                    setProductModalRowId(null); // ✅ clear immediately after reading it here too
                 }}
             />
         </div>
@@ -2766,59 +2841,4 @@ const DeliveryNoteTable = ({ formData, setFormData, editMode, rows: propRows, go
 
 export default DeliveryNoteTable;
 
-DeliveryNoteTable.propTypes = {
-    formData: PropTypes.shape({
-        employeeId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        GodownId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        deliveryDetails: PropTypes.arrayOf(PropTypes.object),
-        taxableAmt: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        subTotal: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        totalTax: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        totalAmount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        totalDiscount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    }).isRequired,
-    setFormData: PropTypes.func.isRequired,
-    editMode: PropTypes.bool,
-    rows: PropTypes.arrayOf(
-        PropTypes.shape({
-            productName: PropTypes.string,
-            productCode: PropTypes.string,
-            deliveryNoteDetails1Id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            orderDetails1Id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            quotationDetailsId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            proformaDetails1Id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            PurchaseRate: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            qty: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            freeQty: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            unitId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            rate: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            discountPercentage: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            netAmount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            taxId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            taxAmount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            amount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            taxType: PropTypes.string,
-            salesManId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            GodownId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            barcode: PropTypes.string,
-            productDescription: PropTypes.string,
-            availableUnits: PropTypes.arrayOf(
-                PropTypes.shape({
-                    unitId: PropTypes.number,
-                    unitName: PropTypes.string,
-                    salesPrice: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-                    barcode: PropTypes.string,
-                })
-            ),
-        })
-    ),
-    godowns: PropTypes.array,
-    otherChargeLedgers: PropTypes.array,
-};
 
-DeliveryNoteTable.defaultProps = {
-    editMode: false,
-    rows: [],
-    godowns: [],
-    otherChargeLedgers: [],
-};

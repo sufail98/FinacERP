@@ -11,6 +11,7 @@ import Swal from 'sweetalert2';
 // ✅ Reusable Inputs
 import TextInput from "@/components/elements/theme/TextInput";
 import TextArea from "@/components/elements/theme/TextArea";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const AddDesignation = ({ open, handleClose, onSuccess, selectedId }) => {
   const { t } = useTranslation();
@@ -72,40 +73,43 @@ const AddDesignation = ({ open, handleClose, onSuccess, selectedId }) => {
     }
   }, [selectedId, open, selectedBranchId, user?.userId]);
 
-  const handleChange = (e) => {
-    const { name, value, type } = e.target;
+ const handleChange = (e) => {
+  const { name, value, type } = e.target;
 
-    let processedValue = value;
-    if (type === "number") {
-      if (value === "") {
-        processedValue = "";
-      } else {
-        const numValue = parseFloat(value);
-        if (!isNaN(numValue)) {
-          if (name === "leaveDays") {
-  processedValue = value === "" ? "" : parseInt(value);
-} else if (name === "advancePercentage") {
-  processedValue =
-    value === ""
-      ? ""
-      : parseFloat(value).toFixed(generalSettings.decimalPart);
-} else {
-  processedValue = value === "" ? "" : parseFloat(value);
-}
+  let processedValue = value;
 
+  if (type === "number") {
+    if (value === "") {
+      processedValue = "";
+    } else {
+      if (name === "advancePercentage") {
+        // Allow typing up to 100 with 2 decimal places
+        const regex = /^(100(\.0{0,2})?|(\d{0,2})(\.\d{0,2})?)$/;
+
+        if (regex.test(value)) {
+          processedValue = value;
         } else {
-          processedValue = "";
+          return; // Ignore invalid input
         }
+      } else if (name === "leaveDays") {
+        processedValue = parseInt(value) || "";
+      } else {
+        processedValue = parseFloat(value);
       }
     }
+  }
 
-    setFormData((prev) => ({
-      ...prev,
-      [name]: processedValue,
-    }));
+  if (["designationName"].includes(name)) {
+    processedValue = sanitize.alphaNumericSpace(value);
+  }
 
-    if (errorMsg) setErrorMsg(null);
-  };
+  setFormData((prev) => ({
+    ...prev,
+    [name]: processedValue,
+  }));
+
+  if (errorMsg) setErrorMsg(null);
+};
 
   const validateForm = () => {
     if (!formData.designationName.trim()) {
@@ -280,6 +284,11 @@ const AddDesignation = ({ open, handleClose, onSuccess, selectedId }) => {
             required
             value={formData.advancePercentage}
             onChange={handleChange}
+            onKeyDown = {(e) => {
+              if(["e",'E',"-","+"].includes(e.key)){
+                e.preventDefault()
+              }
+            }}
             placeholder="0.00"
             error={
               errorMsg?.includes("Advance Percentage") ? errorMsg : undefined

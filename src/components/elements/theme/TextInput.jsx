@@ -22,7 +22,8 @@ const TextInput = forwardRef(({
   onBlur,
   disabled = false,
   step,
-  labelBold
+  labelBold,
+  maxLength
 }, ref) => {
   const [animateError, setAnimateError] = useState(false);
 
@@ -58,6 +59,7 @@ const TextInput = forwardRef(({
         placeholder={placeholder}
         readOnly={readOnly}
         disabled={disabled}
+        maxLength={maxLength}
         step={step}
         onFocus={(e) => {
           if (type === "number") {

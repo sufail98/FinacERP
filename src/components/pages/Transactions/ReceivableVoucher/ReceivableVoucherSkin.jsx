@@ -10,7 +10,13 @@ import { useSelector } from 'react-redux';
 import AlertBox from '@/components/common/AlertBox';
 import { useNavigate, useParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
+import PopupPreloader from '@/components/common/PopupPreloader';
+import PrintDropdown from '@/components/common/PrintDropdown';
+import { Checkbox } from '@/components/ui/checkbox';
 import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
+import { showToast } from '@/utils/toast';
+import printReceivableVoucher, { saveReceivableVoucherAsPDF } from '@/utils/prints/receivableVoucherPrints/ReceivableVoucherPrintOne';
+import { isElectron } from '@/utils/electronPrint';
 
 const ReceivableVoucherSkin = () => {
     const { receivableVoucherId } = useParams();
@@ -26,13 +32,19 @@ const ReceivableVoucherSkin = () => {
     const [customers, setCustomers] = useState([]);
     const [voucherId, setVoucherId] = useState('');
     const [alert, setAlert] = useState(null);
-    const { userId, selectedBranchId, currentFinancialYear, currentCurrencyConversion, currentCurrency } = useAuth();
+    const { userId, selectedBranchId, selectedBranchDetails, currentFinancialYear, currentCurrencyConversion, currentCurrency } = useAuth();
     const [time, setTime] = useState("");
-    const { generalSettings, saleSettings,purchaseSettings } = useSelector((state) => state.settings);
+    const { generalSettings, saleSettings, purchaseSettings, financeSettings } = useSelector((state) => state.settings);
     const [resetTableKey, setResetTableKey] = useState(0);
     const [banks, setBanks] = useState([]);
     const [cash, setCash] = useState([]);
-    const [taxData, setTaxData] = useState([])
+    const [taxData, setTaxData] = useState([]);
+    const [currency, setCurrency] = useState([]);
+    const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
+
+
+    // ===== PRINT STATE =====
+    const [isPrinting, setIsPrinting] = useState(false);
 
 
     useEffect(() => {
@@ -56,7 +68,7 @@ const ReceivableVoucherSkin = () => {
         voucherType: "Receivable Voucher",
         yearId: currentFinancialYear?.yearId,
         date: new Date(),
-        ledgerId: '',
+        ledgerId: (financeSettings?.defaultSalesAccount) || '',
         employeeId: '',
         currencyConversionId: currentCurrencyConversion?.currencyConversionId,
         costCentreId: '',
@@ -69,14 +81,16 @@ const ReceivableVoucherSkin = () => {
         taxType: "NA",
         exchangeRate: currentCurrencyConversion?.rate,
         exchangeDate: currentCurrencyConversion?.date,
+        printAfterSave: financeSettings?.printAfterSave !== undefined ? financeSettings.printAfterSave : (saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : false),
         narration: "",
         totalTax: "",
         totalAmount: "",
-        paymentMode: "cash",
-        CashLedgerId: cash[0]?.ledgerId || "",
+        paymentMode: saleSettings?.DefaultPaymentMode,
+       
         CashRefNo: "",
         CashAmount: "",
-        BankLedgerId: banks[0]?.ledgerId || null,
+        CashLedgerId: financeSettings?.DefaultCashAccount || cash[0]?.ledgerId || null,
+        BankLedgerId: financeSettings?.DefaultBankAccount || banks[0]?.ledgerId || null,
         BankRefNo: "",
         BankAmount: 0,
         BillBalanceAmount: 0,
@@ -85,7 +99,7 @@ const ReceivableVoucherSkin = () => {
         postedDate: generalSettings?.AccountPosting ? null : new Date(),
         branchId: selectedBranchId,
         CreatedUser: userId,
-        vatLedgerId: "",
+        vatLedgerId: generalSettings?.taxLedgerId || "",
         receivableDetails: [
             {
                 SlNo: "",
@@ -101,7 +115,7 @@ const ReceivableVoucherSkin = () => {
                 chequeNo: "",
                 chequeDate: null,
                 narration: "",
-                totalAmount: null,
+                grossAmount: null,
                 branchId: selectedBranchId
             }
         ]
@@ -133,39 +147,58 @@ const ReceivableVoucherSkin = () => {
     const [payableVouchrLedgers, setPayableVoucherLedger] = useState([])
 
 
-    useEffect(() => {
-        const getSalesRequiredData = async () => {
-            setBaseDataloading(true)
-            try {
-                const res = await axiosInstance.post('all-finance-data', {
-                    voucherType: "Receivable Voucher",
-                    branchId: selectedBranchId,
-                    yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Supplier", "Customer"],
-                    ledgerId: formData.ledgerId,
-                    currencyId: currentCurrency?.currencyId
-                })
-                const data = res?.data?.data;
-                setVoucherId(data?.voucherdata?.voucherCode)
-                setCostCenters(data?.costcentre)
-                setLedgers(data?.accountLedger)
-                setEmployees(data?.employees)
-                setCostCenters(data?.costcentre)
-                setCustomers(data?.customers)
-                setPayableVoucherLedger(data?.payablevoucherledgers)
-                setBanks(data?.bank)
-                setCash(data?.cash)
-                setTaxData(data?.taxMaster)
+    const fetchFinanceData = async (silent = false) => {
+        if (!silent) setBaseDataloading(true);
+        try {
+            const res = await axiosInstance.post('all-finance-data', {
+                voucherType: "Receivable Voucher",
+                branchId: selectedBranchId,
+                yearId: currentFinancialYear.yearId,
+                ledgerTypes: ["Supplier", "Customer", "Customer&Supplier", "Other"],
+                ledgerId: formData.ledgerId,
+                currencyId: currentCurrency?.currencyId
+            });
+            const data = res?.data?.data;
+            setVoucherId(data?.voucherdata?.voucherCode);
+            setCostCenters(data?.costcentre);
+            setLedgers(data?.accountLedger);
+            setEmployees(data?.employees);
+            setCostCenters(data?.costcentre);
+            setCustomers(data?.customers);
+            setPayableVoucherLedger(data?.payablevoucherledgers);
+            setBanks(data?.bank);
+            setCash(data?.cash);
+            setTaxData(data?.taxMaster);
+            setCurrency(data?.currencywithConversion || []);
+            setFormData(prev => ({
+                ...prev,
+                CashLedgerId: financeSettings?.DefaultCashAccount || data?.cash[0]?.ledgerId || null,
+                BankLedgerId: financeSettings?.DefaultBankAccount || data?.bank[0]?.ledgerId || null,
+            }));
 
-
-            } catch (error) {
-                console.error('error fetching default data', error)
-            } finally {
-                setBaseDataloading(false)
-            }
+        } catch (error) {
+            console.error('error fetching default data', error);
+        } finally {
+            if (!silent) setBaseDataloading(false);
         }
-        getSalesRequiredData()
+    };
+
+    useEffect(() => {
+        fetchFinanceData()
     }, [])
+
+    const fetchCurrencyConvertion = async () => {
+        try {
+            const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+            setCurrencyConvertionData(response.data.data || []);
+        } catch (error) {
+            console.error('Error fetching currency conversions:', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchCurrencyConvertion();
+    }, [selectedBranchId]);
 
     const handleListNavigate = async () => {
         if (generalSettings?.askConfirmationClose) {
@@ -203,7 +236,7 @@ const ReceivableVoucherSkin = () => {
             yearId: currentFinancialYear?.yearId,
             date: new Date(),
             billTime: "",
-            ledgerId: '',
+            ledgerId: (financeSettings?.defaultSalesAccount) || '',
             employeeId: '',
             purchaseAccount: '',
             purchaseAccountName: '',
@@ -220,6 +253,7 @@ const ReceivableVoucherSkin = () => {
             deliveryDate: "",
             exchangeRate: currentCurrencyConversion?.rate,
             exchangeDate: currentCurrencyConversion?.date,
+            printAfterSave: financeSettings?.printAfterSave !== undefined ? financeSettings.printAfterSave : (saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : false),
             narration: "",
             subTotal: "",
             totalTax: "",
@@ -230,11 +264,12 @@ const ReceivableVoucherSkin = () => {
             billDiscount: "",
             roundOff: "",
             totalAmount: "",
-            paymentMode: "cash",
-            CashLedgerId: "",
+            paymentMode: saleSettings?.DefaultPaymentMode,
+           
             CashRefNo: "",
             CashAmount: 0,
-            BankLedgerId: null,
+            CashLedgerId: financeSettings?.DefaultCashAccount || cash[0]?.ledgerId || null,
+            BankLedgerId: financeSettings?.DefaultBankAccount || banks[0]?.ledgerId || null,
             BankRefNo: "",
             BankAmount: 0,
             BillBalanceAmount: 0,
@@ -243,7 +278,7 @@ const ReceivableVoucherSkin = () => {
             postedDate: generalSettings?.AccountPosting ? null : new Date(),
             branchId: selectedBranchId,
             CreatedUser: userId,
-            vatLedgerId: "",
+            vatLedgerId: generalSettings?.taxLedgerId || "",
             receivableDetails: [
                 {
                     SlNo: "",
@@ -259,7 +294,7 @@ const ReceivableVoucherSkin = () => {
                     chequeNo: "",
                     chequeDate: null,
                     narration: "",
-                    totalAmount: null,
+                    grossAmount: null,
                     branchId: selectedBranchId
                 }
             ]
@@ -273,7 +308,13 @@ const ReceivableVoucherSkin = () => {
             getPayableVoucherById()
         }
     }, [editMode])
-
+    useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            ledgerId: (financeSettings?.defaultSalesAccount) || '',
+            paymentMode: saleSettings?.DefaultPaymentMode,
+        }));
+    }, [financeSettings, saleSettings]);
     const getPayableVoucherById = async () => {
         setFetchLoading(true);
         try {
@@ -286,21 +327,21 @@ const ReceivableVoucherSkin = () => {
             setExistingVoucherNo(data.ReceivableNo);
 
             const receivableVoucherDetailsWithLedgers = (data.receivableDetails || []).map((item, index) => {
-                const amount = parseFloat(item.amount) || 0;
+                const grossAmount = parseFloat(item.grossAmount) || 0;
                 const discPerc = parseFloat(item.discountPercentage) || 0;
 
                 const taxMaster = taxMasters.find(t => t.taxId === item.taxId);
                 const taxRate = parseFloat(taxMaster?.rate) || 0;
 
-                const discAmt = (amount * discPerc) / 100;
-                const amountAfterDiscount = amount - discAmt;
+                const discAmt = (grossAmount * discPerc) / 100;
+                const amountAfterDiscount = grossAmount - discAmt;
 
                 let taxAmount = 0;
                 let netAmount = 0;
 
                 if (item.taxType === 'Included' && item.taxId && taxRate > 0) {
                     taxAmount = (amountAfterDiscount * taxRate) / 100;
-                    netAmount = amountAfterDiscount + taxAmount;
+                    netAmount = amountAfterDiscount - taxAmount; // matches table's calculateRow logic for Included
                 } else {
                     taxAmount = 0;
                     netAmount = amountAfterDiscount;
@@ -308,14 +349,17 @@ const ReceivableVoucherSkin = () => {
 
                 const finalTaxAmount = parseFloat(item.taxAmount) || taxAmount;
                 const finalNetAmount = parseFloat(item.netAmount) || netAmount;
-                const totalAmount = finalNetAmount;
+
+                const finalAmount = parseFloat(item.amount) || (
+                    item.taxType === 'Included' ? amountAfterDiscount : amountAfterDiscount + finalTaxAmount
+                );
 
                 return {
                     id: index + 1,
                     sn: index + 1,
                     ledgerId: item.ledgerId || '',
                     ledgerName: item.ledgerName || '',
-                    amount: amount,
+                    grossAmount: parseFloat(grossAmount.toFixed(generalSettings.decimalPart ?? 2)),
                     discAmt: parseFloat(discAmt.toFixed(generalSettings.decimalPart ?? 2)),
                     discPerc: discPerc,
                     netAmount: parseFloat(finalNetAmount.toFixed(generalSettings.decimalPart ?? 2)),
@@ -324,9 +368,9 @@ const ReceivableVoucherSkin = () => {
                     taxType: item.taxType || 'Excluded',
                     taxAmount: parseFloat(finalTaxAmount.toFixed(generalSettings.decimalPart ?? 2)),
                     chequeNo: item.chequeNo || '',
-                  chequeDate: parseDateFromAPI(item.chequeDate),
+                    chequeDate: parseDateFromAPI(item.chequeDate),
                     narration: item.Narration || '',
-                    totalAmount: parseFloat(totalAmount.toFixed(generalSettings.decimalPart ?? 2)),
+                    amount: parseFloat(finalAmount.toFixed(generalSettings.decimalPart ?? 2)),
                 };
             });
 
@@ -408,8 +452,8 @@ const ReceivableVoucherSkin = () => {
     const fetchCustomers = async () => {
         setLoading(prev => ({ ...prev, customers: true }));
         try {
-            // ✅ CHANGED: ledgerTypes: ["Customer"] instead of ["Supplier"]
-            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer"], branchId: selectedBranchId });
+            // ✅ CHANGED: ledgerTypes: ["Customer"] instead of ["Supplier","Customer&Supplier"]
+            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer", "Customer&Supplier"], branchId: selectedBranchId });
             setCustomers(data.data);
         } catch (err) {
             console.error("Failed to fetch customers:", err);
@@ -450,13 +494,153 @@ const ReceivableVoucherSkin = () => {
         return errors;
     };
 
+    // ===== PRINT HELPERS =====
+    const getCustomerName = useCallback((sourceFormData) => {
+        const source = sourceFormData || formData;
+        if (source.partyName) return source.partyName;
+        if (source.customerName) return source.customerName;
+        if (source.supplierName) return source.supplierName;
+        return customers?.find(c => c.ledgerId === source.ledgerId)?.ledgerName || '';
+    }, [customers, formData]);
+
+    const getBankCashName = useCallback((sourceFormData) => {
+        const source = sourceFormData || formData;
+        if (source.paymentMode === 'cash') {
+            return cash?.find(c => c.ledgerId === source.CashLedgerId)?.ledgerName || 'Cash';
+        }
+        if (source.paymentMode === 'bank') {
+            return banks?.find(b => b.ledgerId === source.BankLedgerId)?.ledgerName || 'Bank';
+        }
+        return source.paymentMode || '';
+    }, [cash, banks, formData]);
+
+    const buildVoucherDataForPrint = useCallback((voucherNumber, overrideData) => {
+        const base = overrideData || formData;
+        const enrichedDetails = (base?.receivableDetails || []).map((item) => {
+            const matchedLedger = ledgers?.find(l => Number(l.ledgerId) === Number(item.ledgerId)) ||
+                payableVouchrLedgers?.find(l => Number(l.ledgerId) === Number(item.ledgerId));
+            const matchedTax = taxData?.find(t => Number(t.taxId) === Number(item.taxId));
+
+            let taxRate = 0;
+            if (item.taxRate !== undefined && item.taxRate !== null && item.taxRate !== '' && parseFloat(item.taxRate) > 0) {
+                taxRate = parseFloat(item.taxRate);
+            } else if (matchedTax) {
+                taxRate = parseFloat(matchedTax.rate || matchedTax.taxPercentage || 0);
+            } else if (parseFloat(item.taxAmount || 0) > 0 && parseFloat(item.netAmount || item.grossAmount || 0) > 0) {
+                const baseAmount = parseFloat(item.netAmount || item.grossAmount || 0);
+                taxRate = Number(((parseFloat(item.taxAmount) / baseAmount) * 100).toFixed(2));
+            }
+
+            const rowGross = parseFloat(item.grossAmount || item.amount || 0);
+            let discAmt = parseFloat(item.discAmt !== undefined && item.discAmt !== null ? item.discAmt : 0);
+            let discPerc = parseFloat(item.discPerc !== undefined && item.discPerc !== null ? item.discPerc : (item.discountPercentage || 0));
+
+            if (discAmt === 0 && discPerc > 0 && rowGross > 0) {
+                discAmt = (rowGross * discPerc) / 100;
+            } else if (discAmt > 0 && discPerc === 0 && rowGross > 0) {
+                discPerc = (discAmt / rowGross) * 100;
+            }
+
+            return {
+                ...item,
+                ledgerName: item.ledgerName || matchedLedger?.ledgerName || '',
+                taxRate: taxRate,
+                discAmt: discAmt,
+                discPerc: discPerc,
+                discountPercentage: discPerc,
+            };
+        });
+
+        const matchedCostCenter = costCenters?.find(c => c.costCentreId === base.costCentreId);
+        const matchedEmployee = employees?.find(e => e.employeeId === base.employeeId);
+
+        return {
+            ...base,
+            voucherNo: base?.voucherNo || voucherNumber || (editMode ? existingVoucherNo : voucherId),
+            partyName: getCustomerName(base),
+            bankCashName: getBankCashName(base),
+            costCentreName: matchedCostCenter?.CostCentre || '',
+            employeeName: matchedEmployee?.employeeName || '',
+            receivableDetails: enrichedDetails,
+        };
+    }, [formData, editMode, existingVoucherNo, voucherId, getCustomerName, getBankCashName, ledgers, payableVouchrLedgers, costCenters, employees, taxData]);
+
+    const printToPrinterFn = useCallback((voucherDataForPrint) => {
+        printReceivableVoucher(voucherDataForPrint, selectedBranchDetails, time, currentCurrency);
+    }, [selectedBranchDetails, time, currentCurrency]);
+
+    const printToPdfFn = useCallback((voucherDataForPrint) => {
+        saveReceivableVoucherAsPDF(voucherDataForPrint, selectedBranchDetails, time, currentCurrency);
+    }, [selectedBranchDetails, time, currentCurrency]);
+
+    // ===== EDIT MODE: Reprint to Printer =====
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this receivable voucher?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const voucherDataForPrint = buildVoucherDataForPrint(existingVoucherNo);
+            printToPrinterFn(voucherDataForPrint);
+
+            if (isElectron()) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        } catch (error) {
+            console.error('Error printing receivable voucher:', error);
+            showToast.error('Failed to print receivable voucher');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, buildVoucherDataForPrint, existingVoucherNo, printToPrinterFn]);
+
+    // ===== EDIT MODE: Reprint to PDF =====
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const voucherDataForPrint = buildVoucherDataForPrint(existingVoucherNo);
+            printToPdfFn(voucherDataForPrint);
+
+            if (isElectron()) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        } catch (error) {
+            console.error('Error generating receivable voucher PDF:', error);
+            showToast.error('Failed to generate receivable voucher PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [buildVoucherDataForPrint, existingVoucherNo, printToPdfFn]);
+
     const handleSave = useCallback(async () => {
         if (formData.BillBalanceAmount < 0) {
-            setAlert({
-                id: Date.now(),
-                type: "error",
-                message: t("payableVoucher.alert.billBalanceAmtError"),
-            });
+            showToast.error(t("salesInvoice.alert.billBalanceAmtError"));
+            return;
+        }
+
+        if (formData.paymentMode === 'cash' && (!(formData.CashAmount) || parseFloat(formData.CashAmount) <= 0)) {
+            showToast.error(t("salesInvoice.alert.cashAmountRequired") || "Cash amount must be greater than 0 for Cash payment mode.");
+            return;
+        }
+
+        if (formData.paymentMode === 'card' && (!(formData.BankAmount) || parseFloat(formData.BankAmount) <= 0)) {
+            showToast.error(t("salesInvoice.alert.bankAmountRequired") || "Bank/Card amount must be greater than 0 for Card payment mode.");
+            return;
+        }
+
+        if (formData.paymentMode === 'credit' && (!(formData.BillBalanceAmount) || parseFloat(formData.BillBalanceAmount) <= 0)) {
+            showToast.error(t("salesInvoice.alert.creditPaymentModeError"));
             return;
         }
 
@@ -501,7 +685,12 @@ const ReceivableVoucherSkin = () => {
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                ModifiedUser: editMode ? userId : null,
+                receivableDetails: (formData.receivableDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: editMode ? userId : detail?.ModifiedUser ?? null,
+                })),
             };
 
             const api = editMode ? `update-receivable-voucher/${receivableVoucherId}` : 'save-receivable-voucher'
@@ -509,6 +698,37 @@ const ReceivableVoucherSkin = () => {
 
             if (!response.data.error) {
                 setAlert({ id: Date.now(), type: "success", message: t("saveSuccess") });
+
+                // ===== PRINT LOGIC =====
+                const freshData = response?.data?.data || response?.data || {};
+                const freshVoucherNo = freshData?.voucherNo || freshData?.voucherCode || (editMode ? existingVoucherNo : voucherId);
+                const voucherDataForPrint = buildVoucherDataForPrint(
+                    freshVoucherNo,
+                    { ...formData, ...freshData }
+                );
+
+                if (formData?.printAfterSave) {
+                    printToPrinterFn(voucherDataForPrint);
+                } else if (!editMode) {
+                    const pdfResult = await Swal.fire({
+                        title: t('Print As Pdf') || 'Print as PDF?',
+                        text: t('Do you want to download this voucher as a PDF?') ||
+                            'Do you want to download this voucher as a PDF?',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
+                        cancelButtonText: t('No, Just Save') || 'No, Just Save',
+                    });
+
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            printToPdfFn(voucherDataForPrint);
+                        }, 500);
+                    }
+                }
+
                 if (purchaseSettings?.CloseAfterSave) {
                     navigate('/transaction/receivable-voucher/list')  // ✅ correct route
                 }
@@ -528,7 +748,7 @@ const ReceivableVoucherSkin = () => {
         } finally {
             setIsSaving(false);
         }
-    }, [formData, time, saleSettings, generalSettings, editMode]);
+    }, [formData, time, saleSettings, generalSettings, editMode, buildVoucherDataForPrint, printToPrinterFn, printToPdfFn, existingVoucherNo, voucherId, selectedBranchId, currentCurrency, cash, t, navigate, userId, receivableVoucherId, purchaseSettings]);
 
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -575,6 +795,12 @@ const ReceivableVoucherSkin = () => {
     return (
         <div className="bg-primary dark:bg-primary ">
             {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+            <PopupPreloader
+                isOpen={isSaving || isPrinting}
+                state="loading"
+                title={isPrinting ? (t("Printing") || "Preparing Print...") : (isSaving ? (editMode ? t("updating") : t("saving")) : "")}
+                subtitle={isPrinting ? (t("printingDesc") || "Please wait while we prepare your voucher for printing...") : (t("loadingDesc") || "Please wait...")}
+            />
             <BreadCrumb
                 routes={[
                     { title: t("receivableVoucher.breadcrumb.master"), url: "#" },
@@ -599,13 +825,39 @@ const ReceivableVoucherSkin = () => {
                     },
                     {
                         label: editMode ? t("updateBtn") : t("submitBtn"),
-                         icon: editMode ? Pencil : SaveAll,
+                        icon: editMode ? Pencil : SaveAll,
                         type: "primary",
                         onClick: handleSave,
                         loading: isSaving,
                         loadingText: t("loadingText"),
                     },
                 ]}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="printAfterSaveReceivableVoucher"
+                                checked={formData.printAfterSave || false}
+                                onCheckedChange={(value) =>
+                                    setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                }
+                            />
+                            <label
+                                htmlFor="printAfterSaveReceivableVoucher"
+                                className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                            >
+                                {t("salesInvoice.form.footerSection.otherDetails.label.printAfterSave") || "Print After Save"}
+                            </label>
+                        </div>
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
             />
             {/* ✅ CHANGED: customers & fetchCustomers instead of suppliers & fetchSupplier */}
             <FormSectionMain
@@ -629,6 +881,10 @@ const ReceivableVoucherSkin = () => {
                 cash={cash}
                 payableVouchrLedgers={payableVouchrLedgers}
                 taxData={taxData}
+                currency={currency}
+                currencyConvertionData={currencyConvertionData}
+                financeSettings={financeSettings}
+                onLedgerCreated={() => fetchFinanceData(true)}
             />
         </div>
     );

@@ -1,7 +1,7 @@
 // CustomerSupplierStatementReport.jsx - Updated with Balance Calculation
 import BreadCrumb from '@/components/common/BreadCrumb';
 import { BookOpen } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import AccountLedgerFilters from './AccountLedgerFilters';
 import ContentTable from '@/components/common/ContentTable';
@@ -12,6 +12,8 @@ import Preloader from '@/components/common/Preloader';
 import NoAcessComponent from '@/components/common/NoAcessComponent';
 import { useSelector } from 'react-redux';
 import useReportExport from '@/hooks/useReportExport';
+import { showToast } from '@/utils/toast';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const CustomerSupplierStatementReport = ({ type }) => {
     const { t } = useTranslation();
@@ -19,10 +21,15 @@ const CustomerSupplierStatementReport = ({ type }) => {
     const [reportData, setReportData] = useState(null);
     const [costCenterData, setCostCenterData] = useState([]);
     const [acGroupData, setAcGroupData] = useState([]);
-    const { selectedBranchId, currentCurrency } = useAuth();
+    const { selectedBranchId, currentCurrency, } = useAuth();
+    
     const { generalSettings } = useSelector((state) => state.settings);
 
-    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges(type === 'customer' ? "Customer Statment" : "Supplier Statment");
+    const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const isInitialMount = useRef(true);
+
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges(type === 'customer' ? "Customer Statement" : "Supplier Statement");
 
     const { 
         exportAccountLedgerToExcel, 
@@ -30,7 +37,39 @@ const CustomerSupplierStatementReport = ({ type }) => {
         exportAccountLedgerToCsv 
     } = useReportExport();
 
-    const [filters, setFilters] = useState({
+    const getInitialFilters = () => ({
+        fromDate: searchParams.get('fromDate') || new Date().toISOString().split('T')[0],
+        toDate: searchParams.get('toDate') || new Date().toISOString().split('T')[0],
+        groupId: searchParams.get('groupId') || '',
+        costCentreId: searchParams.get('costCentreId') || '',
+        isShowOpeningBalance: searchParams.get('isShowOpeningBalance') !== null
+            ? searchParams.get('isShowOpeningBalance') === 'true'
+            : true,
+        isMainGroup: true
+    });
+
+    const [filters, setFilters] = useState(getInitialFilters);
+
+    const syncFiltersToUrl = useCallback((newFilters) => {
+        const params = {};
+        if (newFilters.fromDate) params.fromDate = newFilters.fromDate;
+        if (newFilters.toDate) params.toDate = newFilters.toDate;
+        if (newFilters.groupId) params.groupId = newFilters.groupId;
+        if (newFilters.costCentreId) params.costCentreId = newFilters.costCentreId;
+        params.isShowOpeningBalance = String(newFilters.isShowOpeningBalance);
+        setSearchParams(params, { replace: true });
+    }, [setSearchParams]);
+
+    // useEffect(() => {
+    //     fetchCostCenterData();
+    //     getAcGroupData();
+    // }, []);
+
+    useEffect(() => {
+    // Reset all stale state immediately when switching between customer/supplier
+    setReportData(null);
+    setAcGroupData([]);
+    setFilters({
         fromDate: new Date().toISOString().split('T')[0],
         toDate: new Date().toISOString().split('T')[0],
         groupId: '',
@@ -39,10 +78,9 @@ const CustomerSupplierStatementReport = ({ type }) => {
         isMainGroup: true
     });
 
-    useEffect(() => {
-        fetchCostCenterData();
-        getAcGroupData();
-    }, []);
+    fetchCostCenterData();
+    getAcGroupData();
+}, [type]);
 
     // Balance calculation function (same as Account Ledger Report)
     const calculateRowBalance = (index, debit, credit, previousBalance) => {
@@ -125,22 +163,22 @@ const formatDate = (dateString) => {
     return processed;
 };
 
-    const fetchReport = async () => {
-        if (!filters.groupId) {
-            alert(t('Please select an account group'));
+    const fetchReport = async (filtersToUse = filters) => {
+        if (!filtersToUse.groupId) {
+            showToast.error(t('Please select an account group'));
             return;
         }
 
         setLoading(true);
         try {
             const res = await axiosInstance.post("accountledger-detailed-report", {
-                fromDate: filters.fromDate,
-                toDate: filters.toDate,
+                fromDate: filtersToUse.fromDate,
+                toDate: filtersToUse.toDate,
                 branchId: selectedBranchId,
-                ledgerId: filters.groupId,
+                ledgerId: filtersToUse.groupId,
                 currencyId: currentCurrency.currencyId,
-                isShowOpeningBalance: filters.isShowOpeningBalance,
-                costCentreId: filters.costCentreId || null
+                isShowOpeningBalance: filtersToUse.isShowOpeningBalance,
+                costCentreId: filtersToUse.costCentreId || null
             });
 
             // Process data with balance calculation
@@ -151,6 +189,32 @@ const formatDate = (dateString) => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleRowClick = (row) => {
+        if (!row.MasterId) return;
+
+        syncFiltersToUrl(filters);
+
+        const routes = {
+            'Sales Invoice': `/transaction/sales-invoice/invoice-list/edit-sales-invoice/${row.MasterId}`,
+            'Purchase Invoice': `/transaction/purchase-invoice/edit-purchase-invoice/${row.MasterId}`,
+            'Sales Return': `/transaction/sales-return/return-list/edit-sales-return/${row.MasterId}`,
+            'Purchase Return': `/transaction/purchase-return/edit-purchase-return/${row.MasterId}`,
+            'Journal Voucher': `/transaction/journal-voucher/edit-journal-voucher/${row.MasterId}`,
+            'Payment Voucher': `/transaction/payment-voucher/edit-payment-voucher/${row.MasterId}`,
+            'Receipt Voucher': `/transaction/reciept-voucher/edit-reciept-voucher/${row.MasterId}`,
+            'Contra Voucher': `/transaction/contra-voucher/edit-contra-voucher/${row.MasterId}`,
+            'Material Receipt': `/transaction/material-receipt/edit/${row.MasterId}`,
+            'Delivery Note': `/transaction/delivery-note/edit-delivery-note/${row.MasterId}`,
+            'Payable Voucher': `/transaction/payable-voucher/edit/${row.MasterId}`,
+            'Receivable Voucher': `/transaction/receivable-voucher/edit/${row.MasterId}`,
+            'Physical Stock': `/transaction/physical-stock/edit/${row.MasterId}`,
+            'Damage Stock': `/transaction/damage-stock/edit/${row.MasterId}`,
+        };
+
+        const path = routes[row.voucherType];
+        if (path) navigate(path);
     };
 
     const fetchCostCenterData = async () => {
@@ -165,9 +229,11 @@ const formatDate = (dateString) => {
     const getAcGroupData = async () => {
         try {
             const response = await axiosInstance.post("customer-supplier-account-ledgers", { 
-                ledgerTypes: [type === 'customer' ? 'Customer' : "Supplier"], 
+                ledgerTypes:type==='customer'?['Customer','Customer&Supplier']:['Supplier','Customer&Supplier'], 
+                // ledgerTypes: [type === 'customer' ? 'Customer' : "Supplier"], 
                 branchId: selectedBranchId 
             });
+            
             setAcGroupData(response.data.data || []);
         } catch (error) {
             console.error("Error fetching account groups:", error);
@@ -175,19 +241,36 @@ const formatDate = (dateString) => {
     };
 
     const handleFilterChange = (field, value) => {
-        setFilters(prev => ({ ...prev, [field]: value }));
+        setFilters(prev => {
+            const updated = { ...prev, [field]: value };
+            syncFiltersToUrl(updated);
+            return updated;
+        });
     };
 
     const resetFilters = () => {
-        setFilters({
+        const defaults = {
             fromDate: new Date().toISOString().split('T')[0],
             toDate: new Date().toISOString().split('T')[0],
             groupId: '',
             costCentreId: '',
-            isShowOpeningBalance: true
-        });
+            isShowOpeningBalance: true,
+            isMainGroup: true
+        };
+        setFilters(defaults);
         setReportData(null);
+        setSearchParams({}, { replace: true });
     };
+
+    useEffect(() => {
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            const initial = getInitialFilters();
+            if (initial.groupId) {
+                fetchReport(initial);
+            }
+        }
+    }, []);
 
     const costCenterOptions = costCenterData.map(center => ({
         label: center.CostCentre,
@@ -234,41 +317,64 @@ const formatDate = (dateString) => {
     const selectedLedger = acGroupData.find(g => g.ledgerId === filters.groupId);
 
     // Export configuration with Balance column
-    const getExportOptions = () => {
-        const reportTitle = type === 'customer'
-            ? t('cstAndSupStatementRprt.breadcrumb.cusTitle') || 'Customer Statement'
-            : t('cstAndSupStatementRprt.breadcrumb.supTitle') || 'Supplier Statement';
+  const getExportOptions = () => {
+    const reportTitle = type === 'customer'
+        ? t('cstAndSupStatementRprt.breadcrumb.cusTitle') || 'Customer Statement'
+        : t('cstAndSupStatementRprt.breadcrumb.supTitle') || 'Supplier Statement';
 
-        return {
-            fileName: `${type === 'customer' ? 'Customer' : 'Supplier'}_Statement_${selectedLedger?.ledgerName?.replace(/\s+/g, '_') || 'Report'}`,
-            title: reportTitle,
-            subtitle: selectedLedger?.ledgerName || '',
-            ledgerName: selectedLedger?.ledgerName || '',
-            fromDate: filters.fromDate,
-            toDate: filters.toDate,
-            data: reportData,
-            footer: {
-                label: t('Total'),
-                Debit: totalDebit.toFixed(generalSettings?.decimalPart || 2),
-                Credit: totalCredit.toFixed(generalSettings?.decimalPart || 2),
-                Balance: closingBalance
-            },
-            theme: 'professional',
-            decimalPlaces: generalSettings?.decimalPart || 2,
-            columns: [
-                { key: 'SlNo', label: t('acLedgerReport.grid.columns.SINO') || '#', align: 'center', width: 8 },
-                { key: 'Date', label: t('acLedgerReport.grid.columns.Date') || 'Date', align: 'center', width: 12 },
-                { key: 'voucherType', label: t('acLedgerReport.grid.columns.voucherType') || 'Voucher Type', align: 'left', width: 16 },
-                { key: 'ledgerCode', label: t('acLedgerReport.grid.columns.ledgerCode') || 'Ledger Code', align: 'center', width: 12 },
-                { key: 'voucherNo', label: t('acLedgerReport.grid.columns.voucherNo') || 'Voucher No', align: 'center', width: 12 },
-                { key: 'CostCentre', label: t('acLedgerReport.grid.columns.CostCentre') || 'Cost Centre', align: 'left', width: 15 },
-                { key: 'Narration', label: t('acLedgerReport.grid.columns.Narration') || 'Narration', align: 'left', width: 30 },
-                { key: 'Debit', label: t('acLedgerReport.grid.columns.Debit') || 'Debit', align: 'right', width: 14, type: 'currency' },
-                { key: 'Credit', label: t('acLedgerReport.grid.columns.Credit') || 'Credit', align: 'right', width: 14, type: 'currency' },
-                { key: 'Balance', label: t('Balance') || 'Balance', align: 'right', width: 16, type: 'balance' }
-            ]
-        };
+    const showCostCentre = generalSettings?.costCentre === true;
+
+    const baseColumns = [
+        { key: 'SlNo', label: t('acLedgerReport.grid.columns.SINO') || '#', align: 'center', width: 8 },
+        { key: 'Date', label: t('acLedgerReport.grid.columns.Date') || 'Date', align: 'center', width: 13 },
+        { key: 'voucherType', label: t('acLedgerReport.grid.columns.voucherType') || 'Voucher Type', align: 'left', width: 16 },
+        { key: 'InvoiceNo', label: t('acLedgerReport.grid.columns.voucherNo') || 'Voucher No', align: 'center', width: 12 },
+        ...(showCostCentre
+            ? [{ key: 'CostCentre', label: t('acLedgerReport.grid.columns.CostCentre') || 'Cost Centre', align: 'left', width: 15 }]
+            : []),
+        { key: 'Narration', label: t('acLedgerReport.grid.columns.Narration') || 'Narration', align: 'left', width: 30 },
+        { key: 'Debit', label: t('acLedgerReport.grid.columns.Debit') || 'Debit', align: 'right', width: 14, type: 'currency' },
+        { key: 'Credit', label: t('acLedgerReport.grid.columns.Credit') || 'Credit', align: 'right', width: 14, type: 'currency' },
+        { key: 'Balance', label: t('Balance') || 'Balance', align: 'right', width: 17, type: 'balance' }
+    ];
+
+    // Header/Footer image logic — fallback to current branch data if no image link
+    const headerImage = generalSettings?.branchHeader || null;
+    const footerImage = generalSettings?.branchFooter || null;
+
+    const branchFallbackData = {
+        branchName: generalSettings?.branchName || selectedBranchId?.branchName || '',
+        branchAddress: generalSettings?.branchAddress || '',
+        branchPhone: generalSettings?.branchPhone || '',
+        branchEmail: generalSettings?.branchEmail || '',
     };
+
+    return {
+        fileName: `${type === 'customer' ? 'Customer' : 'Supplier'}_Statement_${selectedLedger?.ledgerName?.replace(/\s+/g, '_') || 'Report'}`,
+        title: reportTitle,
+        subtitle: selectedLedger?.ledgerName || '',
+        ledgerName: selectedLedger?.ledgerName || '',
+        fromDate: filters.fromDate,
+        toDate: filters.toDate,
+        data: reportData,
+        footer: {
+            label: t('Total'),
+            Debit: totalDebit.toFixed(generalSettings?.decimalPart || 2),
+            Credit: totalCredit.toFixed(generalSettings?.decimalPart || 2),
+            Balance: closingBalance
+        },
+        theme: 'professional',
+        decimalPlaces: generalSettings?.decimalPart || 2,
+        columns: baseColumns,
+
+        // NEW: header/footer image config
+        headerImage: headerImage,
+        footerImage: footerImage,
+        showHeaderImage: !!headerImage,
+        showFooterImage: !!footerImage,
+        branchFallbackData: branchFallbackData
+    };
+};
 
     const handleExportExcel = () => {
         if (!reportData || reportData.length === 0) {
@@ -278,14 +384,13 @@ const formatDate = (dateString) => {
         exportAccountLedgerToExcel(getExportOptions());
     };
 
-    const handleExportPdf = () => {
-        if (!reportData || reportData.length === 0) {
-            alert(t('No data to export'));
-            return;
-        }
-        exportAccountLedgerToPdf({ ...getExportOptions(), orientation: 'landscape' });
-    };
-
+ const handleExportPdf = async () => {
+    if (!reportData || reportData.length === 0) {
+        alert(t('No data to export'));
+        return;
+    }
+    await exportAccountLedgerToPdf({ ...getExportOptions(), orientation: 'portrait' });
+};
     const handleExportCsv = () => {
         if (!reportData || reportData.length === 0) {
             alert(t('No data to export'));
@@ -295,17 +400,22 @@ const formatDate = (dateString) => {
     };
 
     // Updated columns to include Balance
-    const columns = [
+ const columns = useMemo(() => {
+    const showCostCentre = generalSettings?.costCentre === true;
+    return [
         { key: 'SNo', label: t('acLedgerReport.grid.columns.SINO') },
         { key: 'Date', label: t('acLedgerReport.grid.columns.Date') },
         { key: 'voucherType', label: t('acLedgerReport.grid.columns.voucherType') },
-        { key: 'voucherNo', label: t('acLedgerReport.grid.columns.voucherNo') },
-        { key: 'CostCentre', label: t('acLedgerReport.grid.columns.CostCentre') },
+        { key: 'InvoiceNo', label: t('acLedgerReport.grid.columns.voucherNo') },
+        ...(showCostCentre
+            ? [{ key: 'CostCentre', label: t('acLedgerReport.grid.columns.CostCentre') }]
+            : []),
         { key: 'Narration', label: t('acLedgerReport.grid.columns.Narration') },
         { key: 'Debit', label: t('acLedgerReport.grid.columns.Debit'), align: "right" },
         { key: 'Credit', label: t('acLedgerReport.grid.columns.Credit'), align: "right" },
         { key: 'Balance', label: t('Balance'), align: "right" }
     ];
+}, [generalSettings?.costCentre, t]);
 
     // Updated renderCell to handle Balance column
     const renderCell = (key, row) => {
@@ -383,7 +493,10 @@ const formatDate = (dateString) => {
                 <AccountLedgerFilters
                     filters={filters}
                     onFilterChange={handleFilterChange}
-                    onGenerateReport={fetchReport}
+                    onGenerateReport={() => {
+                        syncFiltersToUrl(filters);
+                        fetchReport(filters);
+                    }}
                     costCenterOptions={costCenterOptions}
                     acGroupOptions={acGroupOptions}
                     loading={loading}
@@ -399,6 +512,7 @@ const formatDate = (dateString) => {
                         loading={loading}
                         renderCell={renderCell}
                         footerData={footerData}
+                        onRowClick={handleRowClick}
                     />
                 </div>
             </div>

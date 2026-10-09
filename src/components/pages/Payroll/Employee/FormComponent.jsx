@@ -12,6 +12,7 @@ import AddMasterModal from '../../Master/singleMaster/AddMasterModal';
 import { useSelector } from 'react-redux';
 // ── NEW: import the shared DateInput ──────────────────────────────────────────
 import DateInput from '@/components/elements/theme/DateInput';
+import { sanitize } from '@/lib/inputSanitizer';
 
 /* ──────────────────────────────────────────────
    Helper Components (same style as Customer form)
@@ -254,6 +255,7 @@ const FormComponent = ({
         BankBranch: '',
         documentuploadOptionNeeded: false,
         CreatedUser: userId,
+        ModifiedUser: editMode ? userId : null,
         employeephoto: null,
         voucherType: "Employee",
         yearId: currentFinancialYear?.yearId,
@@ -331,6 +333,7 @@ const FormComponent = ({
                 BankBranch: data.BankBranch || '',
                 documentuploadOptionNeeded: data.documentuploadOptionNeeded || false,
                 CreatedUser: data.CreatedUser || userId,
+                ModifiedUser: editMode ? userId : null,
                 employeephoto: null,
                 voucherType: "Employee",
                 yearId: currentFinancialYear?.yearId,
@@ -358,15 +361,73 @@ const FormComponent = ({
     const handleChange = (e) => {
         const { name, value, type, checked, files } = e.target;
         let fieldValue = value;
+       
         if (type === 'checkbox') fieldValue = checked;
         else if (type === 'file') fieldValue = files[0];
 
-        setFormData((prev) => {
-            if (name === 'employeeName' && value.length > 0) {
-                return { ...prev, [name]: value.charAt(0).toUpperCase() + value.slice(1) };
+         if(["employeeName"].includes(name)){
+            fieldValue = sanitize.alphaNumericSpace(value)
+             if (fieldValue.length > 0) {
+                  fieldValue =
+                fieldValue.charAt(0).toUpperCase() + fieldValue.slice(1);
             }
-            return { ...prev, [name]: fieldValue };
-        });
+        }
+        if(["Nationality","qualification","emergencyContactName","BankName","BankBranch"].includes(name)){
+            fieldValue = sanitize.alphaNumericSpace(value)
+        }
+        if(["whatsAppNumber","mobileNo","phoneNo","emergencyContactNumber"].includes(name)){
+            fieldValue = sanitize.numbers(value).slice(0,15)
+        }
+        if(["email"].includes(name)){
+            fieldValue = value.replace(/[^a-zA-Z0-9@._-]/g, "");
+        }
+        if (name === "OTHourlyAmount") {
+        // Allow empty value so user can clear the field
+        if (value === "" || /^\d*\.?\d{0,2}$/.test(value)) {
+            setFormData((prev) => ({ ...prev, [name]: value }));
+        }
+        return;
+        }
+        if(["passportNo"].includes(name)){
+            fieldValue = sanitize.alphaNumeric(value).slice(0,12)
+        }
+        if(["visaNo"].includes(name)){
+            fieldValue = sanitize.alphaNumeric(value).slice(0,20)
+        }
+        if(["BankAccountNo","IBAN"].includes(name)){
+            fieldValue = sanitize.uppercaseAlphaNumeric(value).slice(0,34)
+        }
+         if(["SwiftCode",].includes(name)){
+            fieldValue = sanitize.uppercaseAlphaNumeric(value).slice(0,11)
+        }
+
+         // Auto-set Passport Expiry = Issue Date + 10 years
+    if (name === "passportIssueDate" && fieldValue) {
+        const issueDate = new Date(fieldValue);
+
+        // Add 10 years
+        issueDate.setFullYear(issueDate.getFullYear() + 10);
+
+        const expiryDate = issueDate.toISOString().split("T")[0];
+
+        setFormData((prev) => ({
+            ...prev,
+            passportIssueDate: fieldValue,
+            passportExpDate: expiryDate,
+        }));
+
+        if (errors[name]) {
+            setErrors((prev) => ({ ...prev, [name]: "" }));
+        }
+
+        return;
+    }
+
+         setFormData((prev) => ({
+        ...prev,
+        [name]: fieldValue,
+    }));
+
 
         if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
     };
@@ -422,6 +483,15 @@ const FormComponent = ({
 
     if (fetchLoading) return <Preloader />;
 
+    //DOB 
+    const today = new Date();
+const maxDOB = new Date(
+  today.getFullYear() - 18,
+  today.getMonth(),
+  today.getDate()
+)
+  .toISOString()
+  .split("T")[0];
     /* ── Render ─────────────────────────────── */
 
     return (
@@ -480,7 +550,7 @@ const FormComponent = ({
                                     <CustomDropdown
                                         value={formData.designationId}
                                         onChange={(val) => handleDropdownChange('designationId', val)}
-                                        options={designations.map((d) => ({
+                                        options={designations?.map((d) => ({
                                             value: d.designationId,
                                             label: d.designationName,
                                         }))}
@@ -512,7 +582,7 @@ const FormComponent = ({
                                     <CustomDropdown
                                         value={formData.DepartmentId}
                                         onChange={(val) => handleDropdownChange('DepartmentId', val)}
-                                        options={deprtments.map((d) => ({
+                                        options={deprtments?.map((d) => ({
                                             value: d.departmentId,
                                             label: d.departmentName,
                                         }))}
@@ -541,7 +611,7 @@ const FormComponent = ({
                                     <CustomDropdown
                                         value={formData.workLocationId}
                                         onChange={(val) => handleDropdownChange('workLocationId', val)}
-                                        options={worklocations.map((d) => ({
+                                        options={worklocations?.map((d) => ({
                                             value: d.workLocationId,
                                             label: d.workLocationName,
                                         }))}
@@ -611,6 +681,7 @@ const FormComponent = ({
                                                         onChange={handleChange}
                                                         required
                                                         error={errors.dob}
+                                                          max={maxDOB}
                                                     />
                                                 </InputRow>
 
@@ -844,7 +915,7 @@ const FormComponent = ({
                                                     <CustomDropdown
                                                         value={formData.routeId}
                                                         onChange={(val) => handleDropdownChange('routeId', val)}
-                                                        options={routes.map((d) => ({
+                                                        options={routes?.map((d) => ({
                                                             value: d.RouteId,
                                                             label: d.RouteName,
                                                         }))}
@@ -890,7 +961,7 @@ const FormComponent = ({
                                                     <CustomDropdown
                                                         value={formData.areaId}
                                                         onChange={(val) => handleDropdownChange('areaId', val)}
-                                                        options={area.map((d) => ({
+                                                        options={area?.map((d) => ({
                                                             value: d.AreaId,
                                                             label: d.AreaName,
                                                         }))}
@@ -1010,6 +1081,7 @@ const FormComponent = ({
                                                         name="passportExpDate"
                                                         value={formData.passportExpDate}
                                                         onChange={handleChange}
+                                                          min={formData.passportIssueDate || undefined}
                                                     />
                                                 </InputRow>
 
@@ -1052,6 +1124,7 @@ const FormComponent = ({
                                                         name="labourCardExpDate"
                                                         value={formData.labourCardExpDate}
                                                         onChange={handleChange}
+                                                        min={formData.labourCardIssueDate || undefined}
                                                     />
                                                 </InputRow>
                                             </div>

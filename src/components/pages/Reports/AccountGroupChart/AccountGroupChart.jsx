@@ -110,7 +110,7 @@ const AccountGroupChart = () => {
     const [expandedNodes, setExpandedNodes] = useState(new Set());
 
     const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Chart of Account");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Chart of Accounts");
 
     // Build complete tree from flat data
     const buildTreeFromFlatData = useCallback((flatData) => {

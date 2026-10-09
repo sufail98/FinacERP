@@ -54,7 +54,7 @@ const ReportFileSettingsList = () => {
   } = usePrivileges('Report File Settings');
 
   useEffect(() => {
-    if (hasAccess && !privilegeLoading) {
+    if (!privilegeLoading) {
       fetchAllReportFiles();
       fetchDistinctData()
     }
@@ -151,14 +151,14 @@ const ReportFileSettingsList = () => {
 
   // ✅ Dynamically build actions based on privileges
   const actions = [];
-  if (privileges?.can_edit) {
+  // if (privileges?.can_edit) {
     actions.push({
       icon: <Edit className="h-4 w-4" />,
       onClick: (row) => handleOpenModal(row),
       className: 'text-green-600 hover:text-green-800',
       tooltip: 'Edit',
     });
-  }
+  // }
   if (privileges?.can_delete) {
     actions.push({
       icon: <Trash2 className="h-4 w-4" />,
@@ -224,20 +224,20 @@ const ReportFileSettingsList = () => {
     );
   }
 
-  if (!hasAccess) {
-    return (
-      <div>
-        <BreadCrumb
-          routes={[
-            { title: t('settings.breadcrumb.settings') || 'Settings', url: '/settings' },
-            { title: t('reportFileSettings.breadcrumb.title') || 'Report File Settings', url: '#' },
-          ]}
-          heading={{ icon: FileText, title: t('reportFileSettings.breadcrumb.title') || 'Report File Settings' }}
-        />
-        <NoAcessComponent message={message} />
-      </div>
-    );
-  }
+  // if (!hasAccess) {
+  //   return (
+  //     <div>
+  //       <BreadCrumb
+  //         routes={[
+  //           { title: t('settings.breadcrumb.settings') || 'Settings', url: '/settings' },
+  //           { title: t('reportFileSettings.breadcrumb.title') || 'Report File Settings', url: '#' },
+  //         ]}
+  //         heading={{ icon: FileText, title: t('reportFileSettings.breadcrumb.title') || 'Report File Settings' }}
+  //       />
+  //       <NoAcessComponent message={message} />
+  //     </div>
+  //   );
+  // }
 
   if (fetchError && !fetchLoading) {
     return (
@@ -264,9 +264,20 @@ const ReportFileSettingsList = () => {
           { title: t('reportFileSettings.breadcrumb.title') || 'Report File Settings', url: '#' },
         ]}
         heading={{ icon: FileText, title: t('reportFileSettings.breadcrumb.title') || 'Report File Settings' }}
+        // actions={
+        //   privileges?.can_add
+        //     ? [
+        //       {
+        //         label: t('createNewBtn') || 'Create New',
+        //         icon: Plus,
+        //         type: 'secondary',
+        //         onClick: () => handleOpenModal(),
+        //       },
+        //     ]
+        //     : []
+        // }
         actions={
-          privileges?.can_add
-            ? [
+         [
               {
                 label: t('createNewBtn') || 'Create New',
                 icon: Plus,
@@ -274,7 +285,7 @@ const ReportFileSettingsList = () => {
                 onClick: () => handleOpenModal(),
               },
             ]
-            : []
+           
         }
       />
 

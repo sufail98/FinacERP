@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import PaymentMode from "./FooterTabData/PaymentMode";
 import RetentionData from "./FooterTabData/RetentionData";
 import AdditionalCost from "./FooterTabData/AdditionalCost";
@@ -41,6 +41,8 @@ const PurchaseInvoiceFooterSection = ({
     const [otherChargeAmt, setOtherChargAmt] = useState('');
     const [activeTab, setActiveTab] = useState("payment");
     const [isInitialized, setIsInitialized] = useState(false);
+    const [dbTotalAmount, setDbTotalAmount] = useState(null);   // ← ADD
+    const [userHasChanged, setUserHasChanged] = useState(false); // ← ADD
     const decimalPart = generalSettings?.decimalPart ?? 2;
 
     // Other Charge Ledger Modal
@@ -64,19 +66,11 @@ const PurchaseInvoiceFooterSection = ({
 
     // Purchase History API call
     const fetchPurchaseHistory = async () => {
+        
         const productCode = getCurrentProductCode?.();
 
         if (!productCode || !formData.ledgerId) {
             setProductHistory([]);
-            return;
-        }
-
-        // Create cache key
-        const cacheKey = `${productCode}_${formData.ledgerId}`;
-
-        // Check if history exists in cache
-        if (historyCache[cacheKey]) {
-            setProductHistory(historyCache[cacheKey]);
             return;
         }
 
@@ -85,19 +79,19 @@ const PurchaseInvoiceFooterSection = ({
 
             const res = await axiosInstance.post('history/purchase', {
                 productCode: productCode,
-                branchId: selectedBranchId,
+                branchId: null,
                 currencyId: currentCurrency.currencyId,
-                ledgerId: formData.ledgerId
+                ledgerId: null
             });
 
             if (res.data?.status && res.data?.data) {
                 const historyData = res.data.data.slice(0, 10);
 
                 // Store in cache
-                setHistoryCache(prev => ({
-                    ...prev,
-                    [cacheKey]: historyData
-                }));
+                // setHistoryCache(prev => ({
+                //     ...prev,
+                //     [cacheKey]: historyData
+                // }));
 
                 setProductHistory(historyData);
             } else {
@@ -128,52 +122,98 @@ const PurchaseInvoiceFooterSection = ({
         }
     }, [formData.ledgerId]);
 
-    useEffect(() => {
-        if (isEditMode && formData && !isInitialized) {
-            const addCost = parseFloat(formData.additionalCost) || 0;
-            setAdditionalCost(Math.abs(addCost));
-            setAdditionalCostType(addCost >= 0 ? "Cr" : "Dr");
-
-            const rOff = parseFloat(formData.roundoff) || 0;
-            setRoundOff(Math.abs(rOff));
-            setRoundOffType(rOff >= 0 ? "+" : "-");
-
-            setBillDiscount(parseFloat(formData.billDiscount) || 0);
-
-            setOtherChargRemark(formData.OtherChargeRemark || '');
-            setOtherChargAmt(formData.othercharge || '');
-
-            // Load selected ledger if exists
-            if (formData.otherChargeLedgerId) {
-                setSelectedLedger({
-                    ledgerId: formData.otherChargeLedgerId,
-                    ledgerName: formData.otherChargeLedgerName || 'Other Charge'
-                });
+        useEffect(() => {
+          if (isEditMode && formData?.otherChargeLedgerId && otherChargeLedgers?.length > 0 && !selectedLedger) {
+            const matchedLedger = otherChargeLedgers.find(
+              (ledger) => Number(ledger.ledgerId) === Number(formData.otherChargeLedgerId)
+            );
+            if (matchedLedger) {
+              setSelectedLedger(matchedLedger);
             }
+          }
+        }, [isEditMode, formData?.otherChargeLedgerId, otherChargeLedgers, selectedLedger]);
 
-            setIsInitialized(true);
+useEffect(() => {
+    if (!isInitialized && isEditMode && formData?.totalAmount !== undefined && formData?.totalAmount !== '') {
+        const addCost = parseFloat(formData.additionalCost) || 0;
+        setAdditionalCost(Math.abs(addCost));
+        setAdditionalCostType(addCost >= 0 ? "Cr" : "Dr");
+
+        const rOff = parseFloat(formData.roundoff) || 0;
+        setRoundOff(Math.abs(rOff));
+        setRoundOffType(rOff >= 0 ? "+" : "-");
+
+        setBillDiscount(parseFloat(formData.billDiscount) || 0);
+        setOtherChargRemark(formData.OtherChargeRemark || '');
+        setOtherChargAmt(formData.othercharge || '');
+
+        if (formData.otherChargeLedgerId) {
+            setSelectedLedger({
+                ledgerId: formData.otherChargeLedgerId,
+                ledgerName: formData.otherChargeLedgerName || 'Other Charge'
+            });
         }
-    }, [isEditMode, formData, isInitialized]);
+
+        setDbTotalAmount(parseFloat(formData.totalAmount) || 0);
+        setIsInitialized(true);
+    }
+}, [isEditMode, formData, isInitialized]);
+
+    // const prevPurchaseDetailsRef = useRef(null);
+    // useEffect(() => {
+    //     if (!isInitialized) return;
+    //     const current = JSON.stringify(formData.purchaseDetails);
+    //     if (prevPurchaseDetailsRef.current !== null && prevPurchaseDetailsRef.current !== current) {
+    //         setUserHasChanged(true);
+    //     }
+    //     prevPurchaseDetailsRef.current = current;
+    // }, [formData.purchaseDetails, isInitialized]);
+    const prevPurchaseDetailsRef = useRef(null);
+const skipNextCompareRef = useRef(true); // skip first compare right after init
+
+useEffect(() => {
+    if (!isInitialized) return;
+
+    // round amounts before stringifying so float drift doesn't trigger false positives
+    const normalized = (formData.purchaseDetails || []).map(d => ({
+        productCode: d.productCode,
+        qty: d.qty,
+        rate: Number(d.rate || 0).toFixed(decimalPart),
+        amount: Number(d.amount || 0).toFixed(decimalPart),
+    }));
+    const current = JSON.stringify(normalized);
+
+    if (skipNextCompareRef.current) {
+        skipNextCompareRef.current = false;
+        prevPurchaseDetailsRef.current = current;
+        return;
+    }
+
+    if (prevPurchaseDetailsRef.current !== null && prevPurchaseDetailsRef.current !== current) {
+        setUserHasChanged(true);
+    }
+    prevPurchaseDetailsRef.current = current;
+}, [formData.purchaseDetails, isInitialized]);
 
     const finalGrandTotal = useMemo(() => {
+        // In edit mode, show DB total until the user makes any change
+        if (isEditMode && !userHasChanged && dbTotalAmount !== null) {
+            return dbTotalAmount.toFixed(decimalPart);
+        }
+
         let base = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
-
         base += parseFloat(otherChargeAmt || 0);
-
         if (additionalCostType === "Cr") {
             base += parseFloat(additionalCost || 0);
         } else {
             base -= parseFloat(additionalCost || 0);
         }
-
         base -= parseFloat(billDiscount || 0);
-
         if (roundOffType === "+") {
             base += parseFloat(roundOff || 0);
         } else {
             base -= parseFloat(roundOff || 0);
         }
-
         return base.toFixed(decimalPart);
     }, [
         totals,
@@ -183,8 +223,11 @@ const PurchaseInvoiceFooterSection = ({
         roundOff,
         roundOffType,
         otherChargeAmt,
+        isEditMode,
+        userHasChanged,
+        dbTotalAmount,
+        decimalPart,
     ]);
-
     // Distribute bill discount across all products
     const distributeBillDiscount = (discount, purchaseDetails) => {
         if (!purchaseDetails || purchaseDetails.length === 0) return purchaseDetails;
@@ -212,32 +255,60 @@ const PurchaseInvoiceFooterSection = ({
             return { ...detail, billDiscOnProduct: 0 };
         });
     };
+    const distributeOtherCharge = (otherCharge, purchaseDetails) => {
+    if (!purchaseDetails || purchaseDetails.length === 0) return purchaseDetails;
 
-    useEffect(() => {
-        if (formData.purchaseDetails && formData.purchaseDetails.length > 0) {
-            const updatedPurchaseDetails = distributeBillDiscount(billDiscount, formData.purchaseDetails);
-            setFormData(prev => ({
-                ...prev,
-                additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
-                billDiscount,
-                roundoff: roundOffType === "+" ? roundOff : -roundOff,
-                othercharge: otherChargeAmt,
-                OtherChargeRemark: otherChargeRemark,
-                purchaseDetails: updatedPurchaseDetails,
-                totalAmount: finalGrandTotal,
-            }));
-        } else {
-            setFormData(prev => ({
-                ...prev,
-                additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
-                billDiscount,
-                roundoff: roundOffType === "+" ? roundOff : -roundOff,
-                othercharge: otherChargeAmt,
-                OtherChargeRemark: otherChargeRemark,
-                totalAmount: finalGrandTotal,
-            }));
+    const validRows = purchaseDetails.filter(d => d.productCode && d.qty > 0);
+    if (validRows.length === 0) return purchaseDetails;
+
+    const totalNetAmount = validRows.reduce((sum, d) => sum + parseFloat(d.netAmount || 0), 0);
+
+    if (totalNetAmount === 0 || !otherCharge || parseFloat(otherCharge) === 0) {
+        return purchaseDetails.map(d => ({ ...d, otherchargeOnProduct: 0 }));
+    }
+
+    const chargePercentage = (parseFloat(otherCharge) * 100) / totalNetAmount;
+
+    return purchaseDetails.map(detail => {
+        if (detail.productCode && detail.qty > 0) {
+            const netValue = parseFloat(detail.netAmount || 0);
+            const chargeForRow = (netValue * chargePercentage) / 100;
+            return {
+                ...detail,
+                otherchargeOnProduct: parseFloat(chargeForRow.toFixed(decimalPart))
+            };
         }
-    }, [additionalCost, additionalCostType, billDiscount, roundOff, roundOffType, otherChargeAmt, otherChargeRemark, finalGrandTotal]);
+        return { ...detail, otherchargeOnProduct: 0 };
+    });
+};
+
+useEffect(() => {
+    if (formData.purchaseDetails && formData.purchaseDetails.length > 0) {
+        let updatedPurchaseDetails = distributeBillDiscount(billDiscount, formData.purchaseDetails);
+        updatedPurchaseDetails = distributeOtherCharge(otherChargeAmt, updatedPurchaseDetails);
+
+        setFormData(prev => ({
+            ...prev,
+            additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
+            billDiscount,
+            roundoff: roundOffType === "+" ? roundOff : -roundOff,
+            othercharge: otherChargeAmt,
+            OtherChargeRemark: otherChargeRemark,
+            purchaseDetails: updatedPurchaseDetails,
+            totalAmount: finalGrandTotal,
+        }));
+    } else {
+        setFormData(prev => ({
+            ...prev,
+            additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
+            billDiscount,
+            roundoff: roundOffType === "+" ? roundOff : -roundOff,
+            othercharge: otherChargeAmt,
+            OtherChargeRemark: otherChargeRemark,
+            totalAmount: finalGrandTotal,
+        }));
+    }
+}, [additionalCost, additionalCostType, billDiscount, roundOff, roundOffType, otherChargeAmt, otherChargeRemark, finalGrandTotal]);
 
     const tabs = [
         { id: "payment", label: t("salesInvoice.form.footerSection.tabs.paymentMode") },
@@ -363,8 +434,8 @@ const PurchaseInvoiceFooterSection = ({
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex-1 min-w-[120px] px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab.id
-                                        ? "main-bg text-white border-b-2 border-[#2b216a]"
-                                        : "bg-secondary dark:bg-secondary text-secondary dark:text-secondary hover:bg-hover dark:hover:bg-hover"
+                                    ? "main-bg text-white border-b-2 border-[#2b216a]"
+                                    : "bg-secondary dark:bg-secondary text-secondary dark:text-secondary hover:bg-hover dark:hover:bg-hover"
                                     }`}
                             >
                                 {tab.label}
@@ -405,14 +476,14 @@ const PurchaseInvoiceFooterSection = ({
                             </tr>
 
                             {/* Additional Cost */}
-                            <tr className="border-b border-themed dark:border-themed">
+                            {/* <tr className="border-b border-themed dark:border-themed">
                                 <td className="px-2 py-1 font-medium text-secondary dark:text-secondary">
                                     {t("salesInvoice.form.footerSection.paymentSummery.additionalCost")}
                                 </td>
                                 <td className="px-2 py-1 border-l border-themed dark:border-themed">
                                     <select
                                         value={additionalCostType}
-                                        onChange={(e) => setAdditionalCostType(e.target.value)}
+                                        onChange={(e) => { setAdditionalCostType(e.target.value); setUserHasChanged(true); }}
                                         className="w-full bg-primary dark:bg-secondary text-primary dark:text-primary focus:outline-none"
                                     >
                                         <option value="Cr">Cr</option>
@@ -422,13 +493,15 @@ const PurchaseInvoiceFooterSection = ({
                                 <td colSpan={2} className="px-2 py-1 border-l border-themed dark:border-themed">
                                     <input
                                         type="number"
-                                        value={Number(additionalCost || 0).toFixed(decimalPart)}
-                                        onChange={(e) => setAdditionalCost(parseFloat(e.target.value) || 0)}
+                                        // value={Number(additionalCost || 0).toFixed(decimalPart)}
+                                        value={additionalCost}
+                                        onChange={(e) => { setAdditionalCost(parseFloat(e.target.value) || 0); setUserHasChanged(true); }}
                                         onFocus={handleSelectAll}
+                                        disabled={Number(totals?.grandTotal) <= 0}
                                         className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                                     />
                                 </td>
-                            </tr>
+                            </tr> */}
 
                             {/* Bill Discount */}
                             <tr className="border-b border-themed dark:border-themed">
@@ -439,15 +512,16 @@ const PurchaseInvoiceFooterSection = ({
                                     <input
                                         type="number"
                                         value={billDiscount}
-                                        onChange={(e) => setBillDiscount(parseFloat(e.target.value) || 0)}
+                                        onChange={(e) => { setBillDiscount(parseFloat(e.target.value) || 0); setUserHasChanged(true); }}
                                         onFocus={handleSelectAll}
+                                         disabled={Number(totals?.grandTotal) <= 0}
                                         className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                                     />
                                 </td>
                             </tr>
 
                             {/* Total Tax */}
-                            {generalSettings.ActivateTax && (
+                            {(generalSettings?.ActivateTax &&formData?.taxType==='Applicable to product') && (
                                 <tr className="border-b border-themed dark:border-themed">
                                     <td className="px-2 py-1 font-medium text-secondary dark:text-secondary">
                                         {t("salesInvoice.form.footerSection.paymentSummery.totalTax")}
@@ -480,17 +554,23 @@ const PurchaseInvoiceFooterSection = ({
                                         value={otherChargeRemark}
                                         className="w-full bg-transparent text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none"
                                         placeholder={t("salesInvoice.form.footerSection.paymentSummery.remarkPlaceHolder")}
-                                        onChange={(e) => setOtherChargRemark(e.target.value)}
+                                        onChange={(e) => { setOtherChargRemark(e.target.value); setUserHasChanged(true); }}
                                         onFocus={handleSelectAll}
                                     />
                                 </td>
                                 <td className="px-2 py-1 border-l border-themed dark:border-themed">
                                     <input
                                         type="number"
-                                        value={otherChargeAmt === '' || Number(otherChargeAmt) === 0 ? '' : Number(otherChargeAmt).toFixed(decimalPart)}
+                                        max={0}
+                                        onKeyDown={(e) => {
+                                            if(e.key === "-" || e.key === "+") e.preventDefault()
+                                        }}
+                                        // value={otherChargeAmt === '' || Number(otherChargeAmt) === 0 ? '' : Number(otherChargeAmt).toFixed(decimalPart)}
+                                        value = {otherChargeAmt}
                                         className="w-full bg-transparent text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none text-right"
-                                        onChange={(e) => setOtherChargAmt(e.target.value)}
+                                        onChange={(e) => { setOtherChargAmt(e.target.value); setUserHasChanged(true); }}
                                         onFocus={handleSelectAll}
+                                           disabled={Number(totals?.grandTotal) <= 0||!selectedLedger}
                                         placeholder={t("salesInvoice.form.footerSection.paymentSummery.amntPlaceholder")}
                                     />
                                 </td>
@@ -505,7 +585,7 @@ const PurchaseInvoiceFooterSection = ({
                                     <td className="px-2 py-1 border-l border-themed dark:border-themed">
                                         <select
                                             value={roundOffType}
-                                            onChange={(e) => setRoundOffType(e.target.value)}
+                                            onChange={(e) => { setRoundOffType(e.target.value); setUserHasChanged(true); }}
                                             className="w-full bg-primary dark:bg-secondary text-primary dark:text-primary focus:outline-none"
                                         >
                                             <option value="+">+</option>
@@ -519,12 +599,14 @@ const PurchaseInvoiceFooterSection = ({
                                             onChange={(e) => {
                                                 const val = e.target.value;
                                                 const roundOffDigits = generalSettings?.RoundOffDigit ?? 2;
-                                                const regex = new RegExp(`^\\d*(\\.\\d{0,${roundOffDigits}})?$`);   
+                                                const regex = new RegExp(`^\\d*(\\.\\d{0,${roundOffDigits}})?$`);
                                                 if (val === '' || regex.test(val)) {
                                                     setRoundOff(parseFloat(val) || 0);
+                                                    setUserHasChanged(true); // ← ADD
                                                 }
                                             }}
                                             onFocus={handleSelectAll}
+                                               disabled={Number(totals?.grandTotal) <= 0}
                                             step={Math.pow(10, -(generalSettings?.RoundOffDigit ?? 2))}
                                             className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                                         />

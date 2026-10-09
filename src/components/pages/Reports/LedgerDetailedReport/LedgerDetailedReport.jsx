@@ -21,8 +21,8 @@ const LedgerDetailedReport = () => {
   const [costCenterData, setCostCenterData] = useState([]);
   const [ledgerData, setLedgerData] = useState([]);
   const [userData, setUserData] = useState([]);
-  const { selectedBranchId, currentCurrency } = useAuth();
-  const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Detaied Ledger Report");
+  const { selectedBranchId, currentCurrency,selectedBranchDetails } = useAuth();
+  const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Detailed Ledger Report");
   const { generalSettings } = useSelector((state) => state.settings);
 
   // Use the unified export hook
@@ -73,8 +73,8 @@ const LedgerDetailedReport = () => {
             'Contra Voucher': `/transaction/contra-voucher/edit-contra-voucher/${row.MasterId}`,
             'Material Receipt': `/transaction/material-receipt/edit/${row.MasterId}`,
             'Delivery Note': `/transaction/delivery-note/edit-delivery-note/${row.MasterId}`,
-            'Payable': `/transaction/payable-voucher/edit/${row.MasterId}`,
-            'Receivable': `/transaction/receivable-voucher/edit/${row.MasterId}`,
+            'Payable Voucher': `/transaction/payable-voucher/edit/${row.MasterId}`,
+            'Receivable Voucher': `/transaction/receivable-voucher/edit/${row.MasterId}`,
             'Physical Stock': `/transaction/physical-stock/edit/${row.MasterId}`,
             'Damage Stock': `/transaction/damage-stock/edit/${row.MasterId}`,
         };
@@ -117,7 +117,7 @@ const LedgerDetailedReport = () => {
         fromDate: filters.fromDate,
         toDate: filters.toDate,
         ledgerId: filters.ledgerId || 0,
-        branchId: Number(selectedBranchId),
+        branchId:selectedBranchDetails?.mainBranch ? null :  Number(selectedBranchId),
         currencyId: currentCurrency?.currencyId || 30,
         ledgerName: filters.ledgerName || "",
         costCentreId: filters.costCentreId,
@@ -138,7 +138,7 @@ const LedgerDetailedReport = () => {
     }
   };
 
-  const reportDataWithBalance = useMemo(() => {
+ const reportDataWithBalance = useMemo(() => {
     if (!Array.isArray(reportData)) return [];
 
     let runningBalance = 0;
@@ -147,11 +147,12 @@ const LedgerDetailedReport = () => {
       const debit = Number(row.Debit) || 0;
       const credit = Number(row.Credit) || 0;
 
-      if (debit > 0) {
-        runningBalance += debit;
-      } else if (credit > 0) {
-        runningBalance -= credit;
-      }
+      // FIX: net debit and credit together instead of treating them
+      // as independent conditions. Previously, if a row had BOTH a
+      // debit and a credit (e.g. 7447.40 / 7447.40), only the debit
+      // branch fired (due to else if), so the credit was never
+      // subtracted — inflating the running balance.
+      runningBalance += (debit - credit);
 
       const isCrDr = generalSettings?.AccountCalculationMethod === "CrDr";
       const amount = Math.abs(runningBalance).toFixed(generalSettings?.decimalPart || 2);
@@ -169,7 +170,6 @@ const LedgerDetailedReport = () => {
       };
     });
   }, [reportData, generalSettings?.decimalPart, generalSettings?.AccountCalculationMethod]);
-
   const { totalCrAmount, totalDrAmount } = useMemo(() => {
     if (!reportData || !Array.isArray(reportData)) {
       return { totalCrAmount: 0, totalDrAmount: 0 };

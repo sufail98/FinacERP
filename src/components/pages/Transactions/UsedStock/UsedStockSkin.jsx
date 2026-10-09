@@ -1,7 +1,7 @@
 import BreadCrumb from '@/components/common/BreadCrumb';
 import { Eraser, PackageCheck, Pencil, SaveAll, SquarePen, Table } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
@@ -13,8 +13,17 @@ import TextInput from '@/components/elements/theme/TextInput';
 import DamageStockTable from './UsedStockTable';
 import DateInput from '@/components/elements/theme/DateInput';
 import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+
+import { Checkbox } from '@/components/ui/checkbox';
+import { showToast } from '@/utils/toast';
+import PrintDropdown from '@/components/common/PrintDropdown';
+import printUsedStock, { saveUsedStockAsPDF } from '../../../../utils/prints/usedStockPrints/usedStockPrintOne';
 
 const UsedStockSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Used Stock");
+
     const { usedStockId } = useParams();
     const editMode = Boolean(usedStockId);
     const [fetchLoading, setFetchLoading] = useState(false);
@@ -24,10 +33,15 @@ const UsedStockSkin = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [voucherId, setVoucherId] = useState('');
     const [alert, setAlert] = useState(null);
-    const { userId, selectedBranchId, currentFinancialYear } = useAuth();
+    const { userId, selectedBranchId, currentFinancialYear, currentCurrency, selectedBranchDetails } = useAuth();
+    const [isPrinting, setIsPrinting] = useState(false);
+    const { inventoryProducts: allProducts } = useSelector((state) => state.products);
     const [time, setTime] = useState("");
     const { generalSettings, saleSettings } = useSelector((state) => state.settings);
     const [resetTableKey, setResetTableKey] = useState(0);
+    const [baseDataloading, setBaseDataloading] = useState(false);
+    const [godowns, setGodowns] = useState([])
+
 
     useEffect(() => {
         const updateTime = () => {
@@ -53,6 +67,7 @@ const UsedStockSkin = () => {
         RefDate: null,
         narration: "",
         totalAmount: 0,
+        printAfterSave: saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : true,
         postedStatus: generalSettings?.AccountPosting ? "No" : "Yes",
         postedBy: generalSettings?.AccountPosting ? null : userId,
         postedDate: generalSettings?.AccountPosting ? null : new Date(),
@@ -60,7 +75,40 @@ const UsedStockSkin = () => {
         CreatedUser: userId,
         usedStockDetails: []
     });
+    useEffect(() => {
+        const getSalesRequiredData = async () => {
+            setBaseDataloading(true)
+            try {
+                const res = await axiosInstance.post('all-inventory-data', {
+                    voucherType: "Used Stock",
+                    branchId: selectedBranchId,
+                    yearId: currentFinancialYear.yearId,
+                    ledgerTypes: ["Supplier", "Customer&Supplier"],
+                    ledgerId: formData.ledgerId,
+                    currencyId: currentCurrency?.currencyId
+                })
+                const data = res?.data?.data;
 
+                setVoucherId(data?.voucherdata?.voucherCode)
+                setGodowns(data?.godowns)
+                setFormData((prev) => {
+                    const defaultGodown = data?.godowns?.find(g => g.IsDefault);
+
+                    return {
+                        ...prev,
+                        GodownId: defaultGodown
+                            ? defaultGodown.GodownId
+                            : data?.godowns?.[0]?.GodownId || 1,
+                    };
+                });
+            } catch (error) {
+                console.error('error fetching default data', error)
+            } finally {
+                setBaseDataloading(false)
+            }
+        }
+        getSalesRequiredData()
+    }, [])
     const handleListNavigate = async () => {
         if (generalSettings?.askConfirmationClose) {
             const result = await Swal.fire({
@@ -116,6 +164,7 @@ const UsedStockSkin = () => {
             yearId: currentFinancialYear?.yearId,
             date: new Date(),
             RefNo: "",
+            printAfterSave: saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : true,
             RefDate: null,
             suffixPrefixId: prev.suffixPrefixId, // ✅ preserve from generateUsedStockId
             narration: "",
@@ -134,6 +183,27 @@ const UsedStockSkin = () => {
             getUsedStockById();
         }
     }, [editMode,]);
+
+    const buildStockDataForPrint = useCallback((voucherNumber, overrideData) => {
+        const base = overrideData || formData;
+        return {
+            voucherNo: editMode ? existingVoucherNo : voucherNumber,
+            date: base.date,
+            narration: base.narration,
+            stockDetails: (base.usedStockDetails || []).map(item => {
+                const matchedProduct = allProducts?.find(
+                    p => String(p.productCode) === String(item.productCode)
+                );
+                return {
+                    barcode: item.barcode || item.productDetails?.barcode || matchedProduct?.barcode || '',
+                    productName: matchedProduct?.productName || item.productName || '',
+                    qty: item.qty ?? 0,
+                    rate: item.rate ?? 0,
+                    amount: item.amount ?? ((item.qty || 0) * (item.rate || 0)),
+                };
+            }),
+        };
+    }, [formData, editMode, existingVoucherNo, allProducts]);
 
 
     const getUsedStockById = async () => {
@@ -156,7 +226,7 @@ const UsedStockSkin = () => {
                         mrp: '',
                         purchase: item.PurchaseRate || '',
                         productDescription: item.productDescription || '',
-                        UnitName: ''
+                        UnitName: '',
                     };
 
                     // Fetch product details
@@ -195,6 +265,7 @@ const UsedStockSkin = () => {
                         unitId: item.unitId,
                         ConversionFactor: item.ConversionFactor,
                         barcode: item.barcode,
+                        baseUnitId: item.baseUnitId || item.baseUnitId || null,
                         netAmount: parseFloat(item.netAmount) || 0,
                         amount: parseFloat(item.amount) || 0,
                         productDescription: item.productDescription,
@@ -283,6 +354,46 @@ const UsedStockSkin = () => {
         return errors;
     };
 
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const stockDataForPrint = buildStockDataForPrint(existingVoucherNo, formData);
+            await printUsedStock(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+        } catch (error) {
+            console.error('Error reprinting used stock:', error);
+            showToast.error('Failed to print');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, buildStockDataForPrint, existingVoucherNo, formData, selectedBranchDetails, time, currentCurrency]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const stockDataForPrint = buildStockDataForPrint(existingVoucherNo, formData);
+            await saveUsedStockAsPDF(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+        } catch (error) {
+            console.error('Error saving PDF for used stock:', error);
+            showToast.error('Failed to save PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [buildStockDataForPrint, existingVoucherNo, formData, selectedBranchDetails, time, currentCurrency]);
+
     const handleSave = useCallback(async () => {
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
@@ -335,11 +446,35 @@ const UsedStockSkin = () => {
 
             if (!response.data.error) {
                 setAlert({ id: Date.now(), type: "success", message: t("saveSuccess") });
+
+                const savedVoucherNo = response?.data?.data?.voucherNo || response?.data?.data?.usedStockNo || voucherId;
+                const stockDataForPrint = buildStockDataForPrint(savedVoucherNo, response?.data?.data || formData);
+
+                if (formData?.printAfterSave) {
+                    printUsedStock(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+                } else {
+                    const pdfResult = await Swal.fire({
+                        title: t('Print as PDF?') || 'Print as PDF?',
+                        text: t('Do you want to download this as a PDF?') || 'Do you want to download this as a PDF?',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
+                        cancelButtonText: t('No, Just Save') || 'No, Just Save',
+                    });
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            saveUsedStockAsPDF(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+                        }, 500);
+                    }
+                }
+
                 if (saleSettings?.CloseAfterSave) {
                     navigate('/transaction/used-stock/list');
                 }
-                await generateUsedStockId(); // ✅ await first so suffixPrefixId is set
-                await clearForm(true);       // ✅ then clear — suffixPrefixId stays from above
+                await generateUsedStockId();
+                await clearForm(true);
             }
         } catch (error) {
             console.error('Error saving Used Stock:', error);
@@ -351,22 +486,40 @@ const UsedStockSkin = () => {
         } finally {
             setIsSaving(false);
         }
-    }, [formData, generalSettings, editMode]);
+    }, [formData, generalSettings, editMode, buildStockDataForPrint, selectedBranchDetails, time, currentCurrency, voucherId]);
+
+    const ctrlSPressed = useRef(false);
 
     useEffect(() => {
+        if (editMode) return;
+
         const handleKeyDown = (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
                 e.preventDefault();
+
+                if (ctrlSPressed.current) return;
+
+                ctrlSPressed.current = true;
                 handleSave();
             }
         };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [handleSave]);
 
-    if (fetchLoading || voucherNoGenarating) {
+        const handleKeyUp = (e) => {
+            if (e.key.toLowerCase() === "s") {
+                ctrlSPressed.current = false;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+        };
+    }, [handleSave, editMode]);
+
+    if (fetchLoading || voucherNoGenarating || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary ">
                 <BreadCrumb
@@ -399,6 +552,7 @@ const UsedStockSkin = () => {
             [name]: value
         }));
     };
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary">
@@ -412,6 +566,32 @@ const UsedStockSkin = () => {
                     icon: PackageCheck,
                     title: editMode ? t("usedStock.breadcrumb.editTitle") : t("usedStock.breadcrumb.title")
                 }}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="printAfterSaveUsedStock"
+                                checked={formData.printAfterSave || false}
+                                onCheckedChange={(value) =>
+                                    setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                }
+                            />
+                            <label
+                                htmlFor="printAfterSaveUsedStock"
+                                className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                            >
+                                {t("Direct Print") || "Print After Save"}
+                            </label>
+                        </div>
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
                 actions={[
                     {
                         label: t("listBtn"),

@@ -16,8 +16,12 @@ import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
 import ManufacturingJournalTable from './ManufacturingJournalTable';
 import PopupPreloader from '@/components/common/PopupPreloader';
 import { showToast } from '@/utils/toast';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
 
 const ManufacturingJournalSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Manufacturing Journal");
+
     const { journalId } = useParams();
     const editMode = Boolean(journalId);
     const [fetchLoading, setFetchLoading] = useState(false);
@@ -39,8 +43,6 @@ const ManufacturingJournalSkin = () => {
     const orderDetails = state?.orderDetails || null          // array of items
     const orderMasterId = state?.orderMasterId || null
     const fromOrderSummeryPage = state?.fromOrderSummary || false;
-
-
 
     // BOM
     const [bomProducts, setBomProducts] = useState([]);
@@ -86,6 +88,7 @@ const ManufacturingJournalSkin = () => {
                 amount: 0,
                 godownId: '',
                 rackId: 1,
+                category: item?.category,
                 // Pre-fill materials from BOM if available, otherwise empty
                 materials: bom
                     ? (bom.bomDetails || []).map((bd) => ({
@@ -154,6 +157,7 @@ const ManufacturingJournalSkin = () => {
         GodownId: '',
         productCode: '',
         quantity: 1,
+        category: null,
         unitId: null,
         details: [],
     });
@@ -194,6 +198,7 @@ const ManufacturingJournalSkin = () => {
 
                 setVoucherId(inventoryRes?.data?.data?.voucherdata?.voucherCode || '');
                 setGodowns(inventoryRes?.data?.data?.godowns || []);
+
                 setFormData((prev) => {
                     const defaultGodown = inventoryRes?.data?.data?.godowns?.find(g => g.IsDefault);
 
@@ -252,6 +257,7 @@ const ManufacturingJournalSkin = () => {
                         amount: parseFloat(m.amount) || 0,
                         godownId: m.godownId || '',
                         rackId: m.rackId || 1,
+                        category: m.category || null
                     };
                 });
 
@@ -268,6 +274,7 @@ const ManufacturingJournalSkin = () => {
                     amount: mappedMaterials.reduce((s, m) => s + m.amount, 0),
                     godownId: '',
                     rackId: 1,
+                    category: item?.category,
                     materials: mappedMaterials,
                 };
             });
@@ -421,6 +428,9 @@ const ManufacturingJournalSkin = () => {
                     conversionRate: d.conversionRate ?? 1,
                     baseUnitId: d.baseUnitId ?? null,   // ← ADD
                     narration: d.narration,
+                    category: d.category ?? null,
+                    ModifiedUser: editMode ? userId : null,
+                    ModifiedDate: editMode ? formatDateWithTime(new Date()) : null,
                     materials: (d.materials || []).map((m) => ({
                         productCode: m.productCode,
                         quantity: m.quantity,
@@ -429,6 +439,7 @@ const ManufacturingJournalSkin = () => {
                         baseUnitId: m.baseUnitId ?? null,   // ← ADD
                         rate: m.rate,
                         amount: m.amount,
+                        category: m.category || null,
                         godownId: m.godownId || formData.GodownId || null,
                         rackId: m.rackId || 1,
                     })),
@@ -497,6 +508,7 @@ const ManufacturingJournalSkin = () => {
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary">

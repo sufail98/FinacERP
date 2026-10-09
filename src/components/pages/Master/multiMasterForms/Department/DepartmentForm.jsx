@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import TextInput from "@/components/elements/theme/TextInput";
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
+import { sanitize } from "@/lib/inputSanitizer";
 
 const DepartmentForm = ({ open, handleClose, onSuccess, selectedId }) => {
     const { t } = useTranslation();
@@ -64,10 +65,13 @@ const DepartmentForm = ({ open, handleClose, onSuccess, selectedId }) => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-
+        let updatedValue = value
+        if(["departmentName"].includes(name)){
+            updatedValue = sanitize.alphaNumericSpace(value)
+        }
         setFormData((prev) => ({
             ...prev,
-            [name]: value,
+            [name]: updatedValue,
         }));
 
         if (errorMsg) setErrorMsg(null);

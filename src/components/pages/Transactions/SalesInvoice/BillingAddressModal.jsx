@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import TextInput from "@/components/elements/theme/TextInput";
 import TextArea from "@/components/elements/theme/TextArea";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const BillingAddressModal = ({ open, handleClose, onSave, billingData }) => {
     const { t } = useTranslation();
@@ -34,9 +35,16 @@ const BillingAddressModal = ({ open, handleClose, onSave, billingData }) => {
     // Input handler
     const handleInputChange = (e) => {
         const { name, value } = e.target;
+        let updatedValue = value
+        if(["name"].includes(name)){
+            updatedValue = sanitize.alphaNumericSpace(value)
+        }
+        if(["phoneNo","vatNo"].includes(name)){
+            updatedValue= sanitize.numbers(value)
+        }
         setFormData((prev) => ({
             ...prev,
-            [name]: value,
+            [name]: updatedValue,
         }));
     };
 
@@ -81,6 +89,8 @@ const BillingAddressModal = ({ open, handleClose, onSave, billingData }) => {
                     />
                     <TextInput
                         name="phoneNo"
+                        type = "text"
+                        maxLength = {10}
                         label="Phone Number"
                         value={formData.phoneNo}
                         onChange={handleInputChange}

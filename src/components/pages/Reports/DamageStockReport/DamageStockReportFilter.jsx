@@ -25,6 +25,7 @@ const DamageStockReportFilter = ({
                         name="fromDate"
                         value={filters.fromDate}
                         onChange={(e, value) => onFilterChange('fromDate', value)}
+                        max={new Date().toISOString().split(("T")[0])}
                         required
                         className='w-full'
                     />

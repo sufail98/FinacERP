@@ -39,10 +39,9 @@ const customRoundDecimal = (value, decimalPart) => {
 
 
 
-const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows, otherChargeLedgers }) => {
+const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows, otherChargeLedgers, taxData }) => {
     const [inputValues, setInputValues] = useState({});
     const { t } = useTranslation();
-    const [taxData, setTaxData] = useState([]);
     const [editProductModalOpen, setEditProductModalOpen] = useState(false);
     const [selectedProductCode, setSelectedProductCode] = useState(null);
     const { selectedBranchId } = useAuth();
@@ -68,7 +67,7 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
     const [isUpdatingFromDuplicate, setIsUpdatingFromDuplicate] = useState(false);
     const [pendingFocusRowId, setPendingFocusRowId] = useState(null);
     const [pendingFocusField, setPendingFocusField] = useState('qty');
-
+    const [selectedRowIdForEdit, setSelectedRowIdForEdit] = useState(null);
     const dispatch = useDispatch();
 
     const [focusedRowId, setFocusedRowId] = useState(null);
@@ -316,10 +315,6 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
             }));
         }
     });
-
-    useEffect(() => {
-        fetchTaxData();
-    }, []);
 
     useEffect(() => {
         if (formData.invoiceDetails && formData.invoiceDetails.length > 0) {
@@ -809,8 +804,8 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
             productNameArb: row.productNameArb || '',
             qty: row.qty || null,
             freeQty: row.freeQty || null,
-            rate: row.salesRateWithoutTax ? parseFloat(Number(row.salesRateWithoutTax).toFixed(4)) : null,
-            inclusiveRate: row.salesRate ? parseFloat(Number(row.salesRate).toFixed(2)) : null,
+            rate: row.salesRateWithoutTax ? parseFloat(Number(row.salesRateWithoutTax)) : null,
+            inclusiveRate: row.salesRate ? parseFloat(Number(row.salesRate)) : null,
             lineDiscountWithTax: row.lineDiscountWithTax || null,
             unitId: row.unit || null,
             unitName: row.productDetails?.UnitName || '',
@@ -935,6 +930,7 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                     const currentRow = rows.find(r => r.id === focusedRowId);
                     if (currentRow?.productCode) {
                         setSelectedProductCode(currentRow.productDetails?.productCode || currentRow.productCode);
+                        setSelectedRowIdForEdit(currentRow.id);
                         setEditProductModalOpen(true);
                     }
                 }
@@ -946,14 +942,6 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
     }, [focusedRowId, rows]);
 
 
-    const fetchTaxData = async () => {
-        try {
-            const res = await axiosInstance.get("tax-masters");
-            setTaxData(res.data.data || []);
-        } catch (err) {
-            console.error("Error fetching tax:", err);
-        }
-    };
 
     const calculateRow = (row, updatedField = null) => {
         let gross, descAmt, netValue, taxAmt = 0, amount, descPercentage, salesRateWithoutTax = 0;
@@ -973,27 +961,25 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                 return calculateRow({ ...row, salesRate: beforeTaxRate });
             }
 
-            const derivedSalesRate = generalSettings?.taxincluded === true
-                ? beforeTaxRate * taxMultiplier
-                : beforeTaxRate;
+            // beforeTax is always ex-tax, so always multiply up to get inclusive rate
+            const derivedSalesRate = Math.round(beforeTaxRate * taxMultiplier * 1e10) / 1e10;
 
-            return calculateRow({ ...row, salesRate: parseFloat(derivedSalesRate) });
+            return calculateRow({ ...row, salesRate: derivedSalesRate });
         }
-        // ← FIX: use stored salesRateWithoutTax when available,
-        //         back-calculate only when user is editing salesRate directly
-        // REPLACE the rateWithoutTax block in calculateRow
 
-        const rateWithoutTax = (row.salesRateWithoutTax && safeParsePrice(row.salesRateWithoutTax) > 0 && updatedField !== 'salesRate' && updatedField !== 'beforeTax')
+        const rateWithoutTax = (safeParsePrice(row.salesRateWithoutTax) > 0
+            && updatedField !== 'salesRate'
+            && updatedField !== 'beforeTax'
+            && updatedField !== 'amount')
             ? safeParsePrice(row.salesRateWithoutTax)
             : (!taxApplicable || taxMultiplier === 0)
                 ? salesRate
-                : (salesRate * 100) / (100 + taxPercentage);
+                : parseFloat(((salesRate * 100) / (100 + taxPercentage)));
 
         salesRateWithoutTax = safeParsePrice(rateWithoutTax);
-        salesRateWithoutTax = safeParsePrice(rateWithoutTax);
+
         if (updatedField === 'amount') {
             const inputAmount = parseFloat(row.amount) || 0;
-
             if (qty <= 0) return row;
 
             const existingDescAmt = parseFloat(row.descAmt) || 0;
@@ -1020,16 +1006,17 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                 return {
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRate: parseFloat(calculatedSalesRate.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                    salesRate: parseFloat(calculatedSalesRate),
+                    // ✅ FIX: use freshly computed rateWithoutTaxCalc, not the stale outer rateWithoutTax
+                    salesRateWithoutTax: Math.round(rateWithoutTaxCalc * 1e10) / 1e10,
                     grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
-                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2))
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
-
             } else {
                 const netValueAfterBillDisc = inputAmount / taxMultiplier;
                 const netValueBeforeBillDisc = netValueAfterBillDisc + billDiscOnProduct - otherChargeOnProduct;
@@ -1042,25 +1029,28 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
 
                 netValue = netValueBeforeBillDisc;
                 gross = netValue + existingDescAmt;
-
-                netValue = netValueAfterBillDisc + billDiscOnProduct;
-                gross = netValue + existingDescAmt;
-                const calculatedSalesRate = qty > 0 ? gross / qty : 0;
-                salesRateWithoutTax = calculatedSalesRate;
                 descPercentage = gross > 0 ? (existingDescAmt / gross) * 100 : 0;
+
+                // ✅ FIX: name honestly as the ex-tax rate, derive the inclusive rate from it
+                const calculatedRateWithoutTax = qty > 0 ? gross / qty : 0;
+                const calculatedSalesRate = calculatedRateWithoutTax * taxMultiplier;
+                salesRateWithoutTax = calculatedRateWithoutTax;
 
                 return {
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRate: parseFloat(calculatedSalesRate.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                    // ✅ FIX: salesRate is now truly the inclusive rate
+                    salesRate: parseFloat(calculatedSalesRate),
+                    // ✅ FIX: use the freshly computed ex-tax rate, not the stale outer one
+                    salesRateWithoutTax: Math.round(calculatedRateWithoutTax * 1e10) / 1e10,
                     grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
                     billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
-                    otherchargeonproduct: parseFloat((parseFloat(row.otherchargeonproduct || 0)).toFixed(generalSettings?.decimalPart || 2)),
+                    otherchargeonproduct: parseFloat(otherChargeOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
             }
         }
@@ -1087,7 +1077,6 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
             }
 
             amount = netValueAfterBillDisc + taxAmt;
-
         } else {
             if (updatedField === 'descAmt') {
                 descAmt = parseFloat(row.descAmt) || 0;
@@ -1107,7 +1096,6 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
             }
 
             amount = netValueAfterBillDisc + taxAmt;
-            amount = netValueAfterBillDisc + taxAmt + otherChargeOnProduct;
         }
 
         return {
@@ -1118,12 +1106,12 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
             taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
             amount: parseFloat(amount.toFixed(generalSettings?.decimalPart || 2)),
             descAmt: parseFloat(descAmt.toFixed(generalSettings?.decimalPart || 2)),
-            salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+            salesRateWithoutTax: Math.round(rateWithoutTax * 1e10) / 1e10,
             billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
-            otherchargeonproduct: parseFloat((parseFloat(row.otherchargeonproduct || 0)).toFixed(generalSettings?.decimalPart || 2)),
+            otherchargeonproduct: parseFloat(otherChargeOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+            lineDiscountWithTax: taxApplicable ? parseFloat((descAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
         };
     };
-
     const scrollSuggestionIntoView = (rowId, index) => {
         setTimeout(() => {
             const suggestionElement = document.querySelector(
@@ -1340,8 +1328,8 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                         availableUnits: product.units || [],
                         unit: selectedUnitId || product.unitId || row.unit,
                         baseunitId: product.baseunitId || null,
-                        salesRate: safeParsePrice(salesRate.toFixed(generalSettings?.decimalPart || 2)),
-                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                        salesRate: safeParsePrice(salesRate),
+                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax),
                         taxId: defaultTax?.taxId || null,
                         tax: taxRate,
                         taxRate: taxRate,
@@ -1549,8 +1537,8 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                         availableUnits: product.units || [],
                         unit: product.unitId || row.unit,
                         baseunitId: product.baseunitId || null,
-                        salesRate: safeParsePrice(salesRate.toFixed(generalSettings?.decimalPart || 2)),
-                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                        salesRate: safeParsePrice(salesRate),
+                        salesRateWithoutTax: safeParsePrice(salesRateWithoutTax),
                         taxId: defaultTax?.taxId || null,
                         tax: taxRate,
                         taxRate: taxRate,
@@ -1646,22 +1634,13 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
         }
     };
 
-    const handleProductUpdate = (productCode, updatedDescription) => {
-        setRows(prevRows =>
-            prevRows.map(row =>
-                row.productDetails.productCode === productCode
-                    ? {
-                        ...row,
-                        productDetails: {
-                            ...row.productDetails,
-                            productDescription: updatedDescription
-                        }
-                    }
-                    : row
-            )
-        );
+    const handleProductUpdate = (rowId, updatedDescription) => {
+        setRows(prevRows => prevRows.map(row =>
+            row.id === rowId
+                ? { ...row, productDetails: { ...row.productDetails, productDescription: updatedDescription } }
+                : row
+        ));
     };
-
     useEffect(() => {
         if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
             const suggestionContainer = suggestionRef.current;
@@ -2231,7 +2210,11 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                                                     {saleSettings.showProductDescription && (
                                                         <div className='cursor-pointer'>
                                                             <EllipsisVertical
-                                                                onClick={() => { setSelectedProductCode(row.productDetails.productCode); setEditProductModalOpen(true); }}
+                                                                onClick={() => {
+                                                                    setSelectedProductCode(row.productDetails.productCode);
+                                                                    setSelectedRowIdForEdit(row.id);
+                                                                    setEditProductModalOpen(true);
+                                                                }}
                                                                 className="text-secondary dark:text-secondary"
                                                             />
                                                         </div>
@@ -2391,7 +2374,7 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                                                 value={
                                                     inputValues[`${row.id}-beforeTax`] !== undefined
                                                         ? inputValues[`${row.id}-beforeTax`]
-                                                        : Number(row.salesRateWithoutTax).toFixed(4)  // ← 4 decimal places
+                                                        : Number(row.salesRateWithoutTax)  // ← 4 decimal places
                                                 }
                                                 onFocus={(e) => {
                                                     // handleInputFocus(row.id);
@@ -2434,7 +2417,7 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                                                     }}
                                                     value={inputValues[`${row.id}-salesRate`] !== undefined
                                                         ? inputValues[`${row.id}-salesRate`]
-                                                        : Number(row.salesRate).toFixed(2)}  // ← 2 decimal places
+                                                        : Number(row.salesRate)}  // ← 2 decimal places
                                                     onKeyDown={(e) => {
                                                         if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                                                             handleKeyDown(e, row.id, 'salesRate');
@@ -2452,7 +2435,7 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                                                         handleInputChange(row.id, 'salesRate', numValue || 0);
                                                     }}
                                                     onBlur={(e) => {
-                                                        const value = customRoundDecimal(e.target.value, 2);
+                                                        const value = e.target.value;
                                                         const validation = validateSalesPrice(value, row);
 
                                                         // Handle based on action type
@@ -2588,8 +2571,13 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                                                                 const valid = raw.split('.').length > 2
                                                                     ? raw.slice(0, raw.lastIndexOf('.'))
                                                                     : raw;
-                                                                setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: valid }));
-                                                                handleLineDiscWithTaxChange(row.id, valid);
+
+                                                                const grossWithTax = safeParsePrice(row.qty) * safeParsePrice(row.salesRate);
+                                                                let num = safeParsePrice(valid);
+                                                                if (num > grossWithTax) num = grossWithTax;
+                                                                const finalValue = num.toString();
+                                                                setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: finalValue }));
+                                                                handleLineDiscWithTaxChange(row.id, finalValue);
                                                             }}
                                                             onBlur={(e) => {
                                                                 handleLineDiscWithTaxChange(row.id, safeParsePrice(e.target.value));
@@ -2661,9 +2649,9 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                                                         className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded"
                                                     >
                                                         <option value="" disabled>Select</option>
-                                                        {(row.salesTaxes && row.salesTaxes.length > 0 ? row.salesTaxes : taxData)?.map((tax) => (
-                                                            <option value={String(tax.taxId)} key={tax.taxId}>
-                                                                {tax.taxName || tax.rate}
+                                                        {(row?.salesTaxes && row?.salesTaxes?.length > 0 ? row?.salesTaxes : taxData)?.map((tax) => (
+                                                            <option value={String(tax?.taxId)} key={tax?.taxId}>
+                                                                {tax?.taxName || tax?.rate}
                                                             </option>
                                                         ))}
                                                     </select>
@@ -2772,7 +2760,7 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                                 <div className="w-px bg-gray-300 dark:bg-gray-600" />
                                 <div className="flex flex-col items-end gap-0.5">
                                     <span className="text-muted dark:text-muted font-medium">
-                                        {isLoss ? 'Loss' : 'Profit'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                        {isLoss ? 'Loss' : 'Pf value'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                                             {profit.toFixed(generalSettings?.decimalPart || 2)}
                                         </span>
                                         <span className={`text-xs ${isLoss ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`}>
@@ -2814,14 +2802,15 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
                 open={editProductModalOpen}
                 handleClose={() => {
                     setEditProductModalOpen(false);
+                    setSelectedRowIdForEdit(null);
                     if (focusedRowId) focusInput(focusedRowId, 'productName');
                 }}
                 productCode={selectedProductCode}
                 initialDescription={
-                    rows.find(r => r.productDetails?.productCode === selectedProductCode)
+                    rows.find(r => r.id === selectedRowIdForEdit)
                         ?.productDetails?.productDescription || ''
                 }
-                onSuccess={(updatedDescription) => handleProductUpdate(selectedProductCode, updatedDescription)}
+                onSuccess={(updatedDescription) => handleProductUpdate(selectedRowIdForEdit, updatedDescription)}
             />
             <ProformaInvoiceFooterSection
                 totals={totals}
@@ -2848,61 +2837,3 @@ const ProformaInvoiceTable = ({ formData, setFormData, editMode, rows: propRows,
 };
 
 export default ProformaInvoiceTable;
-
-ProformaInvoiceTable.propTypes = {
-    formData: PropTypes.shape({
-        employeeId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        GodownId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        pricingLevelId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        invoiceDetails: PropTypes.arrayOf(PropTypes.object),
-        taxableAmt: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        subTotal: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        totalTax: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        totalAmount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        totalDiscount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    }).isRequired,
-
-    setFormData: PropTypes.func.isRequired,
-
-    editMode: PropTypes.bool,
-
-    rows: PropTypes.arrayOf(
-        PropTypes.shape({
-            productName: PropTypes.string,
-            productCode: PropTypes.string,
-            deliveryNoteDetails1Id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            orderDetails1Id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            quotationDetailsId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            proformaDetails1Id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            PurchaseRate: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            qty: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            freeQty: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            unitId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            rate: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            Size: PropTypes.string,
-            discountPercentage: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            netAmount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            taxId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            taxAmount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            amount: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            taxType: PropTypes.string,
-            salesManId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            GodownId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-            barcode: PropTypes.string,
-            productDescription: PropTypes.string,
-            availableUnits: PropTypes.arrayOf(
-                PropTypes.shape({
-                    unitId: PropTypes.number,
-                    unitName: PropTypes.string,
-                    salesPrice: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-                    barcode: PropTypes.string,
-                })
-            ),
-        })
-    ),
-};
-
-ProformaInvoiceTable.defaultProps = {
-    editMode: false,
-    rows: [],
-};

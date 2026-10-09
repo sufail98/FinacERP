@@ -2,7 +2,7 @@ import BreadCrumb from '@/components/common/BreadCrumb';
 import { Archive, ArchiveRestore, Eraser, Loader2, Pencil, ReceiptText, SaveAll, SquarePen, Table } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import FormSectionMain from './FormSectionMain';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
@@ -14,15 +14,26 @@ import useFormValidation from '@/lib/hooks/useFormValidation';
 import SalesReturnInvoicePrintOne, { generateQRCodeData } from '@/utils/prints/salesReturnPrints/SalesReturnInvoicePrintOne';
 import salesReturnThermalPrintOne from '@/utils/prints/salesReturnPrints/thermal/salesReturnThermalPrintOne';
 import PrintDropdown from '@/components/common/PrintDropdown';
+import LogismartInvoicereturnPrint from '@/utils/prints/salesReturnPrints/LogismartInvoicereturnPrint';
 import { Checkbox } from '@/components/ui/checkbox';
 import axios from 'axios';
 import { showToast } from '@/utils/toast';
 import PopupPreloader from '@/components/common/PopupPreloader';
+import HelpShortcuts from '@/components/common/HelpShortcuts';
 import { formatDateWithTime } from '@/lib/dateFormat';
 import salesReturnInvoicePrintTwo from '@/utils/prints/salesReturnPrints/salesReturnInvoicePrintTwo';
 import salesReturnInvoicePrintThree from '@/utils/prints/salesReturnPrints/salesReturnInvoicePrintThree';
+import salesReturnInvoicePrintFour from '@/utils/prints/salesReturnPrints/withoutQR/SalesReturnInvoicePrintfour';
+import salesReturnThermalPrintTwo from '@/utils/prints/salesReturnPrints/thermal/salesReturnThermalPrintTwo';
+import { isElectron } from '@/utils/electronPrint';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import { preconnect } from 'react-dom';
 
 const SalesReturnSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Sales Return");
+
+    const [isPrinting, setIsPrinting] = useState(false);
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
     const { returnMasterId } = useParams();
     const editMode = Boolean(returnMasterId);
@@ -49,7 +60,8 @@ const SalesReturnSkin = () => {
     const invoicePrintConfig = printSettings?.["Sales Return"]?.default || Object.values(printSettings?.["Sales Return"]?.types || {})[0];
     const [resetTableKey, setResetTableKey] = useState(0);
     const [voucherNoGenarating, setVoucherNumberGenarating] = useState(false)
-
+    // add near other useState hooks
+    const [helpOpen, setHelpOpen] = useState(false);
     const [cash, setCash] = useState([])
     const [bank, setBank] = useState([])
     const [salesAccount, setSalesAccount] = useState([]);
@@ -58,6 +70,7 @@ const SalesReturnSkin = () => {
     const [shippingAdderess, setShippingAddress] = useState(null);
     const [billingAddress, setBlillingAddress] = useState(null);
     const [taxData, setTaxData] = useState([])
+    const [updateCustomerId, setUpdateCustomerId] = useState(null);
 
     // ===== HOLD INVOICE STATE =====
     const [heldInvoices, setHeldInvoices] = useState([]);
@@ -151,7 +164,7 @@ const SalesReturnSkin = () => {
             try {
                 const res = await axiosInstance.post('all-sales-data', {
                     voucherType: "Sales Return", branchId: selectedBranchId,
-                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Customer"],
+                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Customer", "Customer&Supplier"],
                     ledgerId: formData.ledgerId, currencyId: currentCurrency.currencyId
                 })
                 const data = res?.data?.data
@@ -164,7 +177,7 @@ const SalesReturnSkin = () => {
                 setCustomers(data?.customersupplierLedgers)
                 setCostCenters(data?.costcentre)
                 setCurrentLedgerBalance(data?.LedgerBalance.currentbal)
-
+                setUpdateCustomerId(financeSettings.defaultSalesAccount || null)
                 const filteredCurrencies = data?.currencywithConversion?.filter(
                     c => c.branchid_conversion == selectedBranchId
                 ) || [];
@@ -211,6 +224,9 @@ const SalesReturnSkin = () => {
                     customercreditLimit: data?.customeraddress?.creditLimit || '',
                     customerCreditlimitStatus: data?.customeraddress?.creditLimitStatus || 'Ignore',
                 }));
+                if (editMode) {
+                    getSalesById(data?.taxMaster)
+                }
             } catch (error) {
                 console.error('error fetching default data', error)
             } finally {
@@ -239,13 +255,14 @@ const SalesReturnSkin = () => {
     };
 
     useEffect(() => {
+
         setFormData(prev => ({
             ...prev,
-            CashLedgerId: financeSettings?.DefaultCashAccount,
-            BankLedgerId: financeSettings?.DefaultBankAccount,
+            CashLedgerId: financeSettings?.DefaultCashAccount || cash[0]?.ledgerId,
+            BankLedgerId: financeSettings?.DefaultBankAccount || bank[0]?.ledgerId,
             paymentMode: saleSettings?.DefaultPaymentMode,
         }));
-    }, [financeSettings, saleSettings])
+    }, [financeSettings, saleSettings, cash, bank])
 
     const clearForm = async (skipConfirmation = false) => {
         skipConfirmation = skipConfirmation === true;
@@ -286,7 +303,8 @@ const SalesReturnSkin = () => {
             AdjustmentAmount: "", AdvancePerc: "",
             RetentionLedgerId: "", RetentionType: "", RetentionDueDate: "",
             RetentionPercentage: "", RetentionAmount: "",
-            paymentMode: "cash", CashLedgerId: financeSettings?.DefaultCashAccount || '', CashRefNo: "", CashAmount: 0,
+            paymentMode: "cash", CashLedgerId: financeSettings?.DefaultCashAccount || '',
+            CashRefNo: "", CashAmount: 0,
             BankLedgerId: financeSettings?.DefaultBankAccount || null, BankRefNo: "", BankAmount: 0, BillBalanceAmount: 0,
             CarMake: "", CarModel: "", Kilometer: "", NextService: "",
             VehicleInTime: "", VehicleOutTime: "",
@@ -393,13 +411,14 @@ const SalesReturnSkin = () => {
         }
     };
 
-    useEffect(() => { if (editMode) getSalesById(); }, [editMode])
+    // useEffect(() => { if (editMode) getSalesById(); }, [editMode])
 
-    const getSalesById = async () => {
+    const getSalesById = async (taxMaster) => {
         setFetchLoading(true)
         try {
             const response = await axiosInstance.get(`get-sales-return-byId/${returnMasterId}`);
             const data = response.data.data;
+
             setExistingInvoiceNo(data.returnNo)
             setReturnMasterId(data.ReturnMasterId)
 
@@ -407,8 +426,10 @@ const SalesReturnSkin = () => {
                 (data.returnDetails || []).map(async (item) => {
                     let productName = ''; let productNameArb = ''; let availableUnits = [];
                     let productDetails = { productCode: item.productCode || '', barcode: item.barcode || '', partNo: '', brand: '', mrp: '', purchase: item.PurchaseRate || '', productDescription: item.productDescription || '', UnitName: '' };
-                    const taxInfo = taxData.find(t => t.taxId === item.taxId);
+                    const freshtaxData = taxMaster || taxData
+                    const taxInfo = freshtaxData.find(t => t.taxId === item.taxId);
                     const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
+
                     if (item.productCode) {
                         try {
                             productName = item?.productname || '';
@@ -425,12 +446,21 @@ const SalesReturnSkin = () => {
                                 mrp: item.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
                         }
                     }
+                    // Calculate discount amount if not available
+                    const descAmt = parseFloat(item.descAmt) || (() => {
+                        const gross = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+                        const discPerc = parseFloat(item.discountPercentage) || 0;
+                        return parseFloat(
+                            ((gross * discPerc) / 100).toFixed(generalSettings?.decimalPart || 2)
+                        ) || 0;
+                    })();
+
                     return {
                         ...item, productName, productNameArb, taxRate, availableUnits, productDetails,
                         qty: parseFloat(item.qty) || 0,
@@ -438,12 +468,15 @@ const SalesReturnSkin = () => {
                         rate: parseFloat(item.rate) || 0,
                         lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
                         inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
+                        unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         PurchaseRate: parseFloat(item.PurchaseRate) || 0,
                         taxAmount: parseFloat(item.taxAmount) || 0,
                         grossAmount: parseFloat(item.grossAmount) || 0,
                         netAmount: parseFloat(item.netAmount) || 0,
                         amount: parseFloat(item.amount) || 0,
+                        descAmt,
                     };
                 })
             );
@@ -498,6 +531,7 @@ const SalesReturnSkin = () => {
                 billDiscountWithTax: data?.billDiscountWithTax,
                 salesDetails: salesDetailsWithProducts || []
             }));
+
             setResetTableKey((prev) => prev + 1);
         } catch (error) { console.error("Error fetching sale data", error); }
         finally { setFetchLoading(false) }
@@ -506,7 +540,7 @@ const SalesReturnSkin = () => {
     const [loading, setLoading] = useState({ employees: false, costCenters: false, pricingLevel: false, customers: false, godowns: false, batch: false });
 
     const fetchEmployees = async () => { setLoading(p => ({ ...p, employees: true })); try { const { data } = await axiosInstance.get("employees"); setEmployees(data.data); } catch (e) { console.error(e); } finally { setLoading(p => ({ ...p, employees: false })); } };
-    const fetchCustomer = async () => { setLoading(p => ({ ...p, customers: true })); try { const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer"], branchId: selectedBranchId }); setCustomers(data.data); } catch (e) { console.error(e); } finally { setLoading(p => ({ ...p, customers: false })); } };
+    const fetchCustomer = async () => { setLoading(p => ({ ...p, customers: true })); try { const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer", "Customer&Supplier"], branchId: selectedBranchId }); setCustomers(data.data); } catch (e) { console.error(e); } finally { setLoading(p => ({ ...p, customers: false })); } };
 
     const genarateSalesInvoiceId = async (taxType) => {
         setVoucherNumberGenarating(true)
@@ -514,7 +548,7 @@ const SalesReturnSkin = () => {
             const response = await axiosInstance.get(
                 `get-generated-voucherNo?voucherType=${taxType === 'NA' ? 'Sales Return-No Tax' : 'Sales Return'}&branchId=${selectedBranchId}&yearId=${currentFinancialYear.yearId}&taxType=${taxType || formData.taxType}`
             );
-            setInvoiceId(response.data.voucherNo);
+            setInvoiceId(response.data.voucherCode);
         }
         catch (error) { console.error(error); }
         finally { setVoucherNumberGenarating(false) }
@@ -566,12 +600,21 @@ const SalesReturnSkin = () => {
                                 mrp: item.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
                         }
                     }
+                    // Calculate discount amount if not available
+                    const descAmt = parseFloat(item.descAmt) || (() => {
+                        const gross = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+                        const discPerc = parseFloat(item.discountPercentage) || 0;
+                        return parseFloat(
+                            ((gross * discPerc) / 100).toFixed(generalSettings?.decimalPart || 2)
+                        ) || 0;
+                    })();
+
                     return {
                         ...item, productName, taxRate, availableUnits, productDetails,
                         qty: parseFloat(item.balanceQty) || parseFloat(item.qty) || 0,
@@ -579,12 +622,15 @@ const SalesReturnSkin = () => {
                         rate: parseFloat(item.rate) || 0,
                         lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
                         inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
+                        unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         PurchaseRate: parseFloat(item.PurchaseRate) || 0,
                         taxAmount: parseFloat(item.taxAmount) || 0,
                         grossAmount: parseFloat(item.grossAmount) || 0,
                         netAmount: parseFloat(item.netAmount) || 0,
-                        amount: parseFloat(item.amount) || 0
+                        amount: parseFloat(item.amount) || 0,
+                        descAmt,
                     };
                 })
             );
@@ -612,7 +658,10 @@ const SalesReturnSkin = () => {
         if (savedHeldInvoices) {
             const allHeldInvoices = JSON.parse(savedHeldInvoices);
             const branchHeldInvoices = allHeldInvoices.filter(invoice => invoice.branchId === selectedBranchId);
-            setHeldInvoices(branchHeldInvoices);
+            const deduped = Array.from(
+                new Map(branchHeldInvoices.map(inv => [inv.id, inv])).values()
+            );
+            setHeldInvoices(deduped);
         }
     }, [selectedBranchId]);
 
@@ -621,7 +670,12 @@ const SalesReturnSkin = () => {
         const savedHeldInvoices = localStorage.getItem('heldSalesReturnInvoices');
         const allHeldInvoices = savedHeldInvoices ? JSON.parse(savedHeldInvoices) : [];
         const otherBranchInvoices = allHeldInvoices.filter(invoice => invoice.branchId !== selectedBranchId);
-        const updatedAllInvoices = [...otherBranchInvoices, ...heldInvoices];
+
+        const dedupedHeldInvoices = Array.from(
+            new Map(heldInvoices.map(inv => [inv.id, inv])).values()
+        );
+
+        const updatedAllInvoices = [...otherBranchInvoices, ...dedupedHeldInvoices];
         if (updatedAllInvoices.length > 0) {
             localStorage.setItem('heldSalesReturnInvoices', JSON.stringify(updatedAllInvoices));
         } else {
@@ -647,7 +701,10 @@ const SalesReturnSkin = () => {
             isAgainst: isAgainst,
             formData: { ...formData }
         };
-        setHeldInvoices(prev => [...prev, heldInvoice]);
+        setHeldInvoices(prev => {
+            if (prev.some(inv => inv.id === heldInvoice.id)) return prev;
+            return [...prev, heldInvoice];
+        });
         showToast.success(`Return held successfully. Total held returns: ${heldInvoices.length + 1}`);
         clearForm(true);
     }, [formData, invoiceId, heldInvoices.length, selectedBranchId, isAgainst]);
@@ -685,7 +742,11 @@ const SalesReturnSkin = () => {
         } else {
             setHeldInvoices(prev => prev.filter(inv => inv.id !== heldInvoice.id));
         }
-        setFormData(heldInvoice.formData);
+        setFormData({
+            ...heldInvoice.formData,
+            date: new Date(),
+            billTime: time,
+        });
         setInvoiceId(heldInvoice.invoiceId);
         setIsAgainst(heldInvoice.isAgainst || false);
         setResetTableKey(prev => prev + 1);
@@ -710,7 +771,7 @@ const SalesReturnSkin = () => {
                     </h3>
                     <button
                         onClick={() => setShowHeldInvoices(false)}
-                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl leading-none"
                     >
                         ✕
                     </button>
@@ -719,10 +780,18 @@ const SalesReturnSkin = () => {
                     {heldInvoices.map((invoice) => (
                         <div
                             key={invoice.id}
-                            className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow"
+                            className={`p-4 rounded-lg border hover:shadow-md transition-shadow ${invoice.errorHeld
+                                ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-600'
+                                : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                                }`}
                         >
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex-1">
+                                    {invoice.errorHeld && (
+                                        <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded mb-1 inline-block">
+                                            Error Held
+                                        </span>
+                                    )}
                                     <p className="font-semibold text-gray-800 dark:text-gray-200">{invoice.customerName}</p>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">Return: {invoice.invoiceId}</p>
                                     {invoice.isAgainst && (
@@ -763,44 +832,124 @@ const SalesReturnSkin = () => {
         );
     };
 
+    const fetchInvoiceDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`get-sales-return-byId/${returnMasterId}`);
+        const data = response.data.data;
+
+        const resolvedTaxData = taxData;
+
+        const salesDetailsWithProducts = (data.returnDetails || []).map((item) => {
+            const taxInfo = resolvedTaxData?.find(t => t.taxId === item?.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo?.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productname || '',
+                productNameArb: item?.productnameArb || '',
+                unitName: item?.unitName || item?.UnitName || '',
+                taxRate,
+                qty: parseFloat(item.qty) || 0,
+                freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                rate: parseFloat(item.rate) || 0,
+                inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
+                lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
+                discountPercentage: parseFloat(item.discountPercentage) || 0,
+                PurchaseRate: parseFloat(item.PurchaseRate) || 0,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
+
+        return {
+            ...data,
+            date: data.date ? new Date(data.date) : formData.date,
+            salesDetails: salesDetailsWithProducts,
+        };
+    }, [returnMasterId, taxData, formData.date]);
+    const { salesProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products);
+
     // ===== PRINT HELPERS =====
-    const buildInvoiceDataForPrint = useCallback((invoiceNumber, qrLink) => ({
-        ...formData,
-        invoiceNo: invoiceNumber,
-        date: formData.date,
-        salesDetails: formData.salesDetails,
-        qr_link: qrLink || formData.qr_link,
-    }), [formData]);
+    const buildInvoiceDataForPrint = useCallback((invoiceNumber, qrLink, overrideData) => {
+        const base = overrideData || formData;
+
+        const rawDetails = base.salesDetails || [];
+
+        // ✅ Enrich with productName / productNameArb from allProducts by matching productCode
+        const enrichedDetails = rawDetails.map((detail, idx) => {
+            const matchedProduct = allProducts?.find(
+                (p) => p.productCode === detail.productCode
+            );
+
+            return {
+                ...detail,
+                productName: detail.productName || matchedProduct?.productName || '',
+                productNameArb: detail.productNameArb || matchedProduct?.productNameArb || '',
+                unitName: detail.unitName || formData.salesDetails?.[idx]?.unitName || detail.UnitName || matchedProduct?.unitName || '',
+            };
+        });
+        const mergedCustomerData = {
+            ...(formData.customerData || {}),
+            ...(base.customerData || {}),
+        };
+
+        return {
+            ...base,
+            invoiceNo: base?.returnNo || invoiceNumber,
+            date: base.date,
+            salesDetails: enrichedDetails,
+            qr_link: qrLink || base.qr_link,
+            customerData: mergedCustomerData,
+        };
+    }, [formData]);
 
     const printToPrinterFn = useCallback((invoiceDataForPrint, qrLink) => {
         if (formData.printType === 'Type 1') {
             SalesReturnInvoicePrintOne(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency, qrLink);
         } else if (formData.printType === 'Thermal') {
             salesReturnThermalPrintOne(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency, qrLink);
+        } else if (formData.printType === 'Thermal2') {
+            salesReturnThermalPrintTwo(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency, qrLink);
         } else if (formData.printType === 'Type 2') {
             salesReturnInvoicePrintTwo(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency, qrLink);
         } else if (formData.printType === 'Type 3') {
             salesReturnInvoicePrintThree(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency, qrLink);
+        } else if (formData.printType === 'Type 4') {
+            salesReturnInvoicePrintFour(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency, qrLink);
+        } else if (formData.printType === 'LS') {
+            LogismartInvoicereturnPrint(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency, qrLink);
         } else {
-            salesReturnThermalPrintOne(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency, qrLink);
+            SalesReturnInvoicePrintOne(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency, qrLink);
         }
     }, [formData.printType, selectedBranchDetails, time]);
 
     // ===== SAVE =====
+    // ===== SAVE HANDLER WITH AUTO-HOLD ON ERROR =====
     const handleSave = useCallback(async () => {
         if (formData.formType === 'Tax Invoice' && generalSettings.zatcaType === 'Phase 2') {
             const requiredFields = ['ledgerName', 'tinNumber', 'BuildingNo', 'StreetName', 'District', 'CityName', 'Country', 'PostboxNo', 'AdditionalNo', 'cstNumber'];
             const customerData = formData.customerData || {};
             if (requiredFields.some(field => !customerData[field])) {
-                Swal.fire({ icon: 'warning', title: 'Party Details Required', text: 'Cannot save Tax Invoice without filling party details.', confirmButtonText: 'OK' }); return;
+                Swal.fire({ icon: 'warning', title: 'Party Details Required', text: 'Cannot save Tax Invoice without filling party details.', confirmButtonText: 'OK' });
+                return;
             }
         }
         if (!validateForm(formData, validationRules)) return;
 
-        let hasGaps = false; let lastFilledIndex = -1; const rowValidationErrors = [];
+        if (formData.totalAmount <= 0) {
+            showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
+            return;
+        }
+
+        let hasGaps = false;
+        let lastFilledIndex = -1;
+        const rowValidationErrors = [];
+
         formData.salesDetails.forEach((row, index) => {
             const isRowFilled = row.productCode && row.productCode.trim() !== '';
             const hasAnyData = row.productName?.trim() !== '' || row.barcode?.trim() !== '' || row.qty > 0 || row.rate > 0;
+
             if (isRowFilled) {
                 if (lastFilledIndex !== -1 && index - lastFilledIndex > 1) hasGaps = true;
                 lastFilledIndex = index;
@@ -811,13 +960,27 @@ const SalesReturnSkin = () => {
                 if (!row.unitId) missingFields.push('Unit');
                 if (missingFields.length > 0) rowValidationErrors.push({ row: index + 1, message: `Missing: ${missingFields.join(', ')}` });
             } else if (lastFilledIndex !== -1 && index < formData.salesDetails.length - 1) {
-                if (formData.salesDetails.slice(index + 1).some(r => r.productCode && r.productCode.trim() !== '')) { hasGaps = true; rowValidationErrors.push({ row: index + 1, message: 'Row skipped' }); }
-            } else if (!isRowFilled && hasAnyData && index < formData.salesDetails.length - 1) { rowValidationErrors.push({ row: index + 1, message: 'Incomplete data' }); }
+                if (formData.salesDetails.slice(index + 1).some(r => r.productCode && r.productCode.trim() !== '')) {
+                    hasGaps = true;
+                    rowValidationErrors.push({ row: index + 1, message: 'Row skipped' });
+                }
+            } else if (!isRowFilled && hasAnyData && index < formData.salesDetails.length - 1) {
+                rowValidationErrors.push({ row: index + 1, message: 'Incomplete data' });
+            }
         });
-        if (hasGaps || rowValidationErrors.length > 0) { setAlert({ id: Date.now(), type: "error", message: rowValidationErrors.map(err => `Row ${err.row}: ${err.message}`).join('\n') || "Cannot skip rows!" }); return; }
+
+        if (hasGaps || rowValidationErrors.length > 0) {
+            setAlert({ id: Date.now(), type: "error", message: rowValidationErrors.map(err => `Row ${err.row}: ${err.message}`).join('\n') || "Cannot skip rows!" });
+            return;
+        }
 
         if (formData.BillBalanceAmount < 0) {
             showToast.error(t("salesInvoice.alert.billBalanceAmtError"));
+            return;
+        }
+
+        if (!formData.paymentMode || formData.paymentMode === 'null' || formData.paymentMode === 'NA') {
+            showToast.error("Please select a valid payment mode (Cash, Bank, or Credit).");
             return;
         }
 
@@ -837,7 +1000,12 @@ const SalesReturnSkin = () => {
         }
 
         const validationErrors = validateFormData();
-        if (validationErrors.length > 0) { setAlert({ id: Date.now(), type: "error", message: validationErrors.join('\n') }); return; }
+        if (validationErrors.length > 0) {
+            setAlert({ id: Date.now(), type: "error", message: validationErrors.join('\n') });
+            return;
+        }
+
+        // Cash ledger validation
         if (generalSettings?.negativeCashTransaction !== 'Allow') {
             setIsSaving(true);
 
@@ -865,7 +1033,6 @@ const SalesReturnSkin = () => {
                                 confirmButtonText: t('Ok') || 'Ok',
                             });
                             setIsSaving(false);
-
                             return;
                         }
 
@@ -881,7 +1048,6 @@ const SalesReturnSkin = () => {
                                 cancelButtonText: t('Cancel'),
                             });
                             setIsSaving(false);
-
                             if (!result.isConfirmed) return;
                         }
                     }
@@ -890,29 +1056,55 @@ const SalesReturnSkin = () => {
                 }
             }
         }
+
+        // Confirmation dialogs
         if (editMode && generalSettings?.askConfirmationEdit) {
             const result = await Swal.fire({
-                title: t('ConfirmUpdateTitle'), text: t('ConfirmUpdateText'),
-                icon: 'question', showCancelButton: true,
-                confirmButtonColor: '#3085d6', cancelButtonColor: '#d33',
-                confirmButtonText: t('YesUpdate'), cancelButtonText: t('Cancel'),
+                title: t('ConfirmUpdateTitle'),
+                text: t('ConfirmUpdateText'),
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesUpdate'),
+                cancelButtonText: t('Cancel'),
             });
             if (!result.isConfirmed) return;
         } else if (!editMode && generalSettings?.askConfirmationSave) {
             const result = await Swal.fire({
-                title: t('ConfirmSaveTitle'), text: t('ConfirmSaveText'),
-                icon: 'question', showCancelButton: true,
-                confirmButtonColor: '#3085d6', cancelButtonColor: '#d33',
-                confirmButtonText: t('YesSave'), cancelButtonText: t('Cancel'),
+                title: t('ConfirmSaveTitle'),
+                text: t('ConfirmSaveText'),
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesSave'),
+                cancelButtonText: t('Cancel'),
             });
             if (!result.isConfirmed) return;
         }
 
         setIsSaving(true);
+
         try {
             const qrCodeBase64 = generateQRCodeData(formData, selectedBranchDetails?.branchName || '', selectedBranchDetails?.taxNo || '', time);
             const qrCodeUrl = qrCodeBase64;
-            const dataToSave = { ...formData, date: formatDateWithTime(formData.date), billTime: time, partyName: formData.customerName, partyAddress: formData.CustomerAddress, partyMobile: formData.CustomerPhone, partyVatNo: formData.customerVATNo, partyRefNo: formData.RefNo, partyRefDate: formData.refDate, qr_link: qrCodeUrl };
+
+            const dataToSave = {
+                ...formData,
+                date: formatDateWithTime(formData.date),
+                billTime: time,
+                partyName: formData.customerName,
+                partyAddress: formData.CustomerAddress,
+                partyMobile: formData.CustomerPhone,
+                partyVatNo: formData.customerVATNo,
+                partyRefNo: formData.RefNo,
+                partyRefDate: formData.refDate,
+                vatLedgerId: generalSettings?.taxLedgerId,
+                // cashLedgerId:
+                qr_link: qrCodeUrl
+            };
+
             const api = editMode ? `update-sales-return/${returnMasterId}` : 'save-sales-return';
 
             const response = await axiosInstance.post(api, dataToSave);
@@ -961,7 +1153,8 @@ const SalesReturnSkin = () => {
                     BuyerTaxCode: formData.customerData.tinNumber,
                     PaymentMeansCode: formData.paymentMode === 'cash' ? '10' : formData.paymentMode === 'bank' ? '42' : '30',
                     BillType: formData.formType,
-                    ReasonForReturn: "", LF: "",
+                    ReasonForReturn: "",
+                    LF: "",
                     CERTIFICATE_CONTENT: zatcaSettings.binarytoken,
                     PRIVATE_KEY: zatcaSettings.privatekey,
                     PRODUCTION_SECRET: zatcaSettings.productionsecret,
@@ -969,29 +1162,35 @@ const SalesReturnSkin = () => {
                     PUBLIC_KEY: zatcaSettings.publickey,
                     AUTH_BINARYSECURITYTOKEN_PCSID: zatcaSettings.auth_binarysecuritytoken_pcsid,
                     PreviousHash: response.data.data.prevInvoiceHash,
-                    InvoiceItems: formData.salesDetails.filter(item => item.productCode && item.qty > 0).map(item => ({
-                        ItemName: item.productName || "",
-                        Qty: item.qty, Amount: parseFloat(item.amount),
-                        Discount: 0,
-                        TaxAmt: parseFloat(item.taxAmount) || 0.0,
-                        CurrencyConversionRate: currentCurrencyConversion.rate
-                    }))
+                    InvoiceItems: formData.salesDetails
+                        .filter(item => item.productCode && item.qty > 0)
+                        .map(item => ({
+                            ItemName: item.productName || "",
+                            Qty: item.qty,
+                            Amount: parseFloat(item.amount),
+                            Discount: 0,
+                            TaxAmt: parseFloat(item.taxAmount) || 0.0,
+                            CurrencyConversionRate: currentCurrencyConversion.rate
+                        }))
                 };
 
-                var zatcaPhaceTwoQrLink;
+                let zatcaPhaceTwoQrLink;
 
                 if (generalSettings.zatcaType === 'Phase 2') {
                     const zatcaResponse = await axios.post('https://api.finacerp.com/api/Invoice/Submit', zatcaPayload);
 
                     zatcaPhaceTwoQrLink = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(zatcaResponse.data.QrCodeBase64)}`;
+
                     if (zatcaResponse.data.Success) {
                         await axiosInstance.post('update-zatca-fields', {
                             VoucherType: "Sales Return",
                             ReturnMasterId: response.data.data.ReturnMasterId,
                             PreInvoiceHash: response.data.data.prevInvoiceHash,
                             CurrentInvoiceHash: zatcaResponse.data.InvoiceHash,
-                            UUID: zatcaResponse.data.UUID, ZatcaStatus: zatcaResponse.data.status,
-                            LogData: zatcaResponse.data.logData, Qrlink: zatcaResponse.data.QrCodeBase64,
+                            UUID: zatcaResponse.data.UUID,
+                            ZatcaStatus: zatcaResponse.data.status,
+                            LogData: zatcaResponse.data.logData,
+                            Qrlink: zatcaResponse.data.QrCodeBase64,
                             UploadedInvoice: zatcaResponse.data.ZatcaJson,
                             ZatcaSignedXml: zatcaResponse.data.SignedXml
                         });
@@ -1003,7 +1202,9 @@ const SalesReturnSkin = () => {
                 showToast.success(t("saveSuccess"));
 
                 const invoiceQr = generalSettings.zatcaType === 'Phase 2' ? zatcaPhaceTwoQrLink : zatcaPhaceOneQrLink;
-                const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceId, invoiceQr);
+                const freshReturnData = response?.data?.data?.payload?.salesReturnMaster;
+                const savedReturnNo = freshReturnData?.returnNo;
+                const invoiceDataForPrint = buildInvoiceDataForPrint(savedReturnNo, invoiceQr, freshReturnData);
                 setIsSaving(false);
 
                 // Clean up held invoice if this was a restored one
@@ -1019,12 +1220,18 @@ const SalesReturnSkin = () => {
                     const pdfResult = await Swal.fire({
                         title: t('Print as PDF') || 'Print as PDF?',
                         text: t('Do you want to download this invoice as a PDF?') || 'Do you want to download this credit note as a PDF?',
-                        icon: 'question', showCancelButton: true,
-                        confirmButtonColor: '#3085d6', cancelButtonColor: '#d33',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
                         confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
                         cancelButtonText: t('No, Just Save') || 'No, Just Save',
                     });
-                    if (pdfResult.isConfirmed) { setTimeout(() => { printToPrinterFn(invoiceDataForPrint, invoiceQr); }, 500); }
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            printToPrinterFn(invoiceDataForPrint, invoiceQr);
+                        }, 500);
+                    }
                 }
 
                 if (!editMode) {
@@ -1037,32 +1244,195 @@ const SalesReturnSkin = () => {
                 }
             }
         } catch (error) {
-            console.error('Error saving sales:', error);
-            showToast.error(error.response?.data?.message || t("saveError") || "Error saving sales return");
-        } finally { setIsSaving(false); }
-    }, [formData, time, saleSettings, generalSettings, editMode, invoiceId, restoredHeldInvoiceId, buildInvoiceDataForPrint, printToPrinterFn,]);
+            console.error('Error saving sales return:', error);
+
+            // ✅ AUTO-HOLD RETURN ON ERROR
+            const hasValidData = formData.salesDetails.some(detail => detail.productCode && detail.qty > 0);
+
+            if (hasValidData) {
+                const heldInvoice = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    invoiceId: invoiceId,
+                    customerName: formData.customerName || 'Unknown Customer',
+                    customerAddress: formData.CustomerAddress || '',
+                    totalAmount: formData.totalAmount || 0,
+                    itemCount: formData.salesDetails.filter(d => d.productCode).length,
+                    branchId: selectedBranchId,
+                    isAgainst: isAgainst,
+                    formData: { ...formData },
+                    errorHeld: true // Mark as error-held
+                };
+
+                setHeldInvoices(prev => [...prev, heldInvoice]);
+
+                showToast.warning(
+                    `Save failed. Return has been automatically held. Total held returns: ${heldInvoices.length + 1}`
+                );
+            }
+
+            Swal.fire({
+                icon: 'error',
+                title: t('Error') || 'Error',
+                html: `
+                    <div class="text-left">
+                        <p class="mb-2">${error.response?.data?.message || t("saveError") || "Error saving sales return"}</p>
+                        ${hasValidData ? '<p class="text-sm text-blue-600">Your return data has been automatically held and can be restored later.</p>' : ''}
+                    </div>
+                `,
+                confirmButtonColor: '#3085d6',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    }, [
+        formData,
+        time,
+        saleSettings,
+        generalSettings,
+        editMode,
+        invoiceId,
+        restoredHeldInvoiceId,
+        buildInvoiceDataForPrint,
+        printToPrinterFn,
+        selectedBranchId,
+        isAgainst,
+        heldInvoices.length,
+        t
+    ]);
 
     // ===== EDIT MODE PRINT HANDLERS =====
-    const handleReprintToPrinter = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, formData.qr_link);
-        printToPrinterFn(invoiceDataForPrint, formData.qr_link);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, formData.qr_link, printToPrinterFn]);
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this invoice?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
 
-    const handleReprintToPdf = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, formData.qr_link);
-        printToPrinterFn(invoiceDataForPrint, formData.qr_link);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, formData.qr_link,]);
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchInvoiceDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            printToPrinterFn(invoiceDataForPrint, freshData.qr_link);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching return for reprint:', error);
+            showToast.error('Failed to fetch return data for printing');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, fetchInvoiceDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn, isElectron]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchInvoiceDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            // Sales Return currently routes PDF through the same print function as invoice's printToPdfFn;
+            // if you add a dedicated PDF handler later, swap this call for that.
+            printToPrinterFn(invoiceDataForPrint, freshData.qr_link);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching return for PDF reprint:', error);
+            showToast.error('Failed to fetch return data for PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [fetchInvoiceDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn, isElectron]);
 
     // Ctrl+S keyboard shortcut
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); handleSave(); }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleSave]);
+    const ctrlSPressed = useRef(false);
 
-    if (fetchLoading || baseDataloading) {
+    useEffect(() => {
+        if (editMode) return;
+
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+                e.preventDefault();
+
+                if (ctrlSPressed.current) return;
+
+                ctrlSPressed.current = true;
+                handleSave();
+            }
+        };
+
+        const handleKeyUp = (e) => {
+            if (e.key.toLowerCase() === "s") {
+                ctrlSPressed.current = false;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+        };
+    }, [handleSave, editMode]);
+
+    const salesReturnShortcuts = [
+        {
+            heading: 'General',
+            items: [
+                { keys: ['Ctrl', 'S'], description: 'Save / update sales return' },
+                { keys: ['Ctrl', 'H'], description: 'Hold current sales return' },
+                { keys: ['Alt', '/'], description: 'Open help and shortcuts panel' },
+            ],
+        },
+        {
+            heading: 'Product Grid',
+            items: [
+                { keys: ['Enter'], description: 'Move to next field or add a new row' },
+                { keys: ['←', '→'], description: 'Move between editable columns' },
+                { keys: ['↑', '↓'], description: 'Move between rows' },
+            ],
+        },
+    ];
+
+    const salesReturnManual = [
+        {
+            heading: 'Creating a New Sales Return',
+            steps: [
+                'Select the customer and review the return header details before adding products.',
+                'Add return items from the grid by entering the product name or scanning a barcode.',
+                'Set quantity and rate, then review the totals before saving the return.',
+                'Press Ctrl+S to save or update the sales return.',
+            ],
+        },
+        {
+            heading: 'Holding & Restoring Returns',
+            steps: [
+                'Press Ctrl+H or click Hold to temporarily save the current return and start a new one.',
+                'Use Restore to view held returns and bring one back into the form.',
+            ],
+        },
+        {
+            heading: 'Printing & Sharing',
+            steps: [
+                'Choose the preferred print layout from the Print Type dropdown before printing or saving as PDF.',
+                'Use the Print dropdown in edit mode to reprint or download a PDF for the sales return.',
+            ],
+        },
+    ];
+
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
@@ -1076,14 +1446,15 @@ const SalesReturnSkin = () => {
             </div>
         )
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className='bg-primary dark:bg-primary'>
             <PopupPreloader
-                isOpen={isSaving}
+                isOpen={isSaving || isPrinting}
                 state="loading"
-                title={t("loadingText")}
-                subtitle={t("loadingDesc")}
+                title={isPrinting ? t("Printing") || "Preparing Print..." : t("loadingText")}
+                subtitle={isPrinting ? t("printingDesc") || "Please wait while we prepare your invoice for printing..." : t("loadingDesc")}
             />
 
             {/* ===== HELD INVOICES PANEL ===== */}
@@ -1105,7 +1476,7 @@ const SalesReturnSkin = () => {
                     },
                     // Hold button — only in add mode
                     !editMode && {
-                        label: `Hold Return${heldInvoices.length > 0 ? ` (${heldInvoices.length})` : ''}`,
+                        label: `Hold${heldInvoices.length > 0 ? ` (${heldInvoices.length})` : ''}`,
                         icon: Archive,
                         type: "secondary",
                         onClick: holdCurrentInvoice,
@@ -1134,7 +1505,6 @@ const SalesReturnSkin = () => {
                         loadingText: t("loadingText")
                     },
                 ].filter(Boolean)}
-
                 customActions={
                     <div className="flex items-center gap-3">
                         {!editMode && (
@@ -1156,27 +1526,31 @@ const SalesReturnSkin = () => {
                                 </div>
                             </>
                         )}
-                        <select
-                            name="printType"
-                            id="printType"
-                            className='border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none'
-                            value={formData.printType}
-                            onChange={(e) => {
-                                setFormData(prev => ({ ...prev, printType: e.target.value }));
-                            }}
-                        >
-                            {invoiceTypes.map(type => (
-                                <option key={type} value={type}>{type}</option>
-                            ))}
-                        </select>
+                        {invoiceTypes.length > 0 && (
+                            <select
+                                name="printType"
+                                id="printType"
+                                className='border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none'
+                                value={formData.printType}
+                                onChange={(e) => {
+                                    setFormData(prev => ({ ...prev, printType: e.target.value }));
+                                }}
+                            >
+                                {invoiceTypes.map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
+                            </select>
+                        )}
                         {editMode && !fetchLoading && (
                             <PrintDropdown
                                 onPrintToPrinter={handleReprintToPrinter}
                                 onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
                             />
                         )}
                     </div>
                 }
+                onHelpClick={() => setHelpOpen(true)}
             />
 
             <FormSectionMain
@@ -1202,6 +1576,17 @@ const SalesReturnSkin = () => {
                 setCurrentLedgerBalance={setCurrentLedgerBalance}
                 currency={currency}
                 genarateSalesInvoiceId={genarateSalesInvoiceId}
+                updateCustomerId={updateCustomerId}
+                setUpdateCustomerId={setUpdateCustomerId}
+            />
+            <HelpShortcuts
+                title="Sales Return Help"
+                groups={salesReturnShortcuts}
+                manual={salesReturnManual}
+                buttonPosition="bottom-6 right-22"
+                showFloatingButton={false}
+                open={helpOpen}
+                onOpenChange={setHelpOpen}
             />
         </div>
     )

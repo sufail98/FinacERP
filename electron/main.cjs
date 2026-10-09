@@ -6,6 +6,8 @@ const Store = require('electron-store');
 const printerService = require('./printerService.cjs');
 const updaterService = require('./updaterService.cjs');
 const fs = require('fs');
+const { printRawEpl, buildEplLabel } = require('./eplPrinter.cjs');
+const os = require('os')
 
 const store = new Store();
 const isDev = process.env.NODE_ENV === 'development';
@@ -17,6 +19,36 @@ ipcMain.on('open-external', (event, url) => {
     if (url.startsWith('https://web.whatsapp.com') || url.startsWith('https://wa.me')) {
         shell.openExternal(url);
     }
+});
+ipcMain.handle('get-computer-name', () => {
+    return os.hostname()
+})
+ipcMain.handle('clear-app-data-and-reload', async (event) => {
+  try {
+    const contents = event.sender;
+    const session = contents.session;
+
+    await session.clearCache();
+    await session.clearStorageData({
+      storages: [
+        'appcache',
+        'cookies',
+        'filesystem',
+        'indexdb',
+        'localstorage',
+        'shadercache',
+        'websql',
+        'serviceworkers',
+        'cachestorage',
+      ],
+    });
+
+    contents.reloadIgnoringCache();
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to clear app data:', error);
+    return { success: false, error: error.message };
+  }
 });
 ipcMain.handle('save-pdf', async (event, htmlContent, filename) => {
     try {
@@ -58,6 +90,85 @@ ipcMain.handle('save-pdf', async (event, htmlContent, filename) => {
         return { success: false, error: error.message };
     }
 });
+
+ipcMain.handle('save-file-base64', async (event, { dataUrl, filename }) => {
+    try {
+        const { filePath, canceled } = await dialog.showSaveDialog({
+            title: 'Save File',
+            defaultPath: path.join(require('os').homedir(), 'Downloads', filename),
+        });
+
+        if (canceled || !filePath) {
+            return { success: false, error: 'Save canceled' };
+        }
+
+        let base64Data = dataUrl;
+        if (dataUrl.includes(',')) {
+            base64Data = dataUrl.split(',')[1];
+        }
+
+        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+
+        return { success: true, filePath };
+    } catch (error) {
+        console.error('Save file error:', error);
+        return { success: false, error: error.message };
+    }
+});
+ipcMain.handle('render-html-to-pdf-buffer', async (event, htmlContent) => {
+    let win;
+    try {
+        // Same hidden-window approach as save-pdf, just without the
+        // save dialog and without writing to disk — we return the bytes.
+        win = new BrowserWindow({
+            show: false,
+            webPreferences: {
+                nodeIntegration: false
+            }
+        });
+ 
+        await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+ 
+        // Wait for fonts + images to finish before printing, so the
+        // native Chromium print reflects the fully-loaded layout
+        // (matters for letterhead/background images especially).
+        await win.webContents.executeJavaScript(`
+            (async () => {
+                if (document.fonts && document.fonts.ready) {
+                    await document.fonts.ready;
+                }
+                const imgs = Array.from(document.querySelectorAll('img'));
+                await Promise.all(imgs.map(img => {
+                    if (img.complete) return Promise.resolve();
+                    return new Promise((resolve) => {
+                        img.addEventListener('load', resolve, { once: true });
+                        img.addEventListener('error', resolve, { once: true });
+                        setTimeout(resolve, 5000);
+                    });
+                }));
+                return true;
+            })();
+        `);
+ 
+        const pdfData = await win.webContents.printToPDF({
+            marginsType: 0,
+            printBackground: true,
+            pageSize: 'A4'
+        });
+ 
+        win.close();
+ 
+        // pdfData is already a Buffer here (same as save-pdf receives it) —
+        // return it as-is; ipcRenderer.invoke will structured-clone it to
+        // the renderer as a Uint8Array/Buffer-like.
+        return { success: true, data: pdfData };
+    } catch (error) {
+        console.error('❌ [RENDER HTML TO PDF BUFFER] Error:', error.message);
+        if (win && !win.isDestroyed()) win.close();
+        return { success: false, error: error.message };
+    }
+});
+
 
 // ============================================
 // ✅ SINGLE INSTANCE LOCK - Prevent multiple instances
@@ -215,6 +326,32 @@ if (!gotTheLock) {
   // IPC HANDLERS - Printing
   // ============================================
 
+ipcMain.handle('print-epl-labels', async (event, { labels, printerName, widthMM, heightMM, settings }) => {
+  try {
+    for (const label of labels) {
+      const epl = buildEplLabel({
+        widthMM, heightMM,
+        branchName: settings?.branchName,
+        productName: label.productName,
+        barcode: label.barcode,
+        price: label.salesPrice,
+        supplierCode: settings?.supplierCode,
+        showBranchName: settings?.showBranchName,
+        showProductName: settings?.showProductName,
+        showSupplierCode: settings?.showSupplierCode,
+      });
+
+      const result = await printRawEpl(epl, printerName);
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [EPL PRINT] Error:', error.message);
+    return { success: false, error: error.message };
+  }
+});
   ipcMain.handle('get-printers', async () => {
     try {
       let printers = [];
@@ -292,19 +429,20 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('print-dialog', async (event, { html, printType }) => {
+ipcMain.handle('print-dialog', async (event, { html, printType, pageSize }) => {
     try {
       const result = await printerService.printWithDialog({
         window: mainWindow,
         html,
-        printType
+        printType,
+        pageSize
       });
       return result;
     } catch (error) {
       console.error('❌ [PRINT DIALOG] Error:', error.message);
       return { success: false, error: error.message };
     }
-  });
+});
 
   // ============================================
   // IPC HANDLERS - File System

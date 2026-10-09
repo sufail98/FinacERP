@@ -15,6 +15,7 @@ const NormalSelectInput = ({
   required = false,
   className = "",
   disabled = false,
+  readOnly = false,
   onBlur,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -68,7 +69,7 @@ const NormalSelectInput = ({
   }, [isOpen]);
 
   const handleToggle = () => {
-    if (disabled) return;
+    if (disabled || readOnly) return;
     setIsOpen(!isOpen);
     if (!isOpen) {
       setTimeout(() => {
@@ -82,7 +83,7 @@ const NormalSelectInput = ({
   };
 
   const handleOptionClick = (option) => {
-    if (disabled) return;
+    if (disabled || readOnly) return;
     onChange({ target: { name, value: option.value } });
     setIsOpen(false);
     setSearchTerm("");
@@ -112,7 +113,7 @@ const NormalSelectInput = ({
             transition-all duration-200 
             ${error ? "border-red-500 dark:border-red-400" : "border-gray-500 dark:border-gray-600"}
             ${isOpen ? "ring-opacity-20" : ""}
-            ${disabled
+            ${(disabled || readOnly)
               ? "bg-gray-100 dark:bg-[#1a1a1a] text-gray-400 cursor-not-allowed"
               : "bg-white dark:bg-[#242424] cursor-pointer hover:border-gray-400 dark:hover:border-gray-500"
             }
@@ -120,9 +121,9 @@ const NormalSelectInput = ({
             ${className} ${animateError ? "animate-shake" : ""}
           `}
           onClick={handleToggle}
-          tabIndex={disabled ? -1 : 0}
+          tabIndex={(disabled || readOnly) ? -1 : 0}
           onKeyDown={(e) => {
-            if (disabled) return;
+            if (disabled || readOnly) return;
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               handleToggle();

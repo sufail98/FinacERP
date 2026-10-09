@@ -11,6 +11,7 @@ import useFormValidation from "@/lib/hooks/useFormValidation";
 import useSaveShortcut from "@/lib/hooks/useSaveShortcut";
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
+import { sanitize } from "@/lib/inputSanitizer";
 
 const AddVanExecutive = () => {
   const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
@@ -192,9 +193,20 @@ const AddVanExecutive = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    let updatedValue = value
+    if(["ExecutiveName"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+    }
+    if(["PhoneNo"].includes(name)){
+      updatedValue = sanitize.numbers(value)
+    }
+    if(["Email"].includes(name)){
+      updatedValue = value.replace(/[^a-zA-Z0-9@._-]/g, "");
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: type === "checkbox" ? checked : updatedValue,
     }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
     setFinalError(null);
@@ -221,6 +233,19 @@ const AddVanExecutive = () => {
     e?.preventDefault();
     if (!validateForm(formData, validationRules)) return;
 
+     // Email format validation (only if email is provided, since it's optional)
+    if (formData.Email) {
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(formData.Email)) {
+        setErrors((prev) => ({
+          ...prev,
+          Email: t("invalidEmailError") || "Please enter a valid email address",
+        }));
+        return;
+      }
+    }
+
+    
     if (editId && generalSettings?.askConfirmationEdit) {
     const result = await Swal.fire({
         title: t('ConfirmUpdateTitle'),
@@ -456,6 +481,11 @@ const AddVanExecutive = () => {
                                  focus:outline-none focus:border-gray-900 dark:focus:border-gray-300 text-sm transition-colors"
                     />
                   </div>
+                  {errors.Email && (
+  <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+    {errors.Email}
+  </p>
+)}
 
                   {/* Phone No */}
                   <div className="grid grid-cols-[130px_1fr] items-center gap-3">
@@ -466,6 +496,7 @@ const AddVanExecutive = () => {
                       type="text"
                       name="PhoneNo"
                       value={formData.PhoneNo}
+                      maxLength={10}
                       onChange={handleChange}
                       placeholder="Type phone number"
                       className="w-full px-0 py-1.5 bg-transparent border-0 border-b border-gray-300 dark:border-gray-600

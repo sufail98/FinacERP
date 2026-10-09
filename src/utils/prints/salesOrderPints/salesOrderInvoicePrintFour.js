@@ -232,7 +232,18 @@ const generateOrderHTML = async (invoiceData, branchData, time, currentCurrency)
                     <!-- ✅ Separate Footer Image -->
                     ${FOOTER_IMAGE ? `<img class="footer-img" src="${FOOTER_IMAGE}" alt="footer">` : ''}
                 ` : ''}
-
+    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', { 
+                day: '2-digit', 
+                month: 'short', 
+                year: 'numeric' 
+            })} ${new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            })}</div>
+        </div>
                 <!-- ✅ Content wrapper — positioned over the white body area -->
                 <div class="content-wrapper" style="padding-top: ${HEADER_PAD}; padding-bottom: ${FOOTER_PAD};">
                     ${isFirstPage ? `
@@ -415,7 +426,46 @@ const generateOrderHTML = async (invoiceData, branchData, time, currentCurrency)
                     page-break-after: always;
                 }
                 .page:last-child { margin-bottom: 0; }
+.print-timestamp {
+    position: absolute;
+    bottom: 15mm;
+    right: 3mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
 
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
                 /* ✅ Full Letterhead background */
                 .letterhead-bg {
                     position: absolute;

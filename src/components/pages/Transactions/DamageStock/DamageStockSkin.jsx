@@ -1,7 +1,7 @@
 import BreadCrumb from '@/components/common/BreadCrumb';
 import { Eraser, PackageCheck, Pencil, SaveAll, SquarePen, Table } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosInstance from '@/lib/axiosConfig';
 import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
@@ -11,11 +11,19 @@ import { useNavigate, useParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
 import TextInput from '@/components/elements/theme/TextInput';
 import DamageStockTable from './DamageStockTable';
+import { Checkbox } from '@/components/ui/checkbox';
 import DateInput from '@/components/elements/theme/DateInput';
 import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
 import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import PrintDropdown from '@/components/common/PrintDropdown';
+import printDamageStock, { saveDamageStockAsPDF } from '../../../../utils/prints/damageStockPrints/damageStockPrintOne';
 
 const DamageStockSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Damage Stock");
+    const { inventoryProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products)
+
     const { damageStockId } = useParams();
     const editMode = Boolean(damageStockId);
     const [fetchLoading, setFetchLoading] = useState(false);
@@ -25,12 +33,14 @@ const DamageStockSkin = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [voucherId, setVoucherId] = useState('');
     const [alert, setAlert] = useState(null);
-    const { userId, selectedBranchId, currentFinancialYear, currentCurrency } = useAuth();
+    const { userId, selectedBranchId, currentFinancialYear, currentCurrency, selectedBranchDetails } = useAuth();
     const [time, setTime] = useState("");
     const { generalSettings, saleSettings } = useSelector((state) => state.settings);
     const [resetTableKey, setResetTableKey] = useState(0);
     const [godowns, setGodowns] = useState([])
     const [baseDataloading, setBaseDataloading] = useState(false)
+    const [isPrinting, setIsPrinting] = useState(false);
+
     useEffect(() => {
         const updateTime = () => {
             const now = new Date();
@@ -61,6 +71,7 @@ const DamageStockSkin = () => {
         branchId: selectedBranchId,
         CreatedUser: userId,
         GodownId: '',
+        printAfterSave: saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : true,
         damageDetails: []
     });
     useEffect(() => {
@@ -91,15 +102,22 @@ const DamageStockSkin = () => {
                     voucherType: "Damage Stock",
                     branchId: selectedBranchId,
                     yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Supplier"],
+                    ledgerTypes: ["Supplier", "Customer&Supplier"],
                     ledgerId: formData.ledgerId,
                     currencyId: currentCurrency?.currencyId
                 })
                 const data = res?.data?.data;
 
-
                 setVoucherId(data?.voucherdata?.voucherCode)
                 setGodowns(data?.godowns)
+
+                const defaultGodown = data?.godowns?.find(g => g.IsDefault === true);
+                const defaultGodownId = defaultGodown?.GodownId || 1;
+
+                setFormData(prev => ({
+                    ...prev,
+                    GodownId: defaultGodownId
+                }));
 
             } catch (error) {
                 console.error('error fetching default data', error)
@@ -154,6 +172,7 @@ const DamageStockSkin = () => {
             branchId: selectedBranchId,
             CreatedUser: userId,
             GodownId: '',
+            printAfterSave: saleSettings?.printAfterSave !== undefined ? saleSettings.printAfterSave : true,
             damageDetails: []
         });
         setResetTableKey(prev => prev + 1);
@@ -164,6 +183,28 @@ const DamageStockSkin = () => {
             getDamageStockById();
         }
     }, [editMode]);
+
+    const buildStockDataForPrint = useCallback((voucherNumber, overrideData) => {
+        const base = overrideData || formData;
+        return {
+            voucherNo: editMode ? existingVoucherNo : voucherNumber,
+            date: base.date,
+            narration: base.narration,
+           stockDetails: (base.damageDetails || []).map(item => {
+                const matchedProduct = allProducts?.find(
+                    p => String(p.productCode) === String(item.productCode)
+                );
+                return {
+                    barcode: item.barcode || item.productDetails?.barcode || matchedProduct?.barcode || '',
+                    productName: matchedProduct?.productName || item.productName || '',
+                    currentStock: item.currentQty ?? 0,
+                    qty: item.qty ?? 0,
+                    rate: item.rate ?? 0,
+                    amount: item.amount ?? ((item.qty || 0) * (item.rate || 0)),
+                };
+            }),
+        };
+    }, [formData, editMode, existingVoucherNo]);
 
 
     const getDamageStockById = async () => {
@@ -358,9 +399,19 @@ const DamageStockSkin = () => {
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                CreatesUser: userId,
+                CreatedDate: new Date(),
+                ModifiedUser: editMode ? userId : null,
+                damageDetails: formData.damageDetails.map(detail => ({
+                    ...detail,
+                    CreatedUser: detail.CreatedUser || userId,
+                    CreatedDate: detail.CreatedDate || new Date(),
+                    ModifiedUser: editMode ? userId : detail.ModifiedUser,
+                    ModifiedDate: editMode ? new Date() : detail.ModifiedDate,
+                    GodownId: detail.GodownId || formData.GodownId || 1,
+                })),
             };
-
             const api = editMode
                 ? `update-damage-stock/${damageStockId}`
                 : 'save-damage-stock';
@@ -368,6 +419,30 @@ const DamageStockSkin = () => {
 
             if (!response.data.error) {
                 setAlert({ id: Date.now(), type: "success", message: t("saveSuccess") });
+
+                const savedVoucherNo = response?.data?.data?.voucherNo || response?.data?.data?.damageStockNo || voucherId;
+                const stockDataForPrint = buildStockDataForPrint(savedVoucherNo, response?.data?.data || formData);
+
+                if (formData?.printAfterSave) {
+                    printDamageStock(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+                } else {
+                    const pdfResult = await Swal.fire({
+                        title: t('Print as PDF?') || 'Print as PDF?',
+                        text: t('Do you want to download this as a PDF?') || 'Do you want to download this as a PDF?',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
+                        cancelButtonText: t('No, Just Save') || 'No, Just Save',
+                    });
+                    if (pdfResult.isConfirmed) {
+                        setTimeout(() => {
+                            saveDamageStockAsPDF(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+                        }, 500);
+                    }
+                }
+
                 if (saleSettings?.CloseAfterSave) {
                     navigate('/transaction/damage-stock/list');
                 }
@@ -384,20 +459,78 @@ const DamageStockSkin = () => {
         } finally {
             setIsSaving(false);
         }
-    }, [formData, generalSettings, editMode]);
+    }, [formData, generalSettings, editMode, buildStockDataForPrint, selectedBranchDetails, time, currentCurrency, voucherId]);
 
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-                e.preventDefault();
-                handleSave();
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [handleSave]);
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const stockDataForPrint = buildStockDataForPrint(existingVoucherNo, formData);
+            await printDamageStock(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+        } catch (error) {
+            console.error('Error reprinting damage stock:', error);
+            Swal.fire({ icon: 'error', title: t('Error') || 'Error', text: 'Failed to print' });
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, buildStockDataForPrint, existingVoucherNo, formData, selectedBranchDetails, time, currentCurrency]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const stockDataForPrint = buildStockDataForPrint(existingVoucherNo, formData);
+            await saveDamageStockAsPDF(stockDataForPrint, selectedBranchDetails, time, currentCurrency);
+        } catch (error) {
+            console.error('Error saving PDF for damage stock:', error);
+            Swal.fire({ icon: 'error', title: t('Error') || 'Error', text: 'Failed to save PDF' });
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [buildStockDataForPrint, existingVoucherNo, formData, selectedBranchDetails, time, currentCurrency]);
+
+ const ctrlSPressed = useRef(false);
+
+useEffect(() => {
+    if (editMode) return;
+
+    const handleKeyDown = (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+            e.preventDefault();
+
+            if (ctrlSPressed.current) return;
+
+            ctrlSPressed.current = true;
+            handleSave();
+        }
+    };
+
+    const handleKeyUp = (e) => {
+        if (e.key.toLowerCase() === "s") {
+            ctrlSPressed.current = false;
+        }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("keyup", handleKeyUp);
+    };
+}, [handleSave, editMode]);
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({
@@ -406,7 +539,7 @@ const DamageStockSkin = () => {
         }));
     };
 
-    if (fetchLoading || baseDataloading) {
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary ">
                 <BreadCrumb
@@ -432,6 +565,7 @@ const DamageStockSkin = () => {
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary">
@@ -460,13 +594,39 @@ const DamageStockSkin = () => {
                     },
                     {
                         label: editMode ? t("updateBtn") : t("submitBtn"),
-                      icon: editMode ? Pencil : SaveAll,
+                        icon: editMode ? Pencil : SaveAll,
                         type: "primary",
                         onClick: handleSave,
                         loading: isSaving,
                         loadingText: t("loadingText"),
                     },
                 ]}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="printAfterSaveDamageStock"
+                                checked={formData.printAfterSave || false}
+                                onCheckedChange={(value) =>
+                                    setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                }
+                            />
+                            <label
+                                htmlFor="printAfterSaveDamageStock"
+                                className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                            >
+                                {t("Direct Print") || "Print After Save"}
+                            </label>
+                        </div>
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
             />
 
             <div className='p-2 space-y-2 bg-primary dark:bg-primary'>

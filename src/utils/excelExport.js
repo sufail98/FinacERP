@@ -499,7 +499,12 @@ export const exportReportToExcel = (config) => {
 
   const finalFileName = `${fileName}_${formatDate(new Date(), 'YYYY-MM-DD')}.xlsx`;
 
-  XLSX.writeFile(wb, finalFileName);
+  if (window.electronAPI && window.electronAPI.saveFileBase64) {
+    const base64Data = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+    window.electronAPI.saveFileBase64(base64Data, finalFileName);
+  } else {
+    XLSX.writeFile(wb, finalFileName);
+  }
 
   return true;
 };

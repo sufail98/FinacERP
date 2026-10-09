@@ -3,6 +3,7 @@ import BreadCrumb from '@/components/common/BreadCrumb';
 import NoAcessComponent from '@/components/common/NoAcessComponent';
 import Preloader from '@/components/common/Preloader';
 import AlertBox from '@/components/common/AlertBox';
+import ContentTable from '@/components/common/ContentTable';
 import axiosInstance from '@/lib/axiosConfig';
 import usePrivileges from '@/lib/hooks/usePrivileges';
 import useAuth from '@/redux/hook/auth/useAuth';
@@ -11,7 +12,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import ProductSearchVoucherWiseFilter from './ProductSearchVoucherWiseFilter';
-import ProductSearchVoucherWiseGrid from './ProductSearchVoucherWiseGrid';
 import useReportExport from '@/hooks/useReportExport';
 
 const ProductSearchVoucherWise = () => {
@@ -21,27 +21,27 @@ const ProductSearchVoucherWise = () => {
     const [searchData, setSearchData] = useState(null);
     const [alert, setAlert] = useState(null);
 
-    // Dropdown data states
     const [productData, setProductData] = useState([]);
     const [productGroupData, setProductGroupData] = useState([]);
     const [ledgerData, setLedgerData] = useState([]);
     const [employeeData, setEmployeeData] = useState([]);
 
     const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Product Search Voucher Wise");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Product wise Voucher Search");
     const { generalSettings } = useSelector((state) => state.settings);
 
-    const { 
-        exportGenericToExcel, 
-        exportGenericToPdf, 
-        exportGenericToCsv 
+    const {
+        exportGenericToExcel,
+        exportGenericToPdf,
+        exportGenericToCsv
     } = useReportExport();
+
+    const decimalPart = generalSettings?.decimalPart || 2;
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
         return {
-            startDate: firstDay.toISOString().split('T')[0],
+            startDate: today.toISOString().split('T')[0],
             endDate: today.toISOString().split('T')[0]
         };
     };
@@ -70,7 +70,7 @@ const ProductSearchVoucherWise = () => {
                 axiosInstance.get("products-grid-fill?branchId=" + selectedBranchId).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("product-groups").catch(() => ({ data: { data: [] } })),
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Customer", "Supplier"],
+                    ledgerTypes: ["Customer", "Supplier", "Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("employees").catch(() => ({ data: { data: [] } }))
@@ -87,9 +87,7 @@ const ProductSearchVoucherWise = () => {
         }
     };
 
-    // Dropdown options
     const productOptions = useMemo(() => {
-        // Remove duplicates
         const uniqueProducts = productData.reduce((acc, product) => {
             if (!acc.find(p => p.productCode === product.productCode)) {
                 acc.push(product);
@@ -148,7 +146,6 @@ const ProductSearchVoucherWise = () => {
         { label: t('productSearchVoucherWise.filters.materialReceipt'), value: 'Material Receipt' }
     ];
 
-    // Search/Fetch Data
     const fetchData = async () => {
         setLoading(true);
         setAlert(null);
@@ -166,10 +163,8 @@ const ProductSearchVoucherWise = () => {
                 startText: filters.startText
             };
 
-
             const response = await axiosInstance.post("product-search-vocuher-wise", payload);
             const data = response.data.data || response.data;
-
 
             if (!data || (Array.isArray(data) && data.length === 0)) {
                 setAlert({
@@ -194,30 +189,23 @@ const ProductSearchVoucherWise = () => {
         }
     };
 
-    // Calculate totals
     const totals = useMemo(() => {
         if (!searchData || !Array.isArray(searchData) || searchData.length === 0) {
             return null;
         }
 
-        const decimalPart = generalSettings?.decimalPart || 2;
-
-        const totalQty = searchData.reduce((sum, row) => {
-            const value = parseFloat(row['Qty'] || row['qty'] || 0);
-            return sum + value;
-        }, 0);
-
-        const totalAmount = searchData.reduce((sum, row) => {
-            const value = parseFloat(row['Amount'] || row['amount'] || row['TotalAmount'] || 0);
-            return sum + value;
-        }, 0);
+        const totalInwardQty = searchData.reduce((sum, row) => sum + parseFloat(row['inwardQty'] || 0), 0);
+        const totalOutwardQty = searchData.reduce((sum, row) => sum + parseFloat(row['outwardQty'] || 0), 0);
+        const totalAmount = searchData.reduce((sum, row) => sum + parseFloat(row['cost'] || 0), 0);
 
         return {
-            totalQty: totalQty.toFixed(3),
+            totalInwardQty: totalInwardQty.toFixed(3),
+            totalOutwardQty: totalOutwardQty.toFixed(3),
+            totalQty: (totalOutwardQty - totalInwardQty).toFixed(3),
             totalAmount: totalAmount.toFixed(decimalPart),
             count: searchData.length
         };
-    }, [searchData, generalSettings?.decimalPart]);
+    }, [searchData, decimalPart]);
 
     const handleFilterChange = (field, value) => {
         setFilters(prev => ({ ...prev, [field]: value }));
@@ -239,23 +227,87 @@ const ProductSearchVoucherWise = () => {
         setAlert(null);
     };
 
+    /* ------------------------------ Grid columns / cell rendering ------------------------------ */
+    const formatDate = (value) => {
+        if (!value) return '-';
+        const datePart = String(value).split(' ')[0];
+        const [y, m, d] = datePart.split('-');
+        if (!y || !m || !d) return datePart;
+        return `${d}-${m}-${y}`;
+    };
+
+    const formatNumber = (value, decimals = 3) => {
+        
+        const num = Number(value);
+        
+        if (isNaN(num)) return '-';
+        return num.toFixed(decimals);
+    };
+
+    const columns = useMemo(() => ([
+        { key: 'SNo', label: t('productSearchVoucherWise.grid.columns.slNo'), align: 'center', width: '50' },
+        { key: 'date', label: t('productSearchVoucherWise.grid.columns.date'), align: 'center', width: '110' },
+        { key: 'voucherType', label: t('productSearchVoucherWise.grid.columns.voucherType'), align: 'center', width: '110' },
+        { key: 'voucherNo', label: t('productSearchVoucherWise.grid.columns.voucherNo'), align: 'center', width: '90' },
+        { key: 'productCode', label: t('productSearchVoucherWise.grid.columns.productCode'), align: 'center', width: '100' },
+        { key: 'productName', label: t('productSearchVoucherWise.grid.columns.productName'), align: 'left' },
+        { key: 'UnitName', label: t('productSearchVoucherWise.grid.columns.Unit'), align: 'center', width: '80' },
+        { key: 'inwardQty', label: t('productSearchVoucherWise.grid.columns.qty') + ' (In)', align: 'right', width: '100' },
+        { key: 'outwardQty', label: t('productSearchVoucherWise.grid.columns.qty') + ' (Out)', align: 'right', width: '100' },
+        { key: 'rate', label: t('productSearchVoucherWise.grid.columns.rate'), align: 'right', width: '100' },
+        { key: 'cost', label: t('productSearchVoucherWise.grid.columns.amount'), align: 'right', width: '120' },
+    ]), [t]);
+
+    const renderCell = (key, row) => {
+        switch (key) {
+            case 'date':
+                return formatDate(row.date);
+            case 'Type':
+                return row.Type || '-';
+            case 'voucherNo':
+                return row.voucherNo ?? '-';
+            case 'productCode':
+                return row.productCode ?? '-';
+            case 'productName':
+                return row.productName || '-';
+            case 'UnitName':
+                return row.UnitName || '-';
+            case 'inwardQty':
+                return formatNumber(row.inwardQty, 3);
+            case 'outwardQty':
+                return formatNumber(row.outwardQty, 3);
+            case 'rate':
+                return formatNumber(row.rate, decimalPart);
+            case 'cost':
+                return formatNumber(row.cost, decimalPart);
+            default:
+                return row[key] ?? '-';
+        }
+    };
+
+    const footerData = totals ? {
+        label: t('productSearchVoucherWise.grid.total'),
+        productName: t('productSearchVoucherWise.grid.total'),
+        inwardQty: totals.totalInwardQty,
+        outwardQty: totals.totalOutwardQty,
+        cost: totals.totalAmount,
+    } : null;
+
     /* ------------------------------ Export ------------------------------ */
     const getExportOptions = () => {
         if (!searchData || searchData.length === 0) return null;
 
-        const decimalPart = generalSettings?.decimalPart || 2;
-
         const exportData = searchData.map((row, index) => ({
-            SNo: row['SlNo'] || row['Sl NO'] || index + 1,
-            Date: row['Date'] || row['date'] || '-',
-            VoucherType: row['VoucherType'] || row['Voucher Type'] || '-',
-            VoucherNo: row['VoucherNo'] || row['Voucher No'] || row['BillNo'] || '-',
-            ProductCode: row['ProductCode'] || row['productCode'] || '-',
-            ProductName: row['ProductName'] || row['productName'] || row['Item'] || '-',
-            Party: row['Party'] || row['CustomerName'] || row['SupplierName'] || row['LedgerName'] || '-',
-            Qty: Number(row['Qty'] || row['qty'] || 0).toFixed(3),
-            Rate: Number(row['Rate'] || row['rate'] || 0).toFixed(decimalPart),
-            Amount: Number(row['Amount'] || row['amount'] || row['TotalAmount'] || 0).toFixed(decimalPart)
+            SNo: index + 1,
+            Date: formatDate(row.date),
+            VoucherType: row.Type || '-',
+            VoucherNo: row.voucherNo || '-',
+            ProductCode: row.productCode || '-',
+            ProductName: row.productName || '-',
+            InwardQty: Number(row.inwardQty || 0).toFixed(3),
+            OutwardQty: Number(row.outwardQty || 0).toFixed(3),
+            Rate: Number(row.rate || 0).toFixed(decimalPart),
+            Amount: Number(row.Cost || 0).toFixed(decimalPart)
         }));
 
         return {
@@ -268,14 +320,14 @@ const ProductSearchVoucherWise = () => {
             theme: 'professional',
             decimalPlaces: decimalPart,
             columns: [
-                { key: 'SNo', label: '#', align: 'center', width: 5 },
+                { key: 'SNo', label: t('productSearchVoucherWise.grid.columns.slNo'), align: 'center', width: 5 },
                 { key: 'Date', label: t('productSearchVoucherWise.grid.columns.date'), align: 'center', width: 10 },
                 { key: 'VoucherType', label: t('productSearchVoucherWise.grid.columns.voucherType'), align: 'center', width: 12 },
                 { key: 'VoucherNo', label: t('productSearchVoucherWise.grid.columns.voucherNo'), align: 'center', width: 10 },
                 { key: 'ProductCode', label: t('productSearchVoucherWise.grid.columns.productCode'), align: 'center', width: 10 },
                 { key: 'ProductName', label: t('productSearchVoucherWise.grid.columns.productName'), align: 'left', width: 18 },
-                { key: 'Party', label: t('productSearchVoucherWise.grid.columns.party'), align: 'left', width: 15 },
-                { key: 'Qty', label: t('productSearchVoucherWise.grid.columns.qty'), align: 'right', width: 8 },
+                { key: 'InwardQty', label: t('productSearchVoucherWise.grid.columns.qty') + ' (In)', align: 'right', width: 8 },
+                { key: 'OutwardQty', label: t('productSearchVoucherWise.grid.columns.qty') + ' (Out)', align: 'right', width: 8 },
                 { key: 'Rate', label: t('productSearchVoucherWise.grid.columns.rate'), align: 'right', width: 10 },
                 { key: 'Amount', label: t('productSearchVoucherWise.grid.columns.amount'), align: 'right', width: 12 }
             ]
@@ -378,11 +430,17 @@ const ProductSearchVoucherWise = () => {
                     initialLoading={initialLoading}
                 />
 
-                <ProductSearchVoucherWiseGrid
-                    data={searchData}
+                <ContentTable
+                    columns={columns}
+                    data={searchData || []}
+                    renderCell={renderCell}
                     loading={loading}
-                    totals={totals}
-                    decimalPart={generalSettings?.decimalPart || 2}
+                    footerData={footerData}
+                    staticSearchable={true}
+                    sortable={true}
+                    tableId="product-search-voucher-wise"
+                    pageSize={100}
+                    maxHeight="calc(100vh - 320px)"
                 />
             </div>
         </div>

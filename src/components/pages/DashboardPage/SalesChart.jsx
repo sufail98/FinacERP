@@ -9,7 +9,8 @@ const SalesChart = ({ selectedDate }) => {
   const [loading, setLoading] = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const { selectedBranchId,currentCurrency } = useAuth();
+  const { selectedBranchId, currentCurrency, selectedBranchDetails } = useAuth();
+  const mainBranch = selectedBranchDetails.mainBranch || false;
 
 
 
@@ -21,7 +22,7 @@ const SalesChart = ({ selectedDate }) => {
     { key: 'custom', label: 'Custom' }
   ];
 
-useEffect(() => {
+  useEffect(() => {
     if (selectedPeriod !== 'custom') {
       getChartData(selectedPeriod);
     } else if (fromDate && toDate) {
@@ -29,13 +30,15 @@ useEffect(() => {
     }
   }, [selectedPeriod, selectedBranchId, selectedDate]); // 👈 add selectedDate
 
- const getChartData = async (period) => {
+  const getChartData = async (period) => {
     try {
       setLoading(true);
-      
+
       const payload = {
         period: period,
-        branchId: selectedBranchId
+        branchId: selectedBranchId,
+        isMainBranch: mainBranch,
+
       };
 
       // Pass dashboard date when daily is selected
@@ -51,11 +54,11 @@ useEffect(() => {
       }
 
       const res = await axiosInstance.post('dashboard/sales-graph', payload);
-      
+
       if (res.data && res.data.data) {
         setChartData(res.data.data);
       }
-      
+
     } catch (error) {
       console.error('Error fetching chart data:', error);
       setChartData([]);
@@ -73,20 +76,19 @@ useEffect(() => {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-2">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Total Sales</h3>
-        
+
         {/* Period Tabs */}
-        <div className="flex items-center gap-1 rounded-lg p-1">
+        <div className="flex items-center gap-1 rounded-lg p-1 overflow-x-auto no-scrollbar -mx-2 px-2 sm:mx-0 sm:px-0">
           {periods.map((period) => (
             <button
               key={period.key}
               onClick={() => setSelectedPeriod(period.key)}
-              className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${
-                selectedPeriod === period.key
+              className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-1.5 text-sm font-bold rounded-md transition-all ${selectedPeriod === period.key
                   ? ' text-[#0258FF]'
                   : ' dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-              }`}
+                }`}
             >
               {period.label}
             </button>
@@ -108,7 +110,7 @@ useEffect(() => {
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          
+
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               To:
@@ -124,11 +126,10 @@ useEffect(() => {
           <button
             onClick={handleCustomDateSubmit}
             disabled={!fromDate || !toDate}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-              fromDate && toDate
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${fromDate && toDate
                 ? 'main-bg text-white hover:bg-blue-700'
                 : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-            }`}
+              }`}
           >
             Apply
           </button>
@@ -159,13 +160,13 @@ useEffect(() => {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.3} />
-              <XAxis 
-                dataKey="name" 
+              <XAxis
+                dataKey="name"
                 stroke="#9ca3af"
                 style={{ fontSize: '12px' }}
                 tickLine={false}
               />
-              <YAxis 
+              <YAxis
                 stroke="#9ca3af"
                 style={{ fontSize: '12px' }}
                 tickLine={false}

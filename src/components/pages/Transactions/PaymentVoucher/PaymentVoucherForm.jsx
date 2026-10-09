@@ -1,7 +1,7 @@
 import BreadCrumb from '@/components/common/BreadCrumb'
 import usePrivileges from '@/lib/hooks/usePrivileges'
 import { Wallet, SaveAll, Trash2, Table, Eraser } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import PaymentVoucherFormHeader from './PaymentVoucherFormHeader'
@@ -12,16 +12,24 @@ import PaymentVoucherFormFooter from './PaymentVoucherFormFooter'
 import axiosInstance from '@/lib/axiosConfig'
 import AlertBox from '@/components/common/AlertBox'
 import Preloader from '@/components/common/Preloader'
+import PopupPreloader from '@/components/common/PopupPreloader'
+import PrintDropdown from '@/components/common/PrintDropdown'
+import { Checkbox } from '@/components/ui/checkbox'
 import Swal from 'sweetalert2'
 import { formatDateWithTime, parseDateFromAPI, parseLocalDate } from '@/lib/dateFormat'
 import { showToast } from '@/utils/toast'
+import printPaymentVoucher, { savePaymentVoucherAsPDF } from '@/utils/prints/paymentVoucherPrints/PaymentVoucherPrintOne'
+import printPaymentVoucherA5, { savePaymentVoucherAsPDFA5 } from '@/utils/prints/paymentVoucherPrints/PaymentVoucherPrintA5'
+import { isElectron } from '@/utils/electronPrint'
 
 const PaymentVoucherForm = () => {
     const { t } = useTranslation();
     const { paymentVoucherId } = useParams()
     const editMode = Boolean(paymentVoucherId);
-    const { userId, currentFinancialYear, selectedBranchId, currentCurrencyConversion, currentCurrency } = useAuth();
-    const { generalSettings, purchaseSettings, financeSettings } = useSelector((state) => state.settings);
+    const { userId, currentFinancialYear, selectedBranchId, selectedBranchDetails, currentCurrencyConversion, currentCurrency } = useAuth();
+    const { generalSettings, purchaseSettings, financeSettings, printSettings } = useSelector((state) => state.settings);
+    const invoiceTypes = Object.keys(printSettings?.["Payment Voucher"]?.types || {});
+    const invoicePrintConfig = printSettings?.["Payment Voucher"]?.default || Object.values(printSettings?.["Payment Voucher"]?.types || {})[0];
     const navigate = useNavigate();
     const [fetchLoading, setFetchLoading] = useState(false);
     const [existingPaymentNo, setExistingPaymentNo] = useState('');
@@ -31,7 +39,12 @@ const PaymentVoucherForm = () => {
     const [resetTableKey, setResetTableKey] = useState(0);
     const [time, setTime] = useState("");
     const [ledgerBalance, setLedgerBalance] = useState(null);
+    const [documents, setDocuments] = useState([]);            // File[] — newly attached
+    const [existingDocuments, setExistingDocuments] = useState([]); // string[] — URLs from server
+    const [removedDocuments, setRemovedDocuments] = useState([]);   // string[] — URLs user removed
 
+    // ===== PRINT STATE =====
+    const [isPrinting, setIsPrinting] = useState(false);
 
 
     useEffect(() => {
@@ -77,6 +90,8 @@ const PaymentVoucherForm = () => {
         CreatedUser: userId,
         exchangeRate: currentCurrencyConversion?.rate,
         exchangeDate: currentCurrencyConversion?.date,
+        printAfterSave: financeSettings?.printAfterSave !== undefined ? financeSettings.printAfterSave : false,
+        printType: invoicePrintConfig?.printType || 'A4',
         paymentDetails: [
             {
                 SlNo: 1,
@@ -92,6 +107,13 @@ const PaymentVoucherForm = () => {
         ],
         partyDetails: []
     });
+
+    useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            printType: invoicePrintConfig?.printType || 'A4'
+        }));
+    }, [printSettings]);
 
     useEffect(() => {
         if (editMode) return;
@@ -163,6 +185,8 @@ const PaymentVoucherForm = () => {
             CreatedUser: userId,
             exchangeRate: currentCurrencyConversion?.rate,
             exchangeDate: currentCurrencyConversion?.date,
+            printAfterSave: financeSettings?.printAfterSave !== undefined ? financeSettings.printAfterSave : false,
+            printType: invoicePrintConfig?.printType || 'A4',
             paymentDetails: [{
                 SlNo: 1,
                 ledgerId: "",
@@ -176,6 +200,9 @@ const PaymentVoucherForm = () => {
             }],
             partyDetails: []
         });
+        setDocuments([]);
+        setExistingDocuments([]);
+        setRemovedDocuments([]);
         setErrors({});
         setResetTableKey(prev => prev + 1);
     };
@@ -204,40 +231,46 @@ const PaymentVoucherForm = () => {
         }));
     };
 
+    const fetchFinanceData = async (silent = false) => {
+        if (!silent) setBaseDataloading(true)
+        try {
+            const res = await axiosInstance.post('all-finance-data', {
+                voucherType: "Payment Voucher",
+                branchId: selectedBranchId,
+                yearId: currentFinancialYear.yearId,
+                ledgerTypes: ["Supplier","Customer&Supplier"],
+                ledgerId: formData.ledgerId,
+                currencyId: currentCurrency
+            })
+            const data = res?.data?.data;
+            setVoucherNo(data?.voucherdata?.voucherCode)
+            setBankCash(data?.bankaccountledgers5and8);
+            setCostCenters(data?.costcentre)
+            setCurrency(data?.currencywithConversion)
+            setLedgers(data?.accountLedger)
+            setBaseDataLoaded(true) // Mark base data as loaded
+            setFormData(prev => ({
+                ...prev,
+                costCentreId: data?.costcentre?.length > 0 ? data.costcentre[0].costCentreId : '',
+            }));
+        } catch (error) {
+            console.error('error fetching default data', error)
+            setBaseDataLoaded(true) // Mark as loaded even if error
+        } finally {
+            if (!silent) setBaseDataloading(false)
+        }
+    }
+
     // Fetch base data (ledgers, cost centers, etc.)
     useEffect(() => {
-        const getSalesRequiredData = async () => {
-            setBaseDataloading(true)
-            try {
-                const res = await axiosInstance.post('all-finance-data', {
-                    voucherType: "Payment Voucher",
-                    branchId: selectedBranchId,
-                    yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Supplier"],
-                    ledgerId: formData.ledgerId,
-                    currencyId: currentCurrency
-                })
-                const data = res?.data?.data;
-                setVoucherNo(data?.voucherdata?.voucherCode)
-                setBankCash(data?.bankaccountledgers5and8);
-                setCostCenters(data?.costcentre)
-                setCurrency(data?.currencywithConversion)
-                setLedgers(data?.accountLedger)
-                setBaseDataLoaded(true) // Mark base data as loaded
-
-            } catch (error) {
-                console.error('error fetching default data', error)
-                setBaseDataLoaded(true) // Mark as loaded even if error
-            } finally {
-                setBaseDataloading(false)
-            }
-        }
-        getSalesRequiredData()
+        fetchFinanceData()
     }, [])
 
+    const hasFetchedVoucherRef = React.useRef(false);
     // Fetch payment data AFTER base data is loaded
     useEffect(() => {
-        if (editMode && paymentVoucherId && baseDataLoaded && ledgers.length > 0) {
+        if (editMode && paymentVoucherId && baseDataLoaded && ledgers.length > 0 && !hasFetchedVoucherRef.current) {
+            hasFetchedVoucherRef.current = true;
             fetchPaymentData();
         }
     }, [paymentVoucherId, editMode, baseDataLoaded, ledgers]);
@@ -358,6 +391,8 @@ const PaymentVoucherForm = () => {
                 CreatedUser: data.CreatedUser,
                 exchangeRate: currentCurrencyConversion?.rate,
                 exchangeDate: currentCurrencyConversion?.date,
+                printAfterSave: financeSettings?.printAfterSave !== undefined ? financeSettings.printAfterSave : false,
+                printType: (invoicePrintConfig?.printType || 'A4'),
                 paymentDetails: paymentDetailsForForm,
                 partyDetails: data.partyDetails || []
             });
@@ -394,7 +429,8 @@ const PaymentVoucherForm = () => {
                     paymentDetails: updatedDetails
                 }));
             }
-
+            setExistingDocuments(data.Documents || []);
+            setRemovedDocuments([]);
         } catch (error) {
             console.error('Error fetching payment data:', error);
 
@@ -403,6 +439,103 @@ const PaymentVoucherForm = () => {
             setFetchLoading(false)
         }
     };
+
+    // ===== PRINT HELPERS =====
+    // Cash/Bank ledger name shown at the top of the voucher (formData.ledgerId is the
+    // Cash/Bank account this payment was posted against, resolved from `bankCash`).
+    const getBankCashName = useCallback((sourceFormData) => {
+        const source = sourceFormData || formData;
+        return bankCash?.find(b => b.ledgerId === source.ledgerId)?.ledgerName || '';
+    }, [bankCash, formData]);
+
+    const buildVoucherDataForPrint = useCallback((voucherNumber, overrideData) => {
+        const base = overrideData || formData;
+        return {
+            ...base,
+            voucherNo: base?.voucherNo || voucherNumber || voucherNo,
+            bankCashName: getBankCashName(base),
+        };
+    }, [formData, voucherNo, getBankCashName]);
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // SINGLE SOURCE OF TRUTH for payment voucher print types.
+    // To add a new layout: import it above, add ONE entry here.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const PAYMENT_PRINT_HANDLERS = {
+        'A4': { print: printPaymentVoucher, pdf: savePaymentVoucherAsPDF },
+        'A5': { print: printPaymentVoucherA5, pdf: savePaymentVoucherAsPDFA5 },
+    };
+
+    const DEFAULT_PAYMENT_PRINT_TYPE = 'A4';
+    const DEFAULT_PAYMENT_PDF_TYPE = 'A4';
+
+    // mode: 'print' | 'pdf'
+    const runVoucherOutput = useCallback((mode, voucherDataForPrint) => {
+        const handlers = PAYMENT_PRINT_HANDLERS[formData.printType];
+
+        const fn = handlers?.[mode]
+            ?? PAYMENT_PRINT_HANDLERS[mode === 'pdf' ? DEFAULT_PAYMENT_PDF_TYPE : DEFAULT_PAYMENT_PRINT_TYPE][mode];
+
+        fn(voucherDataForPrint, selectedBranchDetails, time, currentCurrency);
+    }, [formData.printType, selectedBranchDetails, time, currentCurrency]);
+
+    const printToPrinterFn = useCallback((voucherDataForPrint) => {
+        runVoucherOutput('print', voucherDataForPrint);
+    }, [runVoucherOutput]);
+
+    const printToPdfFn = useCallback((voucherDataForPrint) => {
+        runVoucherOutput('pdf', voucherDataForPrint);
+    }, [runVoucherOutput]);
+
+    // ===== EDIT MODE: Reprint to Printer =====
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this payment voucher?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const voucherDataForPrint = buildVoucherDataForPrint(existingPaymentNo);
+            printToPrinterFn(voucherDataForPrint);
+
+            if (isElectron()) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        } catch (error) {
+            console.error('Error printing payment voucher:', error);
+            showToast.error('Failed to print payment voucher');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, buildVoucherDataForPrint, existingPaymentNo, printToPrinterFn]);
+
+    // ===== EDIT MODE: Reprint to PDF =====
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const voucherDataForPrint = buildVoucherDataForPrint(existingPaymentNo);
+            printToPdfFn(voucherDataForPrint);
+
+            if (isElectron()) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        } catch (error) {
+            console.error('Error generating payment voucher PDF:', error);
+            showToast.error('Failed to generate payment voucher PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [buildVoucherDataForPrint, existingPaymentNo, printToPdfFn]);
 
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -511,7 +644,26 @@ const PaymentVoucherForm = () => {
             }
 
             setIsSubmitting(true);
-
+            const appendFormData = (fd, key, value, options = {}) => {
+                const { keepEmpty = false } = options;
+                if (value === null || value === undefined) {
+                    if (keepEmpty) fd.append(key, '');
+                    return;
+                }
+                if (Array.isArray(value)) {
+                    value.forEach((item, index) => {
+                        appendFormData(fd, `${key}[${index}]`, item, { keepEmpty: true });
+                    });
+                } else if (value instanceof Date) {
+                    fd.append(key, value.toISOString());
+                } else if (typeof value === 'object' && !(value instanceof File)) {
+                    Object.entries(value).forEach(([subKey, subValue]) => {
+                        appendFormData(fd, `${key}[${subKey}]`, subValue, { keepEmpty });
+                    });
+                } else {
+                    fd.append(key, value);
+                }
+            };
             const formattedData = {
                 ...formData,
                 date: formData.date instanceof Date ? formData.date.toISOString().split('T')[0] : formData.date,
@@ -524,7 +676,7 @@ const PaymentVoucherForm = () => {
                     .map((detail, index) => ({
                         ledgerId: detail.ledgerId,
                         amount: (parseFloat(detail.amount) || 0).toFixed(generalSettings?.decimalPart ?? 2),
-                        currencyConversionId: detail.currencyConversionId || currentCurrencyConversion?.currencyConversionId || 6,
+                        currencyConversionId: detail.currencyConversionId || currentCurrencyConversion?.currencyConversionId || 1,
                         chequeNo: detail.chequeNo || "",
                         chequeDate: detail.chequeDate instanceof Date
                             ? detail.chequeDate.toISOString().split('T')[0]
@@ -547,10 +699,35 @@ const PaymentVoucherForm = () => {
                 delete updateData.yearId;
                 delete updateData.CreatedUser;
 
-                const response = await axiosInstance.post(`update-payment-voucher/${paymentVoucherId}`, updateData);
+                const hasDocuments = documents.length > 0;
+                let response;
+
+                if (hasDocuments) {
+                    const fd = new FormData();
+                    Object.entries(updateData).forEach(([key, value]) => {
+                        appendFormData(fd, key, value);
+                    });
+                    documents.forEach((file) => fd.append('Documents[]', file));
+
+                    const config = { headers: { "Content-Type": "multipart/form-data" } };
+                    response = await axiosInstance.post(`update-payment-voucher/${paymentVoucherId}`, fd, config);
+                } else {
+                    response = await axiosInstance.post(`update-payment-voucher/${paymentVoucherId}`, updateData);
+                }
 
                 if (response.data && !response.data.error) {
                     showToast.success(t('updateSuccess') || 'Payment updated successfully');
+
+                    // ===== PRINT LOGIC (edit mode: honor printAfterSave toggle) =====
+                    if (formData?.printAfterSave) {
+                        const freshData = response?.data?.data || {};
+                        const voucherDataForPrint = buildVoucherDataForPrint(
+                            existingPaymentNo,
+                            { ...formData, ...freshData }
+                        );
+                        printToPrinterFn(voucherDataForPrint);
+                    }
+
                     if (financeSettings?.CloseAfterSave) {
                         navigate('/transaction/payment-voucher');
                     }
@@ -562,12 +739,56 @@ const PaymentVoucherForm = () => {
                     ...formattedData,
                     date: formatDateWithTime(formattedData.date)
                 };
-                const response = await axiosInstance.post('save-payment-voucher', dataToSave);
+
+                const hasDocuments = documents.length > 0;
+                let response;
+
+                if (hasDocuments) {
+                    const fd = new FormData();
+                    Object.entries(dataToSave).forEach(([key, value]) => {
+                        appendFormData(fd, key, value);
+                    });
+                    documents.forEach((file) => fd.append('Documents[]', file));
+
+                    const config = { headers: { "Content-Type": "multipart/form-data" } };
+                    response = await axiosInstance.post('save-payment-voucher', fd, config);
+                } else {
+                    response = await axiosInstance.post('save-payment-voucher', dataToSave);
+                }
 
                 if (response.data && !response.data.error) {
                     showToast.success(t('saveSuccess') || 'Payment saved successfully');
 
-                    // ✅ FIX: Clear form if CloseAfterSave is false
+                    // ===== PRINT LOGIC (new voucher) =====
+                    const freshData = response?.data?.data || {};
+                    const voucherDataForPrint = buildVoucherDataForPrint(
+                        freshData?.voucherNo || voucherNo,
+                        { ...formData, ...freshData }
+                    );
+
+                    if (formData?.printAfterSave) {
+                        printToPrinterFn(voucherDataForPrint);
+                    } else {
+                        const pdfResult = await Swal.fire({
+                            title: t('Print As Pdf') || 'Print as PDF?',
+                            text: t('Do you want to download this voucher as a PDF?') ||
+                                'Do you want to download this voucher as a PDF?',
+                            icon: 'question',
+                            showCancelButton: true,
+                            confirmButtonColor: '#3085d6',
+                            cancelButtonColor: '#d33',
+                            confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
+                            cancelButtonText: t('No, Just Save') || 'No, Just Save',
+                        });
+
+                        if (pdfResult.isConfirmed) {
+                            setTimeout(() => {
+                                printToPdfFn(voucherDataForPrint);
+                            }, 500);
+                        }
+                    }
+
+                    // ✅ Clear form if CloseAfterSave is false
                     if (financeSettings?.CloseAfterSave) {
                         navigate('/transaction/payment-voucher');
                     } else {
@@ -590,6 +811,8 @@ const PaymentVoucherForm = () => {
                             CreatedUser: userId,
                             exchangeRate: currentCurrencyConversion?.rate,
                             exchangeDate: currentCurrencyConversion?.date,
+                            printAfterSave: financeSettings?.printAfterSave !== undefined ? financeSettings.printAfterSave : false,
+                            printType: invoicePrintConfig?.printType || 'A4',
                             paymentDetails: [{
                                 SlNo: 1,
                                 ledgerId: "",
@@ -603,6 +826,9 @@ const PaymentVoucherForm = () => {
                             }],
                             partyDetails: []
                         });
+                        setDocuments([]);
+                        setExistingDocuments([]);
+                        setRemovedDocuments([]);
                         setErrors({});
                         setResetTableKey(prev => prev + 1);
                     }
@@ -664,6 +890,13 @@ const PaymentVoucherForm = () => {
     return (
         <div className=" bg-white dark:bg-[#1e1e1e] transition-colors">
 
+            <PopupPreloader
+                isOpen={isSubmitting || isPrinting}
+                state="loading"
+                title={isPrinting ? (t("Printing") || "Preparing Print...") : (isSubmitting ? (editMode ? t("updating") : t("saving")) : "")}
+                subtitle={isPrinting ? (t("printingDesc") || "Please wait while we prepare your voucher for printing...") : (t("loadingDesc") || "Please wait...")}
+            />
+
             <BreadCrumb
                 routes={[
                     { title: t("paymentVoucher.breadcrumb.master"), url: "#" },
@@ -709,6 +942,49 @@ const PaymentVoucherForm = () => {
                         ]
                         : []),
                 ]}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="printAfterSavePaymentVoucher"
+                                checked={formData.printAfterSave || false}
+                                onCheckedChange={(value) =>
+                                    setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                }
+                            />
+                            <label
+                                htmlFor="printAfterSavePaymentVoucher"
+                                className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                            >
+                                {t("salesInvoice.form.footerSection.otherDetails.label.printAfterSave") || "Print After Save"}
+                            </label>
+                        </div>
+                        {invoiceTypes.length > 0 && (
+                            <select
+                                name="printType"
+                                id="printTypePaymentVoucher"
+                                className='border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none'
+                                value={formData.printType}
+                                onChange={(e) => {
+                                    setFormData(prev => ({ ...prev, printType: e.target.value }));
+                                }}
+                            >
+                                {
+                                    invoiceTypes.map(type => (
+                                        <option key={type} value={type}>{type}</option>
+                                    ))
+                                }
+                            </select>
+                        )}
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
             />
             {/* ✅ Responsive padding */}
             <div className='p-1 sm:p-2 lg:p-1' key={resetTableKey}>
@@ -726,6 +1002,12 @@ const PaymentVoucherForm = () => {
                     setBankCash={setBankCash}
                     setLedgerBalance={setLedgerBalance}
                     ledgerBalance={ledgerBalance}
+                    documents={documents}
+                    setDocuments={setDocuments}
+                    existingDocuments={existingDocuments}
+                    setExistingDocuments={setExistingDocuments}
+                    removedDocuments={removedDocuments}
+                    setRemovedDocuments={setRemovedDocuments}
                 />
                 <PaymentVoucherFormTable
                     formData={formData}
@@ -733,6 +1015,7 @@ const PaymentVoucherForm = () => {
                     ledgers={ledgers}
                     currency={currency}
                     onRowRemove={handleRowRemove}
+                    onLedgerCreated={() => fetchFinanceData(true)}
                 />
                 <PaymentVoucherFormFooter
                     formData={formData}

@@ -26,6 +26,7 @@ const DayBookReportFilters = ({
                         name="fromDate"
                         value={filters.fromDate}
                         onChange={(e, value) => onFilterChange('fromDate', value)}
+                        max={new Date().toISOString().split('T')[0]}
                         required
                         className='w-full'
                     />
@@ -47,13 +48,13 @@ const DayBookReportFilters = ({
                 {/* Ledger */}
                 <div className="w-[180px]">
                     <SearchableDropdown
-                       label={t("reportFilters.selectLedger")}
+                       label={t("reportFilters.SelectingLedger")}
                         name="ledgerName"
                         value={filters.ledgerName}
                         onChange={(value) => onFilterChange('ledgerName', value)}
                         options={ledgerOptions}
-                        placeholder={t("reportFilters.selectLedger")}
-                        searchPlaceholder={t("reportFilters.selectLedger")}
+                        placeholder={t("reportFilters.SelectingLedger")}
+                        searchPlaceholder={t("reportFilters.SelectingLedger")}
                         clearable
                     />
                 </div>

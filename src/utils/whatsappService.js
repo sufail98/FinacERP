@@ -5,6 +5,7 @@
  */
 
 import { getDomainBySlno } from "@/lib/baseUrl";
+import { isElectron } from '@/utils/electronPrint';
 
 // ─── Route map ────────────────────────────────────────────────────────────────
 const DOCUMENT_ROUTE_MAP = {
@@ -28,23 +29,12 @@ const DOCUMENT_EMOJI_MAP = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Extract the 2-letter customer prefix from the stored slno code
- * e.g. 'TS123456' → 'TS'
- */
 export const getCustomerPrefix = (slno) => {
     if (!slno || typeof slno !== 'string') return null;
     const match = slno.match(/^([A-Z]{2})/i);
     return match ? match[1].toUpperCase() : null;
 };
 
-/**
- * Build the shareable PDF-viewer URL for any supported document type.
- *
- * @param {number|string} masterId      - DB master ID
- * @param {string}        documentType  - One of the keys in DOCUMENT_ROUTE_MAP
- * @returns {string|null}
- */
 export const generateDocumentPDFLink = (masterId, documentType = 'Sales Invoice') => {
     if (!masterId) {
         console.error('generateDocumentPDFLink: masterId is required');
@@ -66,18 +56,11 @@ export const generateDocumentPDFLink = (masterId, documentType = 'Sales Invoice'
     return url;
 };
 
-/**
- * Backward-compatible alias used by SalesInvoiceSkin.
- */
 export const generateInvoicePDFLink = (salesMasterId) =>
     generateDocumentPDFLink(salesMasterId, 'Sales Invoice');
 
 // ─── PDF Generation & Upload ──────────────────────────────────────────────────
 
-/**
- * Dynamically load an external script only once.
- * Resolves immediately if the script tag already exists.
- */
 const loadScript = (src) =>
     new Promise((resolve, reject) => {
         if (document.querySelector(`script[src="${src}"]`)) return resolve();
@@ -88,9 +71,6 @@ const loadScript = (src) =>
         document.head.appendChild(script);
     });
 
-/**
- * Ensure html2canvas and jsPDF are available on window.
- */
 const ensurePDFLibraries = () =>
     Promise.all([
         loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),
@@ -98,94 +78,211 @@ const ensurePDFLibraries = () =>
     ]);
 
 /**
- * Convert an HTML string into a PDF Blob.
+ * ─────────────────────────────────────────────────────────────────────────
+ * PDF RENDERING STRATEGY
+ * ─────────────────────────────────────────────────────────────────────────
+ * html2canvas (the function below, htmlToPDFBlobViaCanvas) reproducibly
+ * introduces a small uniform top-inset on every text line / cell — a known
+ * class of html2canvas issue caused by its own text-metrics approximation
+ * (it doesn't use the browser's real text layout engine), made worse at
+ * scale:2 and with small font sizes (this invoice uses 9-11px text).
+ * Timing fixes (waiting for images/fonts) do NOT fix this, because it's not
+ * a race condition — it's how html2canvas draws text, full stop.
  *
- * Strategy:
- *   1. Inject the HTML into a hidden, fixed-position iframe (same-origin).
- *   2. Wait for layout + images to settle.
- *   3. Iterate over every `.page` div (one per A4 sheet).
- *   4. Capture each page with html2canvas.
- *   5. Stitch captures into a jsPDF document and return as Blob.
+ * The reliable fix is to stop asking html2canvas to draw text at all.
+ * When running inside Electron, we instead render the HTML in a real
+ * hidden Chromium window and ask Chromium itself to print it to PDF
+ * natively (webContents.printToPDF, via a new main-process IPC handler:
+ * 'render-html-to-pdf-buffer'). That's the exact same rendering engine
+ * used for on-screen preview/print, so there is no approximation and no
+ * offset bug.
  *
- * @param {string} htmlString - Full invoice HTML (including <html>, <head>, <body>)
- * @returns {Promise<Blob|null>}
+ * html2canvas is kept ONLY as a fallback for the plain-browser (non-Electron)
+ * case, where there's no Chromium print API available to call directly.
+ * ─────────────────────────────────────────────────────────────────────────
  */
 const htmlToPDFBlob = async (htmlString) => {
+    if (isElectron() && window.electronAPI?.renderHtmlToPdfBuffer) {
+        try {
+            // main.cjs returns { success, data } on success, matching the
+            // existing save-pdf convention — not a raw buffer.
+            const result = await window.electronAPI.renderHtmlToPdfBuffer(htmlString);
+
+            if (!result?.success) {
+                throw new Error(result?.error || 'render-html-to-pdf-buffer returned no data');
+            }
+
+            // Electron's IPC structured-clones a Node Buffer into the
+            // renderer as a plain object with numeric keys / a Uint8Array-like
+            // shape depending on version — normalize defensively either way.
+            const raw = result.data;
+            const bytes = raw instanceof Uint8Array
+                ? raw
+                : new Uint8Array(raw?.data ?? raw ?? []);
+
+            if (!bytes.length) throw new Error('PDF buffer was empty');
+
+            return new Blob([bytes], { type: 'application/pdf' });
+        } catch (err) {
+            console.error('Native Electron PDF render failed, falling back to html2canvas:', err);
+            // fall through to html2canvas below
+        }
+    }
+
+    return htmlToPDFBlobViaCanvas(htmlString);
+};
+/**
+ * Wait until every <img> inside a document has actually finished loading
+ * (or errored out) before we measure layout / capture anything.
+ *
+ * Why this matters: invoice pages with a full-bleed letterhead background
+ * (position:absolute, object-fit:fill, height:100% of .page) only get their
+ * correct final layout height AFTER that image has loaded — browsers may
+ * report a transient/incorrect scrollHeight or bounding rect before then.
+ * The old code used a blind 1.4s setTimeout, which is a race: large
+ * letterhead images (often the biggest asset in the whole render) can take
+ * longer than that on a slow connection or first load, causing the
+ * measurement to happen against a not-yet-settled layout — which is what
+ * produced the "banner, then big empty gap, then content" artifact.
+ */
+const waitForImagesToLoad = (doc) => {
+    const images = Array.from(doc.querySelectorAll('img'));
+    if (images.length === 0) return Promise.resolve();
+
+    return Promise.all(
+        images.map((img) => {
+            if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+            return new Promise((resolve) => {
+                const done = () => resolve();
+                img.addEventListener('load', done, { once: true });
+                img.addEventListener('error', done, { once: true }); // don't hang on a broken image
+                // Safety net in case neither event fires for some reason
+                setTimeout(done, 5000);
+            });
+        }),
+    );
+};
+
+/**
+ * Also wait for web fonts, if the iframe document exposes a FontFaceSet —
+ * text reflow after font swap can shift layout heights too.
+ */
+const waitForFonts = (doc) => {
+    if (doc.fonts && doc.fonts.ready) {
+        return doc.fonts.ready.catch(() => {});
+    }
+    return Promise.resolve();
+};
+
+const htmlToPDFBlobViaCanvas = async (htmlString) => {
     try {
         await ensurePDFLibraries();
 
-        return await new Promise((resolve) => {
-            // ── Hidden iframe ────────────────────────────────────────────────
-            const iframe = document.createElement('iframe');
-            iframe.style.cssText = [
-                'position:fixed',
-                'top:-9999px',
-                'left:-9999px',
-                'width:794px',       // ≈ A4 at 96 dpi
-                'height:auto',        // ✅ let content determine height — each .page div
-    'min-height:1123px',  //    is independently captured; don't clip it
-                'border:none',
-                'visibility:hidden',
-                'pointer-events:none',
-            ].join(';');
-            document.body.appendChild(iframe);
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = [
+            'position:fixed',
+            'top:0',
+            'left:-9999px',      // keep off-screen horizontally only
+            'width:794px',        // A4 width @ 96dpi
+            'height:1123px',      // fixed viewport height for layout purposes
+            'border:none',
+            'visibility:hidden',
+            'pointer-events:none',
+        ].join(';');
+        document.body.appendChild(iframe);
 
+        try {
             const iDoc = iframe.contentDocument || iframe.contentWindow.document;
             iDoc.open();
             iDoc.write(htmlString);
             iDoc.close();
 
-            // Give the browser time to render fonts, images, and layout.
-            setTimeout(async () => {
-                try {
-                    const { jsPDF } = window.jspdf;
-                    const pdf = new jsPDF({
-                        orientation : 'portrait',
-                        unit        : 'mm',
-                        format      : 'a4',
-                        compress    : true,
-                    });
+            // ✅ Wait for real layout completion instead of guessing with setTimeout.
+            // Order matters: fonts first (can change text height/wrapping),
+            // then images (can change background/letterhead height), then
+            // one more animation-frame tick to let the browser finish
+            // painting after those loads resolve.
+            await waitForFonts(iDoc);
+            await waitForImagesToLoad(iDoc);
+            await new Promise((r) => iframe.contentWindow.requestAnimationFrame(() => r()));
+            await new Promise((r) => iframe.contentWindow.requestAnimationFrame(() => r()));
 
-                    // Prefer individual .page divs; fall back to <body>.
-                    const pageDivs = Array.from(iDoc.querySelectorAll('.page'));
-                    const targets  = pageDivs.length > 0 ? pageDivs : [iDoc.body];
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({
+                orientation : 'portrait',
+                unit        : 'mm',
+                format      : 'a4',
+                compress    : true,
+            });
 
-                   // ⚠️ SCALE must match the iframe viewport exactly.
-  // Passing width/height DIFFERENT from the iframe size causes
-  // html2canvas to rescale the layout → extra padding in cells.
-  const PAGE_W_PX = 794;
-  const PAGE_H_PX = 1123;
-  const SCALE     = 2;   // 2× for sharp text — do NOT change
-  for (let i = 0; i < targets.length; i++) {
-  // AFTER
-const canvas = await window.html2canvas(targets[i], {
-    scale          : 2,
-    useCORS        : true,
-    allowTaint     : true,
-    backgroundColor: '#ffffff',
-    windowWidth    : 794,
-    windowHeight   : 1123,
-    logging        : false,
-    // ✅ No width/height override — let html2canvas measure the element naturally
-});
+            const pageDivs = Array.from(iDoc.querySelectorAll('.page'));
+            const targets  = pageDivs.length > 0 ? pageDivs : [iDoc.body];
 
-// And derive mm from actual canvas size:
-const imgW   = canvas.width  / 2;   // ÷ scale
-const imgH   = canvas.height / 2;
-const pxToMm = 25.4 / 96;
-pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, imgW * pxToMm, imgH * pxToMm);
-  }
+            const SCALE = 2; // 2x for sharp text — do NOT change
+            const pxToMm = 25.4 / 96;
 
-                    document.body.removeChild(iframe);
-                    resolve(pdf.output('blob'));
+            // ✅ A4 page height in px at 96dpi. Pages in this app's CSS are
+            // fixed at `.page { width:210mm; height:297mm; }`, so we trust
+            // that fixed layout height rather than scrollHeight — scrollHeight
+            // is unreliable here because .letterhead-bg is position:absolute
+            // (absolutely positioned elements don't reliably contribute to
+            // their parent's scrollHeight), so it doesn't accurately reflect
+            // how tall the visual page actually is once the background image
+            // has loaded and stretched to fill it.
+            const A4_HEIGHT_PX = 1123;
 
-                } catch (innerErr) {
-                    console.error('htmlToPDFBlob render error:', innerErr);
-                    document.body.removeChild(iframe);
-                    resolve(null);
-                }
-            }, 1400); // 1.4 s — enough for web fonts + background images
-        });
+            for (let i = 0; i < targets.length; i++) {
+                const target = targets[i];
+
+                // ✅ Reset any inherited scroll before each capture —
+                // a secondary cause of "content pushed down" bugs when
+                // capturing elements inside off-screen iframes.
+                iframe.contentWindow.scrollTo(0, 0);
+
+                const rect = target.getBoundingClientRect();
+                const actualWidth = Math.ceil(rect.width) || 794;
+                // Prefer the CSS-fixed page height; fall back to measured
+                // rect height only if the element is unusually short (e.g.
+                // a genuinely shorter thermal-style layout, not A4).
+                const actualHeight = rect.height >= A4_HEIGHT_PX - 5
+                    ? A4_HEIGHT_PX
+                    : Math.ceil(rect.height) || A4_HEIGHT_PX;
+
+                const canvas = await window.html2canvas(target, {
+                    scale          : SCALE,
+                    useCORS        : true,
+                    allowTaint     : true,
+                    backgroundColor: '#ffffff',
+                    windowWidth    : 794,
+                    windowHeight   : actualHeight,
+                    width          : actualWidth,
+                    height         : actualHeight,
+                    scrollX        : 0,
+                    scrollY        : 0,
+                    x              : 0,
+                    y              : 0,
+                    logging        : false,
+                });
+
+                const imgW = canvas.width  / SCALE;
+                const imgH = canvas.height / SCALE;
+
+                if (i > 0) pdf.addPage();
+                pdf.addImage(
+                    canvas.toDataURL('image/jpeg', 0.95),
+                    'JPEG',
+                    0,
+                    0,
+                    imgW * pxToMm,
+                    imgH * pxToMm,
+                );
+            }
+
+            return pdf.output('blob');
+
+        } finally {
+            document.body.removeChild(iframe);
+        }
 
     } catch (err) {
         console.error('htmlToPDFBlob error:', err);
@@ -195,13 +292,6 @@ pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, imgW * pxToMm, 
 
 /**
  * Generate invoice HTML → PDF Blob → upload → return hosted URL.
- *
- * @param {Function} generateInvoiceHTML  - Async fn(invoiceData, branchData, time) → HTML string
- *                                          Import from your active print file (e.g. invoicePrintSix)
- * @param {object}   invoiceData          - Full invoice form data (same object passed to print fns)
- * @param {object}   branchData           - selectedBranchDetails from useAuth
- * @param {string}   time                 - Current time string (e.g. "03:45 PM")
- * @returns {Promise<string|null>}         - Hosted PDF URL on success, null on failure
  */
 export const uploadInvoicePDFAndGetLink = async (
     generateInvoiceHTML,
@@ -210,15 +300,12 @@ export const uploadInvoicePDFAndGetLink = async (
     time,
 ) => {
     try {
-        // 1. Render invoice HTML using the same generator the print buttons use
         const invoiceHTML = await generateInvoiceHTML(invoiceData, branchData, time);
         if (!invoiceHTML) throw new Error('generateInvoiceHTML returned empty content');
 
-        // 2. Convert rendered HTML → PDF Blob
         const pdfBlob = await htmlToPDFBlob(invoiceHTML);
         if (!pdfBlob) throw new Error('htmlToPDFBlob returned null — check console for render errors');
 
-        // 3. Upload the Blob to the server
         const invoiceNo = invoiceData.invoiceNo || 'invoice';
         const fileName  = `${invoiceNo}.pdf`;
 
@@ -230,8 +317,6 @@ export const uploadInvoicePDFAndGetLink = async (
             {
                 method : 'POST',
                 body   : formData,
-                // Do NOT set Content-Type manually — the browser sets the
-                // correct multipart/form-data boundary automatically.
             },
         );
 
@@ -241,7 +326,6 @@ export const uploadInvoicePDFAndGetLink = async (
 
         const result = await response.json();
 
-        // Server schema: { status, error, message, path, url }
         if (result.error) {
             throw new Error(`Server error: ${result.message || 'Unknown error'}`);
         }
@@ -250,7 +334,7 @@ export const uploadInvoicePDFAndGetLink = async (
             throw new Error('Server response did not include a url field');
         }
 
-        return result.url; // e.g. "https://finacerp.com/invoice/public/storage/pdfinvoices/invoice_xxx.pdf"
+        return result.url;
 
     } catch (err) {
         console.error('uploadInvoicePDFAndGetLink error:', err);
@@ -260,15 +344,6 @@ export const uploadInvoicePDFAndGetLink = async (
 
 // ─── Message formatting ───────────────────────────────────────────────────────
 
-/**
- * Format the WhatsApp message body.
- *
- * @param {object} formData      - Full document form data
- * @param {string} documentNo    - Human-readable document number
- * @param {string} pdfLink       - Shareable PDF URL (hosted or viewer)
- * @param {string} documentType  - Document type label
- * @returns {string}
- */
 export const formatInvoiceMessageWithLink = (
     formData,
     documentNo,
@@ -283,21 +358,12 @@ export const formatInvoiceMessageWithLink = (
 
 // ─── WhatsApp openers ─────────────────────────────────────────────────────────
 
-/**
- * Open WhatsApp Web with a pre-filled message.
- * Uses Electron's openExternal when available; falls back to window.open.
- *
- * @param {string} phoneNumber - Raw phone number (any format)
- * @param {string} message
- * @returns {boolean}
- */
 export const sendWhatsAppMessage = (phoneNumber, message) => {
     if (!phoneNumber || !message) {
         console.error('sendWhatsAppMessage: phone and message are required');
         return false;
     }
 
-    // Strip spaces, dashes, parentheses, and leading zeros / plus signs
     const clean = phoneNumber
         .replace(/[\s\-\(\)]/g, '')
         .replace(/^[0+]+/, '');
@@ -313,13 +379,6 @@ export const sendWhatsAppMessage = (phoneNumber, message) => {
     return true;
 };
 
-/**
- * wa.me variant — works better on mobile devices.
- *
- * @param {string} phoneNumber
- * @param {string} message
- * @returns {boolean}
- */
 export const sendWhatsAppMessageMobile = (phoneNumber, message) => {
     if (!phoneNumber || !message) return false;
 

@@ -9,6 +9,8 @@ import { useDispatch, useSelector } from "react-redux"
 import { updateInventorySettings } from "@/redux/slice/settingsSlice"
 import Preloader from "@/components/common/Preloader"
 import { showToast } from "@/utils/toast"
+import { getSystemId } from "@/utils/systemId"
+import PasswordModal from "./PasswordModal"
 
 const InventorySettings = () => {
     const { userLoading, selectedBranchId } = useAuth();
@@ -21,8 +23,22 @@ const InventorySettings = () => {
     const [saving, setSaving] = useState(false)
     const [alert, setAlert] = useState(null);
 
+    // Password Modal States
+    const [showPasswordModal, setShowPasswordModal] = useState(false)
+    const [pendingSave, setPendingSave] = useState(false)
+
+    const [systemId, setSystemId] = useState("")
+
     const handleBack = () => {
     }
+
+    useEffect(() => {
+        const fetchSystemId = async () => {
+            const id = await getSystemId()
+            setSystemId(id)
+        }
+        fetchSystemId()
+    }, [])
 
     /* ================================================================
        REFETCH INVENTORY SETTINGS & UPDATE REDUX
@@ -31,7 +47,6 @@ const InventorySettings = () => {
     const fetchAndUpdateSettings = useCallback(async () => {
         try {
             const response = await axiosInstance.get('inventory-settings');
-
 
             if (!response.error && response?.data?.data?.length > 0) {
                 const branchSettings = response.data.data.find(
@@ -62,14 +77,33 @@ const InventorySettings = () => {
         fetchAndUpdateSettings();
     }, [])
 
+    /**
+     * Handle Save Button Click - Show password modal
+     */
+    const handleSaveClick = () => {
+        setShowPasswordModal(true)
+        setPendingSave(true)
+    }
+
+    /**
+     * Handle Password Modal Confirmation
+     */
+    const handlePasswordConfirm = (verified) => {
+        if (verified && pendingSave) {
+            performSave()
+            setPendingSave(false)
+        }
+    }
+
     /* ================================================================
        SAVE HANDLER — after success always refetch & update Redux
     ================================================================ */
-    const handleSave = async () => {
+    const performSave = async () => {
         try {
             setSaving(true)
             const payload = {
                 NegativeStock: settings.NegativeStock,
+                activateMultyUnit: settings.activateMultyUnit,
                 stockValueCalculation: settings.stockValueCalculation,
                 SalesPriceUpdateByCostPricePercentage: settings.SalesPriceUpdateByCostPricePercentage,
                 maintainGodown: settings.maintainGodown,
@@ -77,7 +111,8 @@ const InventorySettings = () => {
                 lowStockReminder: settings.lowStockReminder,
                 CloseAfterSave: settings.CloseAfterSave,
                 AddProductMainGroupCodeWithProductCode: settings.AddProductMainGroupCodeWithProductCode,
-                branchId: selectedBranchId
+                branchId: selectedBranchId,
+                systemId
             }
 
             const response = await axiosInstance.post(
@@ -86,7 +121,6 @@ const InventorySettings = () => {
             );
 
             if (!response.error) {
-
                 showToast.success("Settings updated successfully");
                 // ✅ Refetch & update Redux with fresh server data
                 await fetchAndUpdateSettings();
@@ -117,16 +151,37 @@ const InventorySettings = () => {
         return <div><Preloader /></div>
     }
 
+    // Reusable heading row for grouping sections
+    const SectionHeading = ({ title }) => (
+        <tr className="bg-blue-50 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-700">
+            <td className="px-4 py-3 font-bold text-gray-900 dark:text-gray-100" colSpan="2">
+                {title}
+            </td>
+        </tr>
+    )
+
     return (
-        <div className="p-2 space-y-2 bg-white dark:bg-[#121212] transition-colors">
+        <div className="p-2 space-y-2 bg-white dark:bg-[#121212] transition-colors pb-20">
             {alert && <AlertBox key={alert.key} message={alert.message} type={alert.type} />}
             <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Inventory Settings</h3>
+
+            {/* Password Modal */}
+            <PasswordModal 
+                open={showPasswordModal}
+                onOpenChange={setShowPasswordModal}
+                onConfirm={handlePasswordConfirm}
+            />
 
             {/* Settings Table */}
             <div className="overflow-x-auto">
                 <table className="w-[50%]">
                     <tbody>
-                        {/* Dropdown Settings */}
+
+                        {/* ============================================================
+                            STOCK SETTINGS
+                        ============================================================ */}
+                        <SectionHeading title="Stock Settings" />
+
                         <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Negative Stock Alert</td>
                             <td className="px-4 py-3">
@@ -151,8 +206,7 @@ const InventorySettings = () => {
                                 </Select>
                             </td>
                         </tr>
-
-                        <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
+                        <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Stock Value Calculation Method</td>
                             <td className="px-4 py-3">
                                 <Select
@@ -180,8 +234,24 @@ const InventorySettings = () => {
                                 </Select>
                             </td>
                         </tr>
+                        <tr className="border-b border-gray-200 dark:border-gray-700">
+                            <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Low Stock Reminder</td>
+                            <td className="px-4 py-3">
+                                <Checkbox
+                                    className='border-gray-500 dark:border-gray-600 
+                                             data-[state=checked]:main-bg dark:data-[state=checked]:main-bg'
+                                    id="lowStockReminder"
+                                    checked={settings.lowStockReminder}
+                                    onCheckedChange={(checked) => handleCheckboxChange('lowStockReminder', checked)}
+                                />
+                            </td>
+                        </tr>
 
-                        {/* Checkbox Settings */}
+                        {/* ============================================================
+                            PRODUCT & PRICING SETTINGS
+                        ============================================================ */}
+                        <SectionHeading title="Product & Pricing Settings" />
+
                         <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Sales Price Update By Cost Price Percentage</td>
                             <td className="px-4 py-3">
@@ -206,8 +276,25 @@ const InventorySettings = () => {
                                 />
                             </td>
                         </tr>
+                        <tr className="border-b border-gray-200 dark:border-gray-700">
+                            <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Multi Unit</td>
+                            <td className="px-4 py-3">
+                                <Checkbox
+                                    className='border-gray-500 dark:border-gray-600 
+                                             data-[state=checked]:main-bg dark:data-[state=checked]:main-bg'
+                                    id="activateMultyUnit"
+                                    checked={settings.activateMultyUnit}
+                                    onCheckedChange={(checked) => handleCheckboxChange('activateMultyUnit', checked)}
+                                />
+                            </td>
+                        </tr>
 
-                        <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
+                        {/* ============================================================
+                            STORAGE SETTINGS
+                        ============================================================ */}
+                        <SectionHeading title="Storage Settings" />
+
+                        <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Maintain Godown</td>
                             <td className="px-4 py-3">
                                 <Checkbox
@@ -219,7 +306,6 @@ const InventorySettings = () => {
                                 />
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Maintain Rack</td>
                             <td className="px-4 py-3">
@@ -233,18 +319,10 @@ const InventorySettings = () => {
                             </td>
                         </tr>
 
-                        <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
-                            <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Low Stock Reminder</td>
-                            <td className="px-4 py-3">
-                                <Checkbox
-                                    className='border-gray-500 dark:border-gray-600 
-                                             data-[state=checked]:main-bg dark:data-[state=checked]:main-bg'
-                                    id="lowStockReminder"
-                                    checked={settings.lowStockReminder}
-                                    onCheckedChange={(checked) => handleCheckboxChange('lowStockReminder', checked)}
-                                />
-                            </td>
-                        </tr>
+                        {/* ============================================================
+                            BEHAVIOR SETTINGS
+                        ============================================================ */}
+                        <SectionHeading title="Behavior Settings" />
 
                         <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Close After Save</td>
@@ -258,6 +336,7 @@ const InventorySettings = () => {
                                 />
                             </td>
                         </tr>
+
                     </tbody>
                 </table>
             </div>
@@ -272,7 +351,7 @@ const InventorySettings = () => {
                 </Button>
                 <Button
                     className="main-bg text-white"
-                    onClick={handleSave}
+                    onClick={handleSaveClick}
                     disabled={saving}
                 >
                     {saving ? 'Saving...' : 'Save'}

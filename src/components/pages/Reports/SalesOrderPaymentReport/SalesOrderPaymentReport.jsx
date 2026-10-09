@@ -39,9 +39,9 @@ const SalesOrderPaymentReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      
         return {
-            fromDate: firstDayOfMonth.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -51,11 +51,11 @@ const SalesOrderPaymentReport = () => {
     const [filters, setFilters] = useState({
         fromDate: defaultDates.fromDate,
         toDate: defaultDates.toDate,
-        ledgerId: null,
-        salesManId: null,
-        cashOrBank: null,
+        ledgerId: 0,
+        salesManId: 0,
+        cashOrBank: 0,
         status: 'All',
-        payStatus: 'Pending',
+        payStatus: 'All',
         partyName: 'All'
     });
 
@@ -101,7 +101,7 @@ const SalesOrderPaymentReport = () => {
         try {
             const [partyRes, salesmanRes, cashOrBankRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Customer", "Supplier"],
+                    ledgerTypes: ["Customer", "Supplier","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("employees").catch(() => ({ data: { data: [] } })),
@@ -134,7 +134,7 @@ const SalesOrderPaymentReport = () => {
             salesManId: filters.salesManId || 0,
             cashOrBank: filters.cashOrBank || 0,
             status: filters.status || 'All',
-            payStatus: filters.payStatus || 'Pending',
+            payStatus: filters.payStatus || 'All',
             partyName: filters.partyName || 'All'
         };
 
@@ -289,11 +289,11 @@ const SalesOrderPaymentReport = () => {
         setFilters({
             fromDate: dates.fromDate,
             toDate: dates.toDate,
-            ledgerId: null,
-            salesManId: null,
-            cashOrBank: null,
+            ledgerId: 0,
+            salesManId: 0,
+            cashOrBank: 0,
             status: 'All',
-            payStatus: 'Pending',
+            payStatus: 'All',
             partyName: 'All'
         });
         setReportData(null);
@@ -302,7 +302,7 @@ const SalesOrderPaymentReport = () => {
 
     // Dropdown options
     const partyOptions = useMemo(() => [
-        { label: t('All Parties'), value: null },
+        { label: t('All Parties'), value: 0 },
         ...partyData.map(party => ({
             label: `${party.ledgerName}${party.ledgerType ? ` (${party.ledgerType})` : ''}`,
             value: party.ledgerId
@@ -310,7 +310,7 @@ const SalesOrderPaymentReport = () => {
     ], [partyData, t]);
 
     const salesmanOptions = useMemo(() => [
-        { label: t('All Salesmen'), value: null },
+        { label: t('All Salesmen'), value: 0 },
         ...salesmanData.map(salesman => ({
             label: salesman.employeeName || salesman.name,
             value: salesman.employeeId || salesman.id
@@ -318,7 +318,7 @@ const SalesOrderPaymentReport = () => {
     ], [salesmanData, t]);
 
     const cashOrBankOptions = useMemo(() => [
-        { label: t('All'), value: null },
+        { label: t('All'), value: 0 },
         ...cashOrBankData.map(account => ({
             label: account.ledgerName || account.name,
             value: account.ledgerId || account.id
@@ -326,18 +326,23 @@ const SalesOrderPaymentReport = () => {
     ], [cashOrBankData, t]);
 
     const statusOptions = useMemo(() => [
-        { label: t('All'), value: 'All' },
+        { label: t('All'), value: "All" },
         { label: t('Pending'), value: 'Pending' },
-        { label: t('Partial'), value: 'Partial' },
+        { label: t('Production Completed'), value: 'Production Completed' },
         { label: t('Completed'), value: 'Completed' },
-        { label: t('Cancelled'), value: 'Cancelled' }
+        { label: t('Billed'), value: 'Billed' },
+        { label: t('Cancelled'), value: 'Cancelled' },
+        { label: t('Cash Received'), value: 'Cash Received' },
+        { label: t('Delivered'), value: 'Delivered' },
+        { label: t('Customer Collected'), value: 'Customer Collected' },
+        
     ], [t]);
 
     const payStatusOptions = useMemo(() => [
         { label: t('All'), value: 'All' },
         { label: t('Pending'), value: 'Pending' },
-        { label: t('Partial'), value: 'Partial' },
-        { label: t('Paid'), value: 'Paid' }
+        { label: t('Fully Paid'), value: 'Fully Paid' },
+        // { label: t('Paid'), value: 'Paid' }
     ], [t]);
 
     // Display columns (SNo + only visible ones)

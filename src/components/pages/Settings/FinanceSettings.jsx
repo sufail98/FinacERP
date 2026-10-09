@@ -2,13 +2,15 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import axiosInstance from "@/lib/axiosConfig"
 import { useEffect, useState, useCallback } from "react"
-import AlertBox from "@/components/common/AlertBox"
 import { useDispatch, useSelector } from "react-redux"
 import { updateFinanceSettings } from "@/redux/slice/settingsSlice"
 import useAuth from "@/redux/hook/auth/useAuth"
 import Preloader from "@/components/common/Preloader"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { showToast } from "@/utils/toast"
+import { getSystemId } from "@/utils/systemId"
+import PasswordModal from "./PasswordModal"
+import { Input } from "@/components/ui/input"
 
 const FinanceSettings = () => {
     const { financeSettings } = useSelector((state) => state.settings)
@@ -20,10 +22,23 @@ const FinanceSettings = () => {
     const [suppliers, setSuppliers] = useState([])
     const [bank, setBank] = useState([])
     const [cash, setCash] = useState([])
-    const [customers, setCustomers] = useState([])
+    const [customers, setCustomers] = useState([]);
+    const orgData = useSelector((state) => state.organization.organizationData);
 
-    const handleBack = () => {
-    }
+
+    const [systemId, setSystemId] = useState("")
+
+    // Password Modal States
+    const [showPasswordModal, setShowPasswordModal] = useState(false)
+    const [pendingSave, setPendingSave] = useState(false)
+
+    useEffect(() => {
+        const fetchSystemId = async () => {
+            const id = await getSystemId()
+            setSystemId(id)
+        }
+        fetchSystemId()
+    }, []);
 
     /* ================================================================
        REFETCH FINANCE SETTINGS & UPDATE REDUX
@@ -32,7 +47,6 @@ const FinanceSettings = () => {
     const fetchAndUpdateSettings = useCallback(async () => {
         try {
             const response = await axiosInstance.get("finance-settings");
-            
 
             if (!response.error && response?.data?.data?.length > 0) {
                 const branchSettings = response.data.data.find(
@@ -67,10 +81,28 @@ const FinanceSettings = () => {
         fetchCashAccounts();
     }, [])
 
+    /**
+     * Handle Save Button Click - Show password modal
+     */
+    const handleSaveClick = () => {
+        setShowPasswordModal(true)
+        setPendingSave(true)
+    }
+
+    /**
+     * Handle Password Modal Confirmation
+     */
+    const handlePasswordConfirm = (verified) => {
+        if (verified && pendingSave) {
+            performSave()
+            setPendingSave(false)
+        }
+    }
+
     /* ================================================================
        SAVE HANDLER — after success always refetch & update Redux
     ================================================================ */
-    const handleSave = async () => {
+    const performSave = async () => {
         try {
             setSaving(true);
             const payload = {
@@ -84,7 +116,9 @@ const FinanceSettings = () => {
                 defaultSalesAccount: settings.defaultSalesAccount,
                 DefaultCashAccount: settings.DefaultCashAccount,
                 DefaultBankAccount: settings.DefaultBankAccount,
-                printAfterSave: settings.printAfterSave || false
+                printAfterSave: settings.printAfterSave || false,
+                DashboardDateRangeInDays: settings.DashboardDateRangeInDays || 0,
+                systemId,
             }
 
             const response = await axiosInstance.post(
@@ -93,7 +127,6 @@ const FinanceSettings = () => {
             );
 
             if (!response.error) {
-               
                 showToast.success("Settings updated successfully");
 
                 // ✅ Refetch & update Redux with fresh server data
@@ -110,7 +143,7 @@ const FinanceSettings = () => {
     const fetchSupplier = async () => {
         try {
             const res = await axiosInstance.post("customer-supplier-account-ledgers", {
-                ledgerTypes: ["Supplier"],
+                ledgerTypes: ["Supplier", "Customer&Supplier"],
                 branchId: selectedBranchId
             });
             if (res.data && !res.data.error) {
@@ -122,43 +155,43 @@ const FinanceSettings = () => {
             console.error("Error fetching Account Ledgers:", err);
         }
     };
-  const fetchBankAccounts = async () => {
-    try {
-      setLoading(true);
-      const res = await axiosInstance.post("bank-account-ledgers", { group_ids: [5], branchId: selectedBranchId });
-      if (res.data && !res.data.error) {
 
-        setBank(res.data.data);
-      } else {
-        console.error("API Error:", res.data.message);
-      }
-    } catch (err) {
-      console.error("Error fetching Account Ledgers:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-  const fetchCashAccounts = async () => {
-    try {
-      setLoading(true);
-      const res = await axiosInstance.post("bank-account-ledgers", { group_ids: [8], branchId: selectedBranchId });
-      if (res.data && !res.data.error) {
+    const fetchBankAccounts = async () => {
+        try {
+            setLoading(true);
+            const res = await axiosInstance.post("bank-account-ledgers", { group_ids: [5], branchId: selectedBranchId });
+            if (res.data && !res.data.error) {
+                setBank(res.data.data);
+            } else {
+                console.error("API Error:", res.data.message);
+            }
+        } catch (err) {
+            console.error("Error fetching Account Ledgers:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-        setCash(res.data.data);
-      } else {
-        console.error("API Error:", res.data.message);
-      }
-    } catch (err) {
-      console.error("Error fetching Account Ledgers:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const fetchCashAccounts = async () => {
+        try {
+            setLoading(true);
+            const res = await axiosInstance.post("bank-account-ledgers", { group_ids: [8], branchId: selectedBranchId });
+            if (res.data && !res.data.error) {
+                setCash(res.data.data);
+            } else {
+                console.error("API Error:", res.data.message);
+            }
+        } catch (err) {
+            console.error("Error fetching Account Ledgers:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const fetchCustomer = async () => {
         try {
             const res = await axiosInstance.post("customer-supplier-account-ledgers", {
-                ledgerTypes: ["Customer"],
+                ledgerTypes: ["Customer", "Customer&Supplier"],
                 branchId: selectedBranchId
             });
             if (res.data && !res.data.error) {
@@ -184,19 +217,47 @@ const FinanceSettings = () => {
             [field]: value
         }));
     }
+     const handleInputChange = (field, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    }
 
     if (loading && Object.keys(settings).length === 0) {
         return <div><Preloader /></div>
     }
 
+    // Reusable heading row for grouping sections
+    const SectionHeading = ({ title }) => (
+        <tr className="bg-blue-50 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-700">
+            <td className="px-4 py-3 font-bold text-gray-900 dark:text-gray-100" colSpan="2">
+                {title}
+            </td>
+        </tr>
+    )
+
     return (
         <div className="p-2 bg-white dark:bg-[#121212] transition-colors">
             <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Finance Settings</h3>
+
+            {/* Password Modal */}
+            <PasswordModal
+                open={showPasswordModal}
+                onOpenChange={setShowPasswordModal}
+                onConfirm={handlePasswordConfirm}
+            />
 
             {/* Settings Table */}
             <div className="overflow-x-auto pb-25">
                 <table>
                     <tbody>
+
+                        {/* ============================================================
+                            GENERAL SETTINGS
+                        ============================================================ */}
+                        <SectionHeading title="General Settings" />
+
                         <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Maintain Bill by Bill</td>
                             <td className="px-4 py-3">
@@ -219,18 +280,19 @@ const FinanceSettings = () => {
                                 />
                             </td>
                         </tr>
-                        <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
-                            <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Multi Currency</td>
-                            <td className="px-4 py-3">
-                                <Checkbox
-                                    className="border-gray-500 dark:border-gray-600 
+                        {orgData?.subscriptionPlan != 'Basic' && (
+                            <tr className="border-b border-gray-200 dark:border-gray-700">
+                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Activate Multi Currency</td>
+                                <td className="px-4 py-3">
+                                    <Checkbox
+                                        className="border-gray-500 dark:border-gray-600 
                                              data-[state=checked]:main-bg dark:data-[state=checked]:main-bg"
-                                    checked={settings.multiCurrency}
-                                    onCheckedChange={() => toggleSetting("multiCurrency")}
-                                />
-                            </td>
-                        </tr>
-
+                                        checked={settings.multiCurrency}
+                                        onCheckedChange={() => toggleSetting("multiCurrency")}
+                                    />
+                                </td>
+                            </tr>
+                        )}
                         <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show Ledger Balance in Transactions</td>
                             <td className="px-4 py-3">
@@ -242,8 +304,7 @@ const FinanceSettings = () => {
                                 />
                             </td>
                         </tr>
-
-                        <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
+                        <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Show All Transactions</td>
                             <td className="px-4 py-3">
                                 <Checkbox
@@ -254,7 +315,6 @@ const FinanceSettings = () => {
                                 />
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Close After Save</td>
                             <td className="px-4 py-3">
@@ -266,8 +326,28 @@ const FinanceSettings = () => {
                                 />
                             </td>
                         </tr>
-
                         <tr className="bg-gray-50 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-gray-700">
+                            <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Dashboard Date Range In Days</td>
+                            <td className="px-4 py-3">
+                                <Input
+                                    type="text"
+                                    placeholder="Enter date range in days"
+                                    className="w-full bg-white dark:bg-[#242424] 
+                                                                     border-gray-500 dark:border-gray-600
+                                                                     text-gray-900 dark:text-gray-100
+                                                                     placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                                    value={settings.DashboardDateRangeInDays || 0}
+                                    onChange={(e) => handleInputChange('DashboardDateRangeInDays', parseInt(e.target.value) || 0)}
+                                />
+                            </td>
+                        </tr>
+
+                        {/* ============================================================
+                            DEFAULT ACCOUNTS
+                        ============================================================ */}
+                        <SectionHeading title="Default Accounts" />
+
+                        <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Default Sales Account</td>
                             <td className="px-4 py-3">
                                 <Select
@@ -292,7 +372,6 @@ const FinanceSettings = () => {
                                 </Select>
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">Default Purchase Account</td>
                             <td className="px-4 py-3">
@@ -368,19 +447,14 @@ const FinanceSettings = () => {
                                 </Select>
                             </td>
                         </tr>
+
                     </tbody>
                 </table>
             </div>
 
             {/* Action Buttons */}
             <div className="fixed bottom-0 left-10 right-0 flex gap-3 p-4 justify-start bg-white dark:bg-[#121212] border-t border-gray-200 dark:border-gray-700">
-                <Button variant="outline" onClick={handleBack} disabled={saving}
-                    className="border-gray-500 dark:border-gray-600 
-                                 text-gray-700 dark:text-gray-300 
-                                 hover:bg-gray-100 dark:hover:bg-[#242424]">
-                    Back
-                </Button>
-                <Button className="main-bg text-white" onClick={handleSave} disabled={saving}>
+                <Button className="main-bg text-white" onClick={handleSaveClick} disabled={saving}>
                     {saving ? "Saving..." : "Save"}
                 </Button>
             </div>

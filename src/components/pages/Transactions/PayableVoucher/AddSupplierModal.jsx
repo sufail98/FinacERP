@@ -6,9 +6,13 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import TextInput from "@/components/elements/theme/TextInput";
 import useAuth from "@/redux/hook/auth/useAuth";
+import { sanitize } from "@/lib/inputSanitizer";
+import { useSelector } from "react-redux";
 
 const AddSupplierModal = ({ open, handleClose, onSuccess }) => {
     const { currentFinancialYear, currentCurrencyConversion, selectedBranchId, userId } = useAuth();
+    const {generalSettings} = useSelector((state) => state.settings)
+    
 
     const isMobile = useMediaQuery("(max-width:600px)");
     const style = {
@@ -66,6 +70,14 @@ const AddSupplierModal = ({ open, handleClose, onSuccess }) => {
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
+        let updatedValue =value
+        if (["phoneNo", "vatNumber"].includes(name)) {
+        updatedValue = sanitize.numbers(value);
+    } else if (generalSettings.zatcaType === "Phase 2" && name === "crNumber") {
+        updatedValue = sanitize.numbers(value);
+    } else if (!["phoneNo", "vatNumber", "crNumber"].includes(name)) {
+        updatedValue = sanitize.alphaNumeric(value);
+    }
 
         if (formData.ShippingAddress && name in formData.ShippingAddress) {
             setFormData((prev) => ({
@@ -76,7 +88,7 @@ const AddSupplierModal = ({ open, handleClose, onSuccess }) => {
                 },
             }));
         } else {
-            setFormData((prev) => ({ ...prev, [name]: value }));
+            setFormData((prev) => ({ ...prev, [name]: updatedValue }));
         }
     };
 
@@ -158,6 +170,8 @@ const AddSupplierModal = ({ open, handleClose, onSuccess }) => {
                                     error={errors.nameFL}
                                 />
                                 <TextInput
+                                type="text"
+                                maxLength = {10}
                                     label={t("supplier.form.phoneNo") || "Phone Number"}
                                     placeholder={t("supplier.form.phoneNoPlaceholder") || "Enter phone number"}
                                     name="phoneNo"

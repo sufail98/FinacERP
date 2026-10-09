@@ -110,55 +110,105 @@ const formatDate = (date) => {
 };
 
 /**
- * Split array into pages with different row counts
+ * ✅ NEW — Estimate how many wrapped lines a product row will take.
+ * Tune CHARS_PER_LINE against your actual .col-product column width / font size
+ * (currently ~45% column width, 10px font). Test with your longest real product names.
  */
-const splitIntoPages = (array, firstPageRows, middlePageRows, lastPageRows) => {
-    const totalItems = array.length;
+const CHARS_PER_LINE = 40;
 
-    if (totalItems === 0) {
-        return [{ items: [], isFirst: true, isLast: true, maxRows: lastPageRows }];
+const estimateRowLines = (item) => {
+    let lines = 0;
+    if (item.productName) lines += Math.max(1, Math.ceil(String(item.productName).length / CHARS_PER_LINE));
+    if (item.productNameArb) lines += Math.max(1, Math.ceil(String(item.productNameArb).length / CHARS_PER_LINE));
+    if (item.productDescription) lines += Math.max(1, Math.ceil(String(item.productDescription).length / CHARS_PER_LINE));
+    return Math.max(1, lines);
+};
+
+// Base row height (single line) and extra height per wrapped line — in px, matches CSS
+const ROW_BASE_HEIGHT = 19;   // matches .product-row min-height
+const ROW_LINE_HEIGHT = 12;   // additional px per extra wrapped line at 10px font
+const ROW_VERTICAL_PADDING = 8; // matches padding: 4px top + 4px bottom
+
+const estimateRowHeight = (item) => {
+    const lines = estimateRowLines(item);
+    if (lines <= 1) return ROW_BASE_HEIGHT;
+    return Math.max(ROW_BASE_HEIGHT, lines * ROW_LINE_HEIGHT + ROW_VERTICAL_PADDING);
+};
+
+/**
+ * ✅ NEW — Height-based pagination.
+ * Instead of assuming a fixed number of rows fit per page, this packs rows into
+ * pages based on their ESTIMATED RENDERED HEIGHT, so multi-line product names
+ * don't overflow / break the printed page layout.
+ *
+ * firstPageHeight / middlePageHeight / lastPageHeight are the usable px height
+ * available for the product table body on that page type.
+ */
+const splitIntoPagesByHeight = (array, firstPageHeight, middlePageHeight, lastPageHeight) => {
+    if (array.length === 0) {
+        return [{ items: [], isFirst: true, isLast: true }];
     }
 
-    if (totalItems <= lastPageRows) {
-        return [{ items: array, isFirst: true, isLast: true, maxRows: lastPageRows }];
-    }
+    // Precompute heights once
+    const heights = array.map(estimateRowHeight);
+    const totalHeight = heights.reduce((s, h) => s + h, 0);
 
-    if (totalItems <= firstPageRows) {
-        return [{ items: array, isFirst: true, isLast: true, maxRows: firstPageRows }];
+    // If everything fits on a single (last-page-style) page, keep it on one page
+    if (totalHeight <= lastPageHeight) {
+        return [{ items: array, isFirst: true, isLast: true }];
     }
+    // If everything fits within a first-page-only budget (no totals block needed on it,
+    // but nothing else follows) - still safer to run through the packer below for consistency.
 
     const pages = [];
-    let currentIndex = 0;
+    let currentPage = [];
+    let currentHeight = 0;
+    let pageIndex = 0;
+    let i = 0;
 
-    const firstPageItems = Math.min(firstPageRows, totalItems);
-    pages.push({ items: array.slice(0, firstPageItems), isFirst: true, isLast: false, maxRows: firstPageRows });
-    currentIndex = firstPageItems;
+    while (i < array.length) {
+        const item = array[i];
+        const itemHeight = heights[i];
+        const capacity = pageIndex === 0 ? firstPageHeight : middlePageHeight;
 
-    while (currentIndex < totalItems) {
-        const remainingItems = totalItems - currentIndex;
-
-        if (remainingItems <= lastPageRows) {
-            pages.push({ items: array.slice(currentIndex), isFirst: false, isLast: true, maxRows: lastPageRows });
-            break;
-        }
-
-        const itemsAfterThisPage = remainingItems - middlePageRows;
-
-        if (itemsAfterThisPage > 0 && itemsAfterThisPage <= lastPageRows) {
-            pages.push({ items: array.slice(currentIndex, currentIndex + middlePageRows), isFirst: false, isLast: false, maxRows: middlePageRows });
-            currentIndex += middlePageRows;
-        } else if (itemsAfterThisPage <= 0) {
-            pages.push({ items: array.slice(currentIndex), isFirst: false, isLast: true, maxRows: lastPageRows });
-            break;
+        if (currentPage.length === 0 || currentHeight + itemHeight <= capacity) {
+            currentPage.push(item);
+            currentHeight += itemHeight;
+            i++;
         } else {
-            pages.push({ items: array.slice(currentIndex, currentIndex + middlePageRows), isFirst: false, isLast: false, maxRows: middlePageRows });
-            currentIndex += middlePageRows;
+            pages.push({ items: currentPage, isFirst: pageIndex === 0, isLast: false });
+            currentPage = [];
+            currentHeight = 0;
+            pageIndex++;
         }
+    }
+
+    if (currentPage.length > 0) {
+        pages.push({ items: currentPage, isFirst: pageIndex === 0, isLast: false });
     }
 
     if (pages.length > 0) {
         pages[pages.length - 1].isLast = true;
-        pages[pages.length - 1].maxRows = lastPageRows;
+    }
+
+    // The last page also needs room for the totals/signature block (lastPageHeight is
+    // smaller than middlePageHeight for this reason). If the packed last page's content
+    // exceeds that budget, spill the overflow onto a fresh final page.
+    let last = pages[pages.length - 1];
+    let lastContentHeight = last.items.reduce((s, it) => s + estimateRowHeight(it), 0);
+
+    while (lastContentHeight > lastPageHeight && last.items.length > 1) {
+        const overflowItem = last.items.pop();
+        lastContentHeight -= estimateRowHeight(overflowItem);
+
+        if (pages.length >= 2 && !pages[pages.length - 2].isLast) {
+            // no-op placeholder, structure kept for clarity
+        }
+
+        last.isLast = false;
+        pages.push({ items: [overflowItem], isFirst: false, isLast: true });
+        last = pages[pages.length - 1];
+        lastContentHeight = last.items.reduce((s, it) => s + estimateRowHeight(it), 0);
     }
 
     return pages;
@@ -168,6 +218,8 @@ const splitIntoPages = (array, firstPageRows, middlePageRows, lastPageRows) => {
  * Generate QR code data for Saudi Arabia ZATCA compliance
  */
 export const generateQRCodeData = (invoiceData, companyName, vatNo, time) => {
+   
+    
     const formatDateForQR = (date, time) => {
         if (!date) return "";
 
@@ -274,11 +326,14 @@ const generateQRCodeDataURL = async (data, size = 500) => {
 /**
  * Generate the invoice HTML — ✅ Now async for QR generation
  */
-const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrency) => {
+export const generateInvoiceOneHTML = async (invoiceData, branchData, time, currentCurrency) => {
+console.log(invoiceData);
 
 
     const state = store.getState().settings;
     const generalSettings = state.generalSettings;
+
+
     const showCurrencyPrefix = generalSettings.showCurrencyprefix;
     const currencySymbol = currentCurrency ? currentCurrency.currencySymbol : '';
     // ✅ Check if tax should be displayed
@@ -292,6 +347,9 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
             : Number(num).toFixed(state.generalSettings.decimalPart);
     const companyData = state.generalSettings;
     const salesSettings = state.saleSettings;
+    const showLineDiscount = salesSettings?.showLineDiscount || false;
+    const activateRoundoff = Boolean(companyData.RoundOff)
+
     const headerImage = companyData.branchHeader;
     const footerImage = companyData.branchFooter;
     const companyName = branchData?.branchName || '';
@@ -310,7 +368,10 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
         billDiscount = 0,
         totalTax = 0,
         totalAmount = 0,
-        ledgerBalance = 0,  // ✅ Added ledgerBalance
+        taxableAmt = 0,
+        ledgerBalance = 0, 
+        othercharge = 0,
+        roundOff = 0,
     } = invoiceData;
 
     // ✅ Check if customer name contains 'cash' (case-insensitive)
@@ -353,31 +414,62 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
     const totalQty = salesDetails.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0);
     const totalVAT = salesDetails.reduce((sum, item) => sum + (parseFloat(item.taxAmount) || 0), 0);
 
-    // Row configurations
-    const FIRST_PAGE_ROWS = 21;
-    const MIDDLE_PAGE_ROWS = 30;
-    const LAST_PAGE_ROWS = 18;
+    // ✅ ADD THIS — gross (qty * ex-tax rate) minus netAmount = the discount taken on that line
+    const totalLineDiscount = salesDetails.reduce((sum, item) => {
+        const gross = Number(item.qty || 0) * Number(item.rate || 0);
+         const disc = gross - Number(item.netAmount || 0);
+        return sum + Math.max(0, disc);
+    }, 0);
 
-    // Split products into pages
-    const productPages = splitIntoPages(salesDetails, FIRST_PAGE_ROWS, MIDDLE_PAGE_ROWS, LAST_PAGE_ROWS);
+    // ✅ FIX — subTotal sometimes comes back empty/0 while taxableAmt has the real value.
+    // Fallback must happen on the RAW NUMBER, before any .toFixed()/string formatting —
+    // a formatted string like "0.00" is always truthy and silently breaks `||` fallbacks.
+    const effectiveSubTotal = (subTotal !== undefined && subTotal !== null && Number(subTotal) !== 0)
+        ? Number(subTotal)
+        : Number(taxableAmt) || 0;
+
+    const effectiveGrandTotal = (totalAmount !== undefined && totalAmount !== null && Number(totalAmount) !== 0)
+        ? Number(totalAmount)
+        : Number(taxableAmt) || 0;
+    // ✅ NEW — Height-based page budgets (px) instead of fixed row counts.
+    // Tune these against your real A4 layout if pages still overflow/underflow.
+    // FIRST page has the heading + invoice/customer detail block + QR above the table,
+    // so it has less room for products.
+    // MIDDLE pages are pure product table, full page.
+    // LAST page needs to reserve room below the table for the totals/signature block.
+    // ✅ OPTIMIZED - Reduces paper waste by maximizing content per page
+    const FIRST_PAGE_HEIGHT = headerImage ? 720 : 790;  // ⬆️ Increased from 480/540
+    const MIDDLE_PAGE_HEIGHT = 1000;                      // ⬆️ Increased from 950
+    const LAST_PAGE_HEIGHT = footerImage ? 520 : 580;    // ⬆️ Increased from 420/520
+    // Split products into pages based on estimated content height
+    const productPages = splitIntoPagesByHeight(salesDetails, FIRST_PAGE_HEIGHT, MIDDLE_PAGE_HEIGHT, LAST_PAGE_HEIGHT);
     const totalPages = productPages.length || 1;
 
     // Calculate padding
-    const topPadding = headerImage ? '140px' : '90px';
-    const bottomPadding = footerImage ? '100px' : '100px';
+    const topPadding = headerImage ? '110px' : '90px';
+    const bottomPadding = footerImage ? '70px' : '100px';
     const lastPageBottomPadding = footerImage ? '320px' : '235px';
 
     // Track cumulative index
     let cumulativeIndex = 0;
-
+// Add near totalVAT calculation
+const totalDiscAmt = salesDetails.reduce((sum, item) => {
+    const rate = parseFloat(item.rate) || 0;
+    const qty = parseFloat(item.qty) || 0;
+    const discPerc = parseFloat(item.discountPercentage) || 0;
+    const discAmt = (rate * qty * discPerc) / 100;
+    return sum + discAmt;
+}, 0);
     // Generate pages HTML
     const pagesHTML = productPages.map((pageData, pageIndex) => {
-        const { items: pageProducts, isFirst: isFirstPage, isLast: isLastPage, maxRows } = pageData;
+        const { items: pageProducts, isFirst: isFirstPage, isLast: isLastPage } = pageData;
 
         const pageStartIndex = cumulativeIndex;
         cumulativeIndex += pageProducts.length;
 
-        const emptyRowsCount = Math.max(0, maxRows - pageProducts.length);
+        // ✅ Small fixed number of empty filler rows only on the last page for visual balance
+        // (no longer padding to a fixed row count, since row heights are dynamic now)
+        const emptyRowsCount = isLastPage ? 2 : 0;
         const emptyRows = Array(emptyRowsCount).fill(null);
 
         return `
@@ -393,12 +485,23 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                             <div class="company-vat">VAT No: ${companyVatNo}</div>
                         </div>
                     `}
-
-                    <div class="content-wrapper ${isLastPage ? 'last-page' : ''}" style="padding: ${topPadding} 15px ${isLastPage ? lastPageBottomPadding : bottomPadding} 15px;">
+    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        })} ${new Date().toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        })}</div>
+        </div>
+                    <div class="content-wrapper ${isLastPage ? 'last-page' : ''}" style="padding: ${topPadding} 25px ${isLastPage ? lastPageBottomPadding : bottomPadding} 25px;">
                         ${isFirstPage ? `
                         <h2 class="heading">
                             <span>${isEstimate ? 'ESTIMATE' : (invoiceData.formType === 'Tax Invoice' ? 'TAX INVOICE' : 'SIMPLIFIED TAX INVOICE')}</span>
-                            <span>${isEstimate ? 'تقدير' : (invoiceData.formType === 'Tax Invoice' ? 'فاتورة ضريبية' : 'فاتورة ضريبية مبسطة')}</span>
+                         <div>   <span class="heading-ar">${isEstimate ? 'تقدير' : (invoiceData.formType === 'Tax Invoice' ? 'فاتورة ضريبية' : 'فاتورة ضريبية مبسطة')}</span></div>
                         </h2>
                         <div class="header-section">
                             <div class="invoice-details-section">
@@ -414,13 +517,13 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                                     <tr>
                                         <td class="label">SALES TYPE<br><span class="rtl">نوع المبيعات</span></td>
                                     <td class="bold">
-    ${paymentMode === 'cash'
+                                        ${paymentMode === 'cash'
                     ? 'Cash Sale'
-                    : paymentMode === 'card'
+                    : paymentMode === 'bank'
                         ? 'Bank Sale'
                         : 'Credit Sale'
                 }
-    </td>
+                                        </td>
                                     </tr>
                                 </table>
                             </div>
@@ -476,9 +579,9 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                             </div>
                         </div>
                         ` : `
-                        <h2 class="heading">
-                            <span>${isEstimate ? 'ESTIMATE (Continued)' : (invoiceData.formType === 'Tax Invoice' ? 'TAX INVOICE (Continued)' : 'SIMPLIFIED TAX INVOICE (Continued)')}</span>
-                            <span>${isEstimate ? '(تابع) تقدير' : (invoiceData.formType === 'Tax Invoice' ? '(تابع) فاتورة ضريبية' : 'فاتورة ضريبية مبسطة (تابع)')}</span>
+                      <h2 class="heading">
+                            <span>${isEstimate ? 'ESTIMATE' : (invoiceData.formType === 'Tax Invoice' ? 'TAX INVOICE' : 'SIMPLIFIED TAX INVOICE')}</span>
+                         <div>   <span class="heading-ar">${isEstimate ? 'تقدير' : (invoiceData.formType === 'Tax Invoice' ? 'فاتورة ضريبية' : 'فاتورة ضريبية مبسطة')}</span></div>
                         </h2>
                         <div style="margin-bottom: 15px; text-align: center; font-weight: bold;">
                             Invoice No: ${invoiceNo} | Page ${pageIndex + 1} of ${totalPages}
@@ -492,6 +595,10 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
     <div class="col-qty"><div>الكمية</div><div>QTY</div></div>
     <div class="col-qty"><div>وحدة</div><div>UNIT</div></div>
     <div class="col-price"><div>سعر الوحدة</div><div>UNIT PRICE</div></div>
+    ${showLineDiscount ? `
+    <div class="col-disc-percent"><div>خصم %</div><div>DISC %</div></div>
+    <div class="col-disc-amt"><div>مبلغ الخصم</div><div>DISC AMT</div></div>
+` : ''}
     ${showTax ? `
         <div class="col-vat-percent"><div>ضريبة %</div><div>VAT %</div></div>
         <div class="col-vat-amt"><div>مبلغ الضريبة</div><div>VAT AMT</div></div>
@@ -502,26 +609,38 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                             <div class="product-body">
                              ${pageProducts.map((item, index) => {
                     const globalIndex = pageStartIndex + index;
+
+                    const qty = Number(item.qty || 0);
+                    const rate = Number(item.rate || 0);
+                    const grossAmt = qty * rate;
+                    const discPercent = Number(item.discountPercentage || 0);
+                    const discAmt = Math.max(0, grossAmt - Number(item.netAmount || 0));
+ 
                     return `
-        <div class="product-row">
-            <div class="col-sl" style="font-size: 10px;">${globalIndex + 1}</div>
-            <div class="col-product">
-                <div style="font-weight: 600;font-size: 10px;">${item.productName || ''}</div>
-                ${item.productNameArb ? `<div style="font-size: 10px;">${item.productNameArb}</div>` : ''}
-                ${item.productDescription ? `<div style="font-size: 10px;">${item.productDescription}</div>` : ''}
-            </div>
-            <div class="col-qty" style="font-size: 10px;">${item.qty || 0}</div>
-            <div class="col-qty" style="font-size: 10px;">${item.unitName || 'PCS'}</div>
-            <div class="col-price" style="font-size: 10px;">${(Number(item?.rate).toFixed(state.generalSettings.decimalPart)) || 0}</div>
-            ${showTax ? `
-                <div class="col-vat-percent" style="font-size: 10px;">${item?.taxRate || 0}%</div>
-                <div class="col-vat-amt" style="font-size: 10px;">${item?.taxAmount || 0}</div>
-            ` : ''}
-            <div class="col-total" style="text-align:right;font-size: 10px;">${Number(item?.amount || 0).toFixed(state.generalSettings.decimalPart)}</div>
+
+         <div class="product-row">
+        <div class="col-sl" style="font-size: 10px;">${globalIndex + 1}</div>
+        <div class="col-product">
+            <div style="font-weight: 600;font-size: 10px;">${item.productName || ''}</div>
+            ${item.productNameArb ? `<div style="font-size: 10px;">${item.productNameArb}</div>` : ''}
+            ${item.productDescription ? `<div style="font-size: 10px;">${item.productDescription}</div>` : ''}
         </div>
+        <div class="col-qty" style="font-size: 10px;">${item.qty || 0}</div>
+        <div class="col-qty" style="font-size: 10px;">${item.unitName || 'PCS'}</div>
+        <div class="col-price" style="font-size: 10px;">${rate.toFixed(state.generalSettings.decimalPart)}</div>
+        ${showLineDiscount ? `
+            <div class="col-disc-percent" style="font-size: 10px;">${discPercent.toFixed(2)}%</div>
+            <div class="col-disc-amt" style="font-size: 10px;">${discAmt.toFixed(state.generalSettings.decimalPart)}</div>
+        ` : ''}
+        ${showTax ? `
+            <div class="col-vat-percent" style="font-size: 10px;">${item?.taxRate || 0}%</div>
+            <div class="col-vat-amt" style="font-size: 10px;">${item?.taxAmount || 0}</div>
+        ` : ''}
+        <div class="col-total" style="text-align:right;font-size: 10px;">${Number(item?.amount || 0).toFixed(state.generalSettings.decimalPart)}</div>
+    </div>
     `;
                 }).join('')}
-                                
+
                                ${emptyRows.map(() => `
     <div class="product-row empty-row">
         <div class="col-sl"></div>
@@ -529,6 +648,10 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
         <div class="col-qty"></div>
         <div class="col-qty"></div>
         <div class="col-price"></div>
+         ${showLineDiscount ? `
+            <div class="col-disc-percent"></div>
+            <div class="col-disc-amt"></div>
+        ` : ''}
         ${showTax ? `
             <div class="col-vat-percent"></div>
             <div class="col-vat-amt"></div>
@@ -542,25 +665,29 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                                 ` : ''}
                             </div>
 
-                          ${isLastPage ? `
-<div class="product-footer">
-    <div class="col-sl"></div>
-    <div class="col-product" style="text-align: right; font-weight: 800;">
-        TOTAL / <span>المجموع</span>
-    </div>
-    <div class="col-qty">${totalQty.toFixed(0)}</div>
-    <div class="col-qty"></div>
-    <div class="col-price"></div>
-    ${showTax ? `
-        <div class="col-vat-percent"></div>
-        <div class="col-vat-amt">${Number(totalVAT).toFixed(state.generalSettings.decimalPart)}</div>
-    ` : ''}
-    <div class="col-total">${Number(totalAmount).toFixed(state.generalSettings.decimalPart)}</div>
-</div>
-` : ''}
+                        ${isLastPage ? `
+                            <div class="product-footer">
+                                <div class="col-sl"></div>
+                                <div class="col-product" style="text-align: right; font-weight: 800;">
+                                    TOTAL / <span>المجموع</span>
+                                </div>
+                                <div class="col-qty">${totalQty.toFixed(0)}</div>
+                                <div class="col-qty"></div>
+                                <div class="col-price"></div>
+                                ${showLineDiscount ? `
+                                    <div class="col-disc-percent"></div>
+                                    <div class="col-disc-amt">${totalLineDiscount.toFixed(state.generalSettings.decimalPart)}</div>
+                                ` : ''}
+                                ${showTax ? `
+                                    <div class="col-vat-percent"></div>
+                                    <div class="col-vat-amt">${Number(totalVAT).toFixed(state.generalSettings.decimalPart)}</div>
+                                ` : ''}
+                                <div class="col-total">${effectiveGrandTotal.toFixed(state.generalSettings.decimalPart)}</div>
+                            </div>
+                        ` : ''}
                         </div>
                     </div>
-                                
+
                     ${isLastPage ? `
                     <div class="total-section-fixed">
                         ${invoiceData?.narration ? `<div class="narration">Remark : ${invoiceData?.narration}</div>` : ''}
@@ -568,8 +695,8 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                             <div class="total-left-side">
                                 <div>
                                     <div style="font-weight: 900;">Amount In Words <span>المبلغ بالكلمات</span> :-</div>
-                                    <div style="margin-top: 10px;">${amountToWords(totalAmount || 0).english}</div>
-                                    <div style="margin-top: 10px;text-align:right;">${amountToWords(totalAmount || 0).arabic}</div>
+                                 <div style="margin-top: 10px;">${amountToWords(effectiveGrandTotal).english}</div>
+<div style="margin-top: 10px;text-align:right;">${amountToWords(effectiveGrandTotal).arabic}</div>
                                 </div>
                                 <div class="signature-section-compact">
                                     <div><span style="font-size: 9px; font-weight: 700;">AUTHORIZED SIGNATURE</span></div>
@@ -581,13 +708,36 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
         <tr>
             <td style="text-align: left;">Sub Total</td>
             <td style="text-align: right;padding-right:15px;"><span>المجموع الفرعي</span> <span>:</span></td>
-            <td style="text-align: right;">${fmt(subTotal)}</td>
+            <td style="text-align: right;">${fmt(effectiveSubTotal)}</td>
         </tr>
-        <tr>
+             ${Number(othercharge) !== 0 ? `<tr>
+             <td style="text-align: left;">Other Charge</td>
+             <td style="text-align: right;padding-right:15px;"><span>رسوم اخرى</span> <span>:</span></td>
+             <td style="text-align: right;">${fmt(othercharge)}</td>
+                </tr>` : ""}            
+          
+
+        ${((salesSettings?.showBillDiscountAmount || salesSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0)?`
+           <tr>
             <td style="text-align: left;">Discount Amount</td>
             <td style="text-align: right;padding-right:15px;"><span>مبلغ الخصم</span> <span>:</span></td>
             <td style="text-align: right;">${fmt(billDiscount)}</td>
-        </tr>
+        </tr> ` : ""}
+
+         <tr>
+            <td style="text-align: left;">Taxable Amount</td>
+              <td  style="text-align: right;padding-right:15px;">المبلغ الخاضع للضريبة</td>
+             <td style="text-align: right;">
+             ${fmt(
+                 Number(subTotal || 0) -
+                     Number(invoiceData?.billDiscount || 0) +
+                     Number(othercharge || 0)
+                    )}
+                    </td>
+          
+            </tr>
+
+         
         ${showTax ? `
         <tr>
             <td style="text-align: left;">VAT Amount</td>
@@ -595,12 +745,20 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
             <td style="text-align: right;">${fmt(totalTax)}</td>
         </tr>
         ` : ''}
+
+                ${(activateRoundoff && Number(roundOff) !== 0) ? `
+                                    <tr>
+                                    <td style="text-align: left;">Round Off:</td>
+                                    <td style="text-align: right;"><span>مبلغ الضريبة</span>  <span>:</span></td>
+                                    <td style="text-align: right;"">${fmt( roundOff )}</td>
+                        </tr>` : ""}
+
         <tr>
             <th style="text-align: left; font-size: 20px;">Grand Total</th>
             <th style="text-align: right;padding-right:15px;"><span>المجموع الإجمالي</span> <span>:</span></th>
-            <th style="text-align: right; font-size: 20px;">${fmt(totalAmount)}</th>
+          <th style="text-align: right; font-size: 20px;">${fmt(effectiveGrandTotal)}</th>
         </tr>
-      ${(!isCashCustomer&&salesSettings.showCustomerBalanceBill) ? `
+      ${(!isCashCustomer && salesSettings.showCustomerBalanceBill) ? `
         <tr class="customer-balance-row">
             <td style="text-align: left;">Customer Balance</td>
             <td style="text-align: right;padding-right:15px;"><span>رصيد العميل</span> <span>:</span></td>
@@ -655,12 +813,56 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                         flex-direction: column;
                         margin-bottom: 10px;
                         page-break-after: always;
+                        overflow: hidden;
                     }
+                        /* ✅ Vertical Print Timestamp in Right Corner */
+.print-timestamp {
+    position: absolute;
+    bottom: 70mm;
+    right: 5mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
+
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
                     .page:last-child { margin-bottom: 0; }
-                    .header-image { width: 100%; position: absolute; top: 0; left: 0; z-index: 1; height: 130px; overflow: hidden; }
-                    .header-image img { width: 100%; display: block; height: 130px; }
-                    .footer-image { width: 100%; position: absolute; bottom: 10px; left: 0; z-index: 1; }
-                    .footer-image img { width: 100%; display: block; }
+                    .header-image { width: 100%; position: absolute; top: 0; left: 0; z-index: 1; height: 110px; overflow: hidden; }
+                    .header-image img { width: 100%; display: block; height: 110px;
+                    object-fit: fill; }
+                    .footer-image { width: 100%; position: absolute; bottom: 10px; left: 0; z-index: 1;height: 70px; overflow: hidden; }
+                    .footer-image img { width: 100%; display: block;   height: 70px;
+                    object-fit: fill;}
                     .content-wrapper {
                         flex: 1;
                         position: relative;
@@ -670,23 +872,27 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                     }
                     .total-section-fixed {
                         position: absolute;
-                        bottom: ${footerImage ? '90px' : '90px'};
+                        bottom: ${footerImage ? '110px' : '90px'};
                         left: 15px;
                         right: 15px;
                         z-index: 2;
                     }
                     .heading {
                         display: flex;
+                        flex-direction:column;
                         justify-content: center;
-                        gap: 1rem;
-                        font-size: 22px;
-                        margin: 0 0 30px 0;
+                        font-size: 19px;
+                        margin: 0 0 10px 0;
                         font-weight: bold;
                         border-top: 1px solid rgb(216, 216, 216);
                         border-bottom: 1px solid rgb(216, 216, 216);
                         padding-top: 5px;
                         padding-bottom: 5px;
+                        text-align:center
                     }
+                        .heading-ar{
+                         font-size: 16px;
+                        }
                     .header-text {
                         width: 100%;
                         padding: 20px 15px;
@@ -761,12 +967,27 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
                         flex-direction: column;
                         justify-content: center;
                     }
-                    .product-row { height: 19px; }
+                    /* ✅ Row height is now dynamic: minimum height with auto growth
+                       so multi-line product names don't get clipped */
+                    .product-row {
+                        min-height: 19px;
+                        height: auto;
+                    }
                     .product-row > div {
-                        padding: 2px;
+                        padding: 4px 2px;
                         border-right: 1px solid rgb(216, 216, 216);
                         display: flex;
                         align-items: center;
+                        word-break: break-word;
+                        overflow-wrap: break-word;
+                    }
+                    /* ✅ Product column stacks name / arabic name / description vertically
+                       and needs to wrap independently of the row's flex alignment */
+                    .col-product {
+                        flex-direction: column;
+                        align-items: flex-start !important;
+                        justify-content: center;
+                        padding: 4px 6px;
                     }
                     .empty-row { border-bottom: none; }
                     .product-footer { border-bottom: none; font-weight: bold; }
@@ -784,6 +1005,14 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
 .col-vat-percent { width: 7%; text-align: center; justify-content: center; }
 .col-vat-amt { width: 9%; text-align: right; justify-content: flex-end; }
 .col-total { width: 15%; text-align: right; justify-content: flex-end; }
+
+    /* ✅ ADD THIS */
+${showLineDiscount ? `
+    .col-disc-percent { width: 6%; text-align: center; justify-content: center; }
+    .col-disc-amt { width: 8%; text-align: right; justify-content: flex-end; }
+    .col-product { width: 31%; }
+` : ''}
+
  ${!showTax ? `
         /* Adjusted widths when tax is hidden */
         .col-sl { width: 5%; }
@@ -791,7 +1020,13 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
         .col-qty { width: 8%; }
         .col-price { width: 17%; }
         .col-total { width: 15%; }
+
+        ${showLineDiscount ? `
+        .col-disc-percent { width: 7%; }
+        .col-disc-amt { width: 9%; }
+        .col-product { width: 39%; }
     ` : ''}
+` : ''}
                     .product-header > div:last-child,
                     .product-row > div:last-child,
                     .product-footer > div:last-child { border-right: none; }
@@ -868,8 +1103,8 @@ const generateInvoiceHTML = async (invoiceData, branchData, time, currentCurrenc
 export const printInvoiceOne = async (invoiceData, branchData, time, currentCurrency) => {
 
 
-    // ✅ generateInvoiceHTML is now async (QR generation)
-    const invoiceHTML = await generateInvoiceHTML(invoiceData, branchData, time, currentCurrency);
+    // ✅ generateInvoiceOneHTML is now async (QR generation)
+    const invoiceHTML = await generateInvoiceOneHTML(invoiceData, branchData, time, currentCurrency);
 
     if (isElectron()) {
         try {
@@ -905,7 +1140,7 @@ export const printInvoiceOne = async (invoiceData, branchData, time, currentCurr
  * ✅ Also updated to use local QR generation
  */
 export const saveInvoiceAsPDF = async (invoiceData, branchData, time, currentCurrency) => {
-    const invoiceHTML = await generateInvoiceHTML(invoiceData, branchData, time, currentCurrency);
+    const invoiceHTML = await generateInvoiceOneHTML(invoiceData, branchData, time, currentCurrency);
     const invoiceNumber = invoiceData.invoiceNo || 'invoice';
     const filename = `${invoiceNumber}.pdf`;
 

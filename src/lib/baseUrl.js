@@ -39,6 +39,41 @@ export const customerWiseDomainList = [
         code: 'MS123456',
         domain: "https://maasker.finacerp.com/Api/public/api/"
     },
+    {
+        customerName: "arab-designs",
+        code: 'AD123456',
+        domain: "https://arabdesign.finacerp.com/Api/public/api/"
+    },
+    {
+        customerName: "latest-update-check",
+        code: 'LU123456',
+        domain: "https://update-check.finacerp.com/Api/public/api/"
+    },
+    {
+        customerName: "tester",
+        code: 'TST12345',
+        domain: "https://tester.finacerp.com/Api/public/api/"
+    },
+    {
+        customerName: "fursan-al-sharkiya",
+        code: 'FS123456',
+        domain: "https://fst.finacerp.com/Api/public/api/"
+    },
+    {
+        customerName: "ktc",
+        code: 'KT123456',
+        domain: "https://ktc.finacerp.com/Api/public/api/"
+    },
+    {
+        customerName: "logismart",
+        code: 'LS123456',
+        domain: "https://logismart.finacerp.com/Api/public/api/"
+    },
+    {
+        customerName: "kmis",
+        code: 'KS123456',
+        domain: "https://kmis.finacerp.com/Api/public/api/"
+    },
 ];
 
 /**

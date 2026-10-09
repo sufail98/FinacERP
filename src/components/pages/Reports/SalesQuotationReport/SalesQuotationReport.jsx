@@ -46,9 +46,9 @@ const SalesQuotationReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -78,7 +78,7 @@ const SalesQuotationReport = () => {
         try {
             const [customersRes, costCentreRes, salesmanRes, usersRes, currencyRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Customer"],
+                    ledgerTypes: ["Customer","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("cost-centres").catch(() => ({ data: { data: [] } })),
@@ -126,10 +126,15 @@ const SalesQuotationReport = () => {
     })), [currencyData]);
 
     const conditionOptions = [
-        { label: t('salesQuotationReport.filters.conditionAll') || 'All', value: null },
-        { label: t('salesQuotationReport.filters.conditionCash') || 'Cash', value: 'Cash' },
-        { label: t('salesQuotationReport.filters.conditionCredit') || 'Credit', value: 'Credit' },
-        { label: t('salesQuotationReport.filters.conditionBank') || 'Bank', value: 'Bank' }
+      {
+        label: t("salesQuotationReport.filters.approved") || "Approved",
+        value: "Approved",
+      },
+      {
+        label: t("salesQuotationReport.filters.pending") || "Pending",
+        value: "Pending",
+      },
+      
     ];
 
     // ─── Fetch Report ────────────────────────────────────────────────────────────
@@ -191,37 +196,189 @@ const SalesQuotationReport = () => {
     const columns = useMemo(() => {
         if (filters.reportMode === 'Summary') {
             return [
-                { key: 'SNo',          label: '#',             align: 'center', width: '60'  },
-                { key: 'Date',         label: t('salesQuotationReport.grid.columns.date')         || 'Date',           align: 'center', width: '110' },
-                { key: 'QuotationNo',  label: t('salesQuotationReport.grid.columns.quotationNo')  || 'Quotation No',    align: 'center', width: '130' },
-                { key: 'Type',         label: t('salesQuotationReport.grid.columns.type')         || 'Type',            align: 'center', width: '100' },
-                { key: 'Party',        label: t('salesQuotationReport.grid.columns.party')        || 'Party',           align: 'left',   width: '180' },
-                { key: 'Salesman',     label: t('salesQuotationReport.grid.columns.salesman')     || 'Salesman',        align: 'left',   width: '140' },
-                { key: 'TotalAmount',  label: t('salesQuotationReport.grid.columns.totalAmount')  || 'Total Amount',    align: 'right',  width: '120' },
-                { key: 'BillDiscount', label: t('salesQuotationReport.grid.columns.discount')     || 'Discount',        align: 'right',  width: '100' },
-                { key: 'TaxableAmt',   label: t('salesQuotationReport.grid.columns.taxableAmount')|| 'Taxable Amt',     align: 'right',  width: '120' },
-                { key: 'TotalTax',     label: t('salesQuotationReport.grid.columns.taxAmount')    || 'Total Tax',       align: 'right',  width: '100' },
-                { key: 'GrandAmount',  label: t('salesQuotationReport.grid.columns.grandAmount')  || 'Grand Amount',    align: 'right',  width: '120' },
-                { key: 'Approved',     label: t('salesQuotationReport.grid.columns.approved')     || 'Approved',        align: 'center', width: '90'  },
-                { key: 'DoneBy',       label: t('salesQuotationReport.grid.columns.doneBy')       || 'Done By',         align: 'center', width: '110' }
+              { key: "SNo", label: "#", align: "center", width: "60" },
+              {
+                key: "Date",
+                label: t("salesQuotationReport.grid.columns.date") || "Date",
+                align: "center",
+                width: "110",
+              },
+              {
+                key: "QuotationNo",
+                label:
+                  t("salesQuotationReport.grid.columns.quotationNo") ||
+                  "Quotation No",
+                align: "center",
+                width: "130",
+              },
+              //   {
+              //     key: "Type",
+              //     label: t("salesQuotationReport.grid.columns.type") || "Type",
+              //     align: "center",
+              //     width: "100",
+              //   },
+              {
+                key: "CustomerName",
+                label: t("salesQuotationReport.grid.columns.party") || "Party",
+                align: "left",
+                width: "180",
+              },
+              {
+                key: "Salesman",
+                label:
+                  t("salesQuotationReport.grid.columns.salesman") || "Salesman",
+                align: "left",
+                width: "140",
+              },
+            //   {
+            //     key: "TotalAmount",
+            //     label:
+            //       t("salesQuotationReport.grid.columns.totalAmount") ||
+            //       "Total Amount",
+            //     align: "right",
+            //     width: "120",
+            //   },
+              {
+                key: "BillDiscount",
+                label:
+                  t("salesQuotationReport.grid.columns.discount") || "Discount",
+                align: "right",
+                width: "100",
+              },
+              {
+                key: "TaxableAmt",
+                label:
+                  t("salesQuotationReport.grid.columns.taxableAmount") ||
+                  "Taxable Amt",
+                align: "right",
+                width: "120",
+              },
+              {
+                key: "TotalTax",
+                label:
+                  t("salesQuotationReport.grid.columns.taxAmount") ||
+                  "Total Tax",
+                align: "right",
+                width: "100",
+              },
+              {
+                key: "Amount",
+                label:
+                  t("salesQuotationReport.grid.columns.grandAmount") ||
+                  "Grand Amount",
+                align: "right",
+                width: "120",
+              },
+              {
+                key: "Approved",
+                label:
+                  t("salesQuotationReport.grid.columns.approved") || "Approved",
+                align: "center",
+                width: "90",
+              },
+              {
+                key: "DoneBy",
+                label:
+                  t("salesQuotationReport.grid.columns.doneBy") || "Done By",
+                align: "center",
+                width: "110",
+              },
             ];
         }
 
         // Detailed
         return [
-            { key: 'SNo',          label: '#',             align: 'center', width: '50'  },
-            { key: 'date',         label: t('salesQuotationReport.grid.columns.date')         || 'Date',           align: 'center', width: '100' },
-            { key: 'quotationNo',  label: t('salesQuotationReport.grid.columns.quotationNo')  || 'Quotation No',   align: 'center', width: '120' },
-            { key: 'customerName', label: t('salesQuotationReport.grid.columns.customer')     || 'Customer',       align: 'left',   width: '180' },
-            { key: 'productName',  label: t('salesQuotationReport.grid.columns.product')      || 'Product',        align: 'left',   width: '200' },
-            { key: 'unitName',     label: t('salesQuotationReport.grid.columns.unit')         || 'Unit',           align: 'center', width: '80'  },
-            { key: 'qty',          label: t('salesQuotationReport.grid.columns.qty')          || 'Qty',            align: 'right',  width: '80'  },
-            { key: 'rate',         label: t('salesQuotationReport.grid.columns.rate')         || 'Rate',           align: 'right',  width: '100' },
-            { key: 'grossAmount',  label: t('salesQuotationReport.grid.columns.grossAmount')  || 'Gross Amount',   align: 'right',  width: '120' },
-            { key: 'BillDiscount', label: t('salesQuotationReport.grid.columns.discount')     || 'Discount',       align: 'right',  width: '100' },
-            { key: 'taxableAmt',   label: t('salesQuotationReport.grid.columns.taxableAmount')|| 'Taxable Amt',    align: 'right',  width: '120' },
-            { key: 'taxAmount',    label: t('salesQuotationReport.grid.columns.taxAmount')    || 'Tax Amount',     align: 'right',  width: '120' },
-            { key: 'amount',       label: t('salesQuotationReport.grid.columns.amount')       || 'Amount',         align: 'right',  width: '120' }
+          { key: "SNo", label: "#", align: "center", width: "50" },
+          {
+            key: "date",
+            label: t("salesQuotationReport.grid.columns.date") || "Date",
+            align: "center",
+            width: "100",
+          },
+          {
+            key: "quotationNo",
+            label:
+              t("salesQuotationReport.grid.columns.quotationNo") ||
+              "Quotation No",
+            align: "center",
+            width: "120",
+          },
+          {
+            key: "customerName",
+            label:
+              t("salesQuotationReport.grid.columns.customer") || "Customer",
+            align: "left",
+            width: "180",
+          },
+          {
+            key: "productName",
+            label: t("salesQuotationReport.grid.columns.product") || "Product",
+            align: "left",
+            width: "200",
+          },
+          {
+            key: "unitName",
+            label: t("salesQuotationReport.grid.columns.unit") || "Unit",
+            align: "center",
+            width: "80",
+          },
+          {
+            key: "qty",
+            label: t("salesQuotationReport.grid.columns.qty") || "Qty",
+            align: "right",
+            width: "80",
+          },
+          {
+            key: "rate",
+            label: t("salesQuotationReport.grid.columns.rate") || "Rate",
+            align: "right",
+            width: "100",
+          },
+          {
+            key: "grossAmount",
+            label:
+              t("salesQuotationReport.grid.columns.grossAmount") ||
+              "Gross Amount",
+            align: "right",
+            width: "120",
+          },
+          // { key: 'BillDiscount', label: t('salesQuotationReport.grid.columns.discount')     || 'Discount',       align: 'right',  width: '100' },
+          {
+            key: "BillDiscOnProduct",
+            label:
+              t("salesQuotationReport.grid.columns.discount") || "Discount",
+            align: "right",
+            width: "100",
+          },
+          {
+            key: "OtherChargeOnProduct",
+            label:
+              t("salesQuotationReport.grid.columns.othercharge") ||
+              "Other Charge",
+            align: "right",
+            width: "100",
+          },
+          {
+            key: "taxableAmt",
+            label:
+              t("salesQuotationReport.grid.columns.taxableAmount") ||
+              "Taxable Amt",
+            align: "right",
+            width: "120",
+          },
+          {
+            key: "taxAmount",
+            label:
+              t("salesQuotationReport.grid.columns.taxAmount") || "Tax Amount",
+            align: "right",
+            width: "120",
+          },
+          {
+            key: "amount",
+            label: t("salesQuotationReport.grid.columns.amount") || "Amount",
+            align: "right",
+            width: "120",
+          },
         ];
     }, [t, filters.reportMode]);
 
@@ -338,14 +495,14 @@ const SalesQuotationReport = () => {
                 SNo:          '',
                 Date:         '',
                 QuotationNo:  '',
-                Type:         '',
+                // Type:         '',
                 Party:        <strong>{t('salesQuotationReport.grid.total') || 'Total'}</strong>,
                 Salesman:     '',
                 TotalAmount:  sum('TotalAmount').toFixed(decimalPart),
                 BillDiscount: sum('BillDiscount').toFixed(decimalPart),
                 TaxableAmt:   sum('TaxableAmt').toFixed(decimalPart),
                 TotalTax:     sum('TotalTax').toFixed(decimalPart),
-                GrandAmount:  sum('GrandAmount').toFixed(decimalPart),
+                Amount:  sum('Amount').toFixed(decimalPart),
                 Approved:     '',
                 DoneBy:       ''
             };
@@ -588,7 +745,7 @@ const SalesQuotationReport = () => {
                     // Row merging only in Detailed mode — group by quotationMasterId
                     groupBy={filters.reportMode === 'Detailed' ? 'quotationMasterId' : null}
                     mergedColumns={filters.reportMode === 'Detailed' ? [
-                        'SNo', 'date', 'quotationNo', 'customerName', 'BillDiscount', 'taxableAmt', 'taxAmount', 'amount'
+                        'SNo', 'date', 'quotationNo', 'customerName', 
                     ] : []}
                 />
             </div>

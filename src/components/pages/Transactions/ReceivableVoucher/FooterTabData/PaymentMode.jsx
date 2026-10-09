@@ -175,11 +175,11 @@ const PaymentMode = ({ totals, formData, setFormData, finalGrandTotal,banks,cash
         </div>
 
         {/* Balance Row */}
-        <div className="mt-2 pt-2 border-t border-themed dark:border-themed">
+        <div className="mt-2 pt-2 border-t border-themed dark:border-themed ">
           <div className="flex items-center justify-end gap-2">
             <span className="text-xs font-medium text-secondary dark:text-secondary">Balance</span>
             <div
-              className={`border-2 rounded px-2 py-1 w-24 text-right font-bold text-sm ${balance === 0
+              className={`border-2 rounded px-2 py-1 w-auto text-right font-bold text-sm ${balance === 0
                 ? 'border-green-500 dark:border-green-400 text-green-600 dark:text-green-400'
                 : 'border-orange-500 dark:border-orange-400 text-orange-600 dark:text-orange-400'
                 }`}

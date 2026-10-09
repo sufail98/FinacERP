@@ -14,6 +14,7 @@ import NoAcessComponent from "@/components/common/NoAcessComponent";
 import Swal from "sweetalert2";
 import usePrivileges from "@/lib/hooks/usePrivileges";
 
+
 const BranchesList = () => {
   const navigate = useNavigate();
   const { t } = useTranslation(); // ✅ get translation function
@@ -24,7 +25,7 @@ const BranchesList = () => {
   const [alert, setAlert] = useState(null);
   const [branches, setBranches] = useState([]);
 
-    const { privileges, loading: privilegeLoading,hasAccess ,message} = usePrivileges("Branches");
+    const { privileges, loading: privilegeLoading,hasAccess ,message} = usePrivileges("Branch");
 useEffect(()=>{
   fetchAllBranches()
 },[])

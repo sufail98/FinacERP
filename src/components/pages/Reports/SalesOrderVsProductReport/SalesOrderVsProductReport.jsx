@@ -28,7 +28,7 @@ const SalesOrderVsProductReport = () => {
     const [brandData, setBrandData] = useState([]);
 
     const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Sales Order Vs Product Report");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Sales Order v/s Product");
     const { generalSettings } = useSelector((state) => state.settings);
 
     const {
@@ -39,10 +39,10 @@ const SalesOrderVsProductReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+       
 
         return {
-            fromDate: firstDayOfMonth.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };

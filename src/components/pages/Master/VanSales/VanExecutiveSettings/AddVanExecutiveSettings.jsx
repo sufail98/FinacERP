@@ -171,7 +171,14 @@ const AddVanExecutiveSettings = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let updatedValue = value
+     if (name === "salesTargetAmount") {
+    if (Number(value) < 0) {
+      return; // Ignore negative values
+    }
+  }
+
+    setFormData((prev) => ({ ...prev, [name]: updatedValue }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
     setFinalError(null);
   };
@@ -597,6 +604,9 @@ const AddVanExecutiveSettings = () => {
   value={formData.salesTargetAmount}
 onChange={handleChange}
 onBlur={handleAmountBlur}
+onKeyDown={(e) => {
+  if(e.key === "-") e.preventDefault()
+}}
   placeholder={(0).toFixed(generalSettings?.decimalPart ?? 2)}
                     className="w-full px-0 py-1.5 bg-transparent border-0 border-b border-gray-300 dark:border-gray-600
                                text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500

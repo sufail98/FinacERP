@@ -29,6 +29,7 @@ const PayableVoucherReportFilter = ({
                         name="fromDate"
                         value={filters.fromDate}
                         onChange={(e, value) => onFilterChange('fromDate', value)}
+                        max={new Date().toISOString().split(('T')[0])}
                         required
                         className='w-full'
                     />
@@ -48,7 +49,7 @@ const PayableVoucherReportFilter = ({
 
                 <div className="w-[160px]">
                     <SearchableDropdown
-                        label={t("reportFilters.selectLedger")}
+                        label={t("payableReport.filter.selectLedger")}
                         name="ledgerId"
                         value={filters.ledgerId}
                         onChange={(value) => onFilterChange('ledgerId', value)}
@@ -75,18 +76,18 @@ const PayableVoucherReportFilter = ({
                 )}
 
                 {generalSettings?.AccountPosting && (
-    <div className="w-[160px]">
-        <SearchableDropdown
+            <div className="w-[160px]">
+            <SearchableDropdown
             label={t("reportFilters.selectAccountPosting")}
-            name="accountPostingId"
-            value={filters.accountPostingId}
-            onChange={(value) => onFilterChange('accountPostingId', value)}
+            name="postedStatus"
+            value={filters.postedStatus}
+            onChange={(value) => onFilterChange('postedStatus', value)}
             options={accountPostingOptions}
             placeholder={t("All")}
             searchPlaceholder={t("Search...")}
             clearable
         />
-    </div>
+        </div>
 )}
 
                 <div className="w-[130px]">

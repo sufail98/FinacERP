@@ -49,7 +49,8 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
                             delete: false,
                             post: false,
                             view: false,
-                            home: false
+                            home: false,
+                            planVisible: false
                         };
 
                         if (item.children && item.children.length > 0) {
@@ -66,6 +67,8 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
                 }
 
                 // Match by window_name against item.id (preferred) or labelEn/labelAr fallback
+                // Keep planVisible (owned by the Plan Visibility screen) so this screen
+                // doesn't reset it to false when saving can_add/can_edit/etc.
                 result.data.forEach(privilege => {
                     const findAndUpdateMenuPrivilege = (items, parentKey = '') => {
                         for (const item of items) {
@@ -87,7 +90,8 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
                                     delete: privilege.can_delete || false,
                                     post: privilege.can_post || false,
                                     view: privilege.can_view || false,
-                                    home: privilege.can_home || false
+                                    home: privilege.can_home || false,
+                                    planVisible: privilege.planVisible || false
                                 };
                                 return true;
                             }
@@ -133,7 +137,8 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
                     delete: false,
                     post: false,
                     view: false,
-                    home: false
+                    home: false,
+                    planVisible: false
                 };
 
                 if (item.children && item.children.length > 0) {
@@ -178,16 +183,18 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
                 const menuItem = findMenuItemByKey(menuData.menuItems, windowKey);
 
                 if (menuItem && !menuItem.isGroupHeader) {
+                    const isVisible = priv.planVisible;
                     privilegesToSave.push({
-                        window_name: menuItem.labelEn, // Use id for uniqueness
-                        window_label: getMenuLabel(menuItem), // Keep label for display
-                        can_all: priv.all || false,
-                        can_add: priv.add || false,
-                        can_edit: priv.edit || false,
-                        can_delete: priv.delete || false,
-                        can_post: priv.post || false,
-                        can_view: priv.view || false,
-                        can_home: priv.home || false
+                        window_name: menuItem.labelEn,
+                        window_label: getMenuLabel(menuItem),
+                        can_all: isVisible ? (priv.all || false) : false,
+                        can_add: isVisible ? (priv.add || false) : false,
+                        can_edit: isVisible ? (priv.edit || false) : false,
+                        can_delete: isVisible ? (priv.delete || false) : false,
+                        can_post: isVisible ? (priv.post || false) : false,
+                        can_view: isVisible ? (priv.view || false) : false,
+                        can_home: isVisible ? (priv.home || false) : false,
+                        planVisible: priv.planVisible || false
                     });
                 }
             });
@@ -255,7 +262,7 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
     const handlePrivilegeChange = (windowName, permissionType, checked) => {
         setPrivileges(prev => {
             const currentWindowPrivs = prev[windowName] || {
-                all: false, add: false, edit: false, delete: false, post: false, view: false, home: false
+                all: false, add: false, edit: false, delete: false, post: false, view: false, home: false, planVisible: false
             };
 
             let updatedPrivs = {
@@ -265,6 +272,7 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
 
             if (permissionType === 'all') {
                 updatedPrivs = {
+                    ...updatedPrivs,
                     all: checked,
                     add: checked,
                     edit: checked,
@@ -293,7 +301,11 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
 
     const toggleAllPermissions = (windowName) => {
         const currentAll = privileges[windowName]?.all || false;
+        const currentWindowPrivs = privileges[windowName] || {
+            all: false, add: false, edit: false, delete: false, post: false, view: false, home: false, planVisible: false
+        };
         const updatedPrivs = {
+            ...currentWindowPrivs,
             all: !currentAll,
             add: !currentAll,
             edit: !currentAll,
@@ -348,7 +360,7 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
 
             filteredWindowKeys.forEach(windowKey => {
                 const currentWindowPrivs = updated[windowKey] || {
-                    all: false, add: false, edit: false, delete: false, post: false, view: false, home: false
+                    all: false, add: false, edit: false, delete: false, post: false, view: false, home: false, planVisible: false
                 };
 
                 let updatedPrivs = {
@@ -358,6 +370,7 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
 
                 if (permissionType === 'all') {
                     updatedPrivs = {
+                        ...updatedPrivs,
                         all: !allChecked,
                         add: !allChecked,
                         edit: !allChecked,
@@ -421,13 +434,38 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
             sourceItems = [selectedMenuData];
         }
 
+        // Helper: does this item (by its computed windowKey) have planVisible === true?
+        const isPlanVisible = (item) => {
+            const windowKey = selectedMenuData?.children && selectedMenuData.children.length > 0
+                ? `${selectedMenuData.id}.${item.id}`
+                : item.id;
+            return privileges[windowKey]?.planVisible === true;
+        };
+
         if (!searchTerm) {
-            // No search: return everything (headers + items)
-            return sourceItems.filter(item => item && typeof item === 'object');
+            // No search: return headers + only items with planVisible === true
+            const matchingItems = new Set();
+            const result = [];
+            let pendingHeader = null;
+
+            sourceItems.forEach(item => {
+                if (!item || typeof item !== 'object') return;
+
+                if (item.isGroupHeader) {
+                    pendingHeader = item;
+                } else if (isPlanVisible(item)) {
+                    if (pendingHeader) {
+                        result.push(pendingHeader);
+                        pendingHeader = null;
+                    }
+                    result.push(item);
+                }
+            });
+
+            return result;
         }
 
-        // With search: find which non-header items match, keep their preceding group headers
-        const matchingItems = new Set();
+        // With search: match label AND planVisible === true
         const result = [];
         let pendingHeader = null;
 
@@ -438,7 +476,7 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
                 pendingHeader = item;
             } else {
                 const label = getMenuLabel(item).toLowerCase();
-                if (label.includes(searchTerm.toLowerCase())) {
+                if (label.includes(searchTerm.toLowerCase()) && isPlanVisible(item)) {
                     if (pendingHeader) {
                         result.push(pendingHeader);
                         pendingHeader = null;
@@ -635,7 +673,7 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
                                         : item.id;
 
                                     const windowPrivileges = privileges[windowKey] || {
-                                        all: false, add: false, edit: false, delete: false, post: false, view: false, home: false
+                                        all: false, add: false, edit: false, delete: false, post: false, view: false, home: false, planVisible: false
                                     };
 
                                     // Count data rows before this one to alternate stripe correctly
@@ -711,7 +749,7 @@ const WindowPrivileges = forwardRef(({ userGroupId, setAlert, setSaving, setHasU
                                 : item.id;
 
                             const windowPrivileges = privileges[windowKey] || {
-                                all: false, add: false, edit: false, delete: false, post: false, view: false, home: false
+                                all: false, add: false, edit: false, delete: false, post: false, view: false, home: false, planVisible: false
                             };
 
                             return (

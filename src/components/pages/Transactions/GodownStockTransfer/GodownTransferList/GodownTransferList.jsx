@@ -23,7 +23,7 @@ const GodownTransferList = () => {
     const { selectedBranchId } = useAuth()
 
 
-    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Godown Transfer");
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Stock Receipts");
 
     // Get today's date in YYYY-MM-DD format
     const getTodayDate = () => {
@@ -49,23 +49,31 @@ const GodownTransferList = () => {
     useEffect(() => {
         fetchAllSales();
     }, [page, limit]);
-
+const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
     const fetchAllSales = async () => {
         setFetchLoading(true);
         try {
-            const payload = {
-                fromDate: fromDate,
-                toDate: toDate,
-                limits: limit,
-                page: page,
-                branchId: selectedBranchId
-            };
+         
             const res = await axiosInstance.get(`stock-transfers/${selectedBranchId}`);
 
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((page - 1) * limit) + index + 1,
-                date: formatDate(item.date),
+               date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setSalesData(formattedData);

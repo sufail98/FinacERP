@@ -6,6 +6,7 @@ import useAuth from '@/redux/hook/auth/useAuth'
 import TextInput from '@/components/elements/theme/TextInput'
 import TextArea from '@/components/elements/theme/TextArea'
 import axiosInstance from '@/lib/axiosConfig'
+import { sanitize } from '@/lib/inputSanitizer'
 
 const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
     const { currentFinancialYear, currentCurrencyConversion,userId } = useAuth()
@@ -34,7 +35,13 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
     // Input handler (for both main fields and nested ShippingAddress)
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target
-
+        let updatedValue = value
+        if(["customerName"].includes(name)){
+            updatedValue = sanitize.alphaNumericSpace(value)
+        }
+        if(["vatNo","phoneNo"].includes(name)){
+            updatedValue = sanitize.numbers(value)
+        }
         if (["address1", "address2", "address3", "address4"].includes(name)) {
             setFormData((prev) => ({
                 ...prev,
@@ -54,7 +61,7 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
         } else {
             setFormData((prev) => ({
                 ...prev,
-                [name]: value,
+                [name]: updatedValue,
             }))
         }
     }
@@ -105,49 +112,70 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
     }, [editId, open, currentCurrencyConversion, currentFinancialYear])
 
     // Submit handler
-    const handleSubmit = async (e) => {
-        e.preventDefault()
-        setLoading(true)
-        setErrors({})
+   // Submit handler
+const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setErrors({})
 
-        try {
-            // ✅ Ensure Isdefault is always sent
-            const payload = {
-                customerName: formData.customerName,
-                ledgerName: formData.customerName,
-                phoneNo: formData.phoneNo,
-                tinNumber: formData.vatNo,
-                ShippingAddress: {
-                    address1: formData.ShippingAddress.address1 || "",
-                    address2: formData.ShippingAddress.address2 || "",
-                    address3: formData.ShippingAddress.address3 || "",
-                    address4: formData.ShippingAddress.address4 || "",
-                    Isdefault: formData.ShippingAddress.Isdefault ?? false, // ✅ Always include
-                },
-                exchangeDate: formData.exchangeDate,
-                exchangeRate: formData.exchangeRate,
-                currencyConversionId: formData.currencyConversionId,
-                activeFinancialYear_fromDate: formData.activeFinancialYear_fromDate,
-                ModifiedUser: editId ? userId : null,
-            }
-
-
-            const { data } = await axiosInstance.post(
-                `update-account-ledger/${editId}`,
-                payload
-            )
-
-            if (!data.error) {
-                onSuccess?.()
-                handleClose()
-            }
-        } catch (err) {
-            console.error("Shipping update failed:", err)
-            setErrors({ api: err.response?.data?.message || "Failed to update shipping address" })
-        } finally {
-            setLoading(false)
+    try {
+        // ✅ Ensure Isdefault is always sent
+        const payload = {
+            customerName: formData.customerName,
+            ledgerName: formData.customerName,
+            phoneNo: formData.phoneNo,
+            tinNumber: formData.vatNo,
+            ShippingAddress: {
+                address1: formData.ShippingAddress.address1 || "",
+                address2: formData.ShippingAddress.address2 || "",
+                address3: formData.ShippingAddress.address3 || "",
+                address4: formData.ShippingAddress.address4 || "",
+                Isdefault: formData.ShippingAddress.Isdefault ?? false,
+            },
+            exchangeDate: formData.exchangeDate,
+            exchangeRate: formData.exchangeRate,
+            currencyConversionId: formData.currencyConversionId,
+            activeFinancialYear_fromDate: formData.activeFinancialYear_fromDate,
+            ModifiedUser: editId ? userId : null,
         }
+
+        // API 1: update ledger (name, phone, vat, etc.)
+        const { data } = await axiosInstance.post(
+            `update-account-ledger/${editId}`,
+            payload
+        )
+
+        // API 2: dedicated shipping address save/update
+        const isEditingAddress = Boolean(formData.ShippingAddress.addressId)
+
+        const shippingPayload = {
+            ledgerId: editId,
+            address1: formData.ShippingAddress.address1 || "",
+            address2: formData.ShippingAddress.address2 || "",
+            address3: formData.ShippingAddress.address3 || "",
+            address4: formData.ShippingAddress.address4 || "",
+            Isdefault: formData.ShippingAddress.Isdefault ?? false,
+            CreatedUser: userId,
+            ModifiedUser: userId,
+        }
+
+        const shippingApiUrl = isEditingAddress
+            ? `update-shipping-address/${formData.ShippingAddress.addressId}`
+            : `save-shipping-address`
+
+        const shippingRes = await axiosInstance.post(shippingApiUrl, shippingPayload)
+
+        if (!data.error && !shippingRes.data.error) {
+            onSuccess?.()
+            handleClose()
+        }
+    } catch (err) {
+        console.error("Shipping update failed:", err)
+        setErrors({ api: err.response?.data?.message || "Failed to update shipping address" })
+    } finally {
+        setLoading(false)
     }
+}
 
     return (
         <SalesInvoiceModalWizard
@@ -168,6 +196,8 @@ const ShippingAddressModal = ({ open, handleClose, editId, onSuccess }) => {
                     />
                     <TextInput
                         name="phoneNo"
+                        type = "text"
+                        maxLength = {10}
                         label="Phone Number"
                         value={formData.phoneNo}
                         onChange={handleInputChange}

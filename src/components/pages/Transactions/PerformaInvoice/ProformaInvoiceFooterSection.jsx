@@ -204,20 +204,64 @@ const ProformaInvoiceFooterSection = ({
   };
 
   // Called when user directly types in the % field — auto-calculates w/tax
+  // const handleBillDiscountPercChange = (percValue) => {
+
+  //   const perc = parseFloat(percValue) || 0;
+  //   setBillDiscountPerc(perc);
+
+  //   const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
+  //   const amount = (grandTotal * perc) / 100;
+  //   const calculatedAmount = parseFloat(amount.toFixed(generalSettings.decimalPart || 2));
+  //   setBillDiscount(calculatedAmount);
+
+  //   // Auto-calculate billDiscountWithTax from percentage
+  //   const taxRate = parseFloat(formData.invoiceDetails?.[0]?.taxRate) || 15;
+  //   const withTax = calculatedAmount * (1 + taxRate / 100);
+  //   setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings.decimalPart || 2)));
+  // };
   const handleBillDiscountPercChange = (percValue) => {
-    const perc = parseFloat(percValue) || 0;
-    setBillDiscountPerc(perc);
+  // Allow empty value
+  if (percValue === "") {
+    setBillDiscountPerc("");
+    setBillDiscount(0);
+    setBillDiscountWithTaxInput(0);
+    return;
+  }
 
-    const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
-    const amount = (grandTotal * perc) / 100;
-    const calculatedAmount = parseFloat(amount.toFixed(generalSettings.decimalPart || 2));
-    setBillDiscount(calculatedAmount);
+  // Allow only up to 2 decimal places
+  if (!/^\d*\.?\d{0,2}$/.test(percValue)) {
+    return;
+  }
 
-    // Auto-calculate billDiscountWithTax from percentage
-    const taxRate = parseFloat(formData.invoiceDetails?.[0]?.taxRate) || 15;
-    const withTax = calculatedAmount * (1 + taxRate / 100);
-    setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings.decimalPart || 2)));
-  };
+  const perc = parseFloat(percValue);
+
+  // Prevent values greater than 100
+  if (perc > 100) {
+    return;
+  }
+
+  setBillDiscountPerc(percValue);
+
+  const grandTotal =
+    parseFloat(totals?.grandTotal || 0) +
+    parseFloat(totals?.totalTax || 0);
+
+  const amount = (grandTotal * perc) / 100;
+  const calculatedAmount = parseFloat(
+    amount.toFixed(generalSettings.decimalPart || 2)
+  );
+
+  setBillDiscount(calculatedAmount);
+
+  const taxRate =
+    parseFloat(formData.invoiceDetails?.[0]?.taxRate) || 15;
+
+  const withTax = calculatedAmount * (1 + taxRate / 100);
+
+  setBillDiscountWithTaxInput(
+    parseFloat(withTax.toFixed(generalSettings.decimalPart || 2))
+  );
+};
 
   // Called when user types in the w/tax field — uses applyBillDiscountAmount (no reset loop)
   const handleBillDiscountWithTaxChange = (withTaxValue) => {
@@ -320,59 +364,118 @@ const ProformaInvoiceFooterSection = ({
   ]);
 
   // REPLACE the main sync useEffect
-  useEffect(() => {
-    if (!initializationCompleteRef.current) return;
+  // useEffect(() => {
+  //   if (!initializationCompleteRef.current) return;
 
-    const details = invoiceDetailsRef.current;
+  //   const details = invoiceDetailsRef.current;
 
-    if (details && details.length > 0) {
-      const afterBillDisc = distributeBillDiscount(billDiscount, details);
-      const updatedInvoiceDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
+  //   if (details && details.length > 0) {
+  //     const afterBillDisc = distributeBillDiscount(billDiscount, details);
+  //     const updatedInvoiceDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
 
-      const detailsString = JSON.stringify(
-        updatedInvoiceDetails.map(d => ({
-          b: d.billDiscOnProduct,
-          o: d.otherchargeonproduct
-        }))
-      );
-      const lastDetailsString = lastDistributedDetails.current;
+  //     const detailsString = JSON.stringify(
+  //       updatedInvoiceDetails.map(d => ({
+  //         b: d.billDiscOnProduct,
+  //         o: d.otherchargeonproduct
+  //       }))
+  //     );
+  //     const lastDetailsString = lastDistributedDetails.current;
 
-      if (detailsString !== lastDetailsString) {
-        lastDistributedDetails.current = detailsString;
+  //     if (detailsString !== lastDetailsString) {
+  //       lastDistributedDetails.current = detailsString;
 
-        setFormData(prev => ({
-          ...prev,
-          additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
-          billDiscount,
-          billDiscountWithTax: billDiscountWithTaxInput,
-          roundOff: roundOffType === "+" ? roundOff : -roundOff,
-          othercharge: otherChargeAmt,
-          OtherChargeRemark: otherChargeRemark,
-          invoiceDetails: updatedInvoiceDetails
-        }));
-      }
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
-        billDiscount,
-        billDiscountWithTax: billDiscountWithTaxInput,
-        roundOff: roundOffType === "+" ? roundOff : -roundOff,
-        othercharge: otherChargeAmt,
-        OtherChargeRemark: otherChargeRemark
-      }));
-    }
-  }, [
-    additionalCost,
-    additionalCostType,
+  //       setFormData(prev => ({
+  //         ...prev,
+  //         additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
+  //         billDiscount,
+  //         billDiscountWithTax: billDiscountWithTaxInput,
+  //         roundOff: roundOffType === "+" ? roundOff : -roundOff,
+  //         othercharge: otherChargeAmt,
+  //         OtherChargeRemark: otherChargeRemark,
+  //         invoiceDetails: updatedInvoiceDetails
+  //       }));
+  //     }
+  //   } else {
+  //     setFormData(prev => ({
+  //       ...prev,
+  //       additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
+  //       billDiscount,
+  //       billDiscountWithTax: billDiscountWithTaxInput,
+  //       roundOff: roundOffType === "+" ? roundOff : -roundOff,
+  //       othercharge: otherChargeAmt,
+  //       OtherChargeRemark: otherChargeRemark
+  //     }));
+  //   }
+  // }, [
+  //   additionalCost,
+  //   additionalCostType,
+  //   billDiscount,
+  //   roundOff,
+  //   roundOffType,
+  //   otherChargeAmt,
+  //   otherChargeRemark,
+  //   billDiscountWithTaxInput,
+  //   formData.invoiceDetails,
+  // ]);
+
+  // REPLACE the main sync useEffect
+useEffect(() => {
+  if (!initializationCompleteRef.current) return;
+
+  const details = invoiceDetailsRef.current;
+
+  // These scalar fields must always sync to formData, independent of
+  // whether the per-row bill-discount/other-charge distribution changed.
+  const baseUpdate = {
+    additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
     billDiscount,
-    roundOff,
-    roundOffType,
-    otherChargeAmt,
-    otherChargeRemark,
-    billDiscountWithTaxInput,
-    formData.invoiceDetails,
-  ]);
+    billDiscountWithTax: billDiscountWithTaxInput,
+    roundOff: roundOffType === "+" ? roundOff : -roundOff,
+    othercharge: otherChargeAmt,
+    OtherChargeRemark: otherChargeRemark,
+  };
+
+  if (details && details.length > 0) {
+    const afterBillDisc = distributeBillDiscount(billDiscount, details);
+    const updatedInvoiceDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
+
+    const detailsString = JSON.stringify(
+      updatedInvoiceDetails.map(d => ({
+        b: d.billDiscOnProduct,
+        o: d.otherchargeonproduct
+      }))
+    );
+
+    // Only decides whether the invoiceDetails array needs replacing
+    // (avoids unnecessary re-renders) — must NOT gate baseUpdate.
+    const distributionChanged = detailsString !== lastDistributedDetails.current;
+    if (distributionChanged) {
+      lastDistributedDetails.current = detailsString;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      ...baseUpdate,
+      ...(distributionChanged ? { invoiceDetails: updatedInvoiceDetails } : {}),
+    }));
+  } else {
+    setFormData(prev => ({
+      ...prev,
+      ...baseUpdate,
+    }));
+  }
+}, [
+  additionalCost,
+  additionalCostType,
+  billDiscount,
+  roundOff,
+  roundOffType,
+  otherChargeAmt,
+  otherChargeRemark,
+  billDiscountWithTaxInput,
+  formData.invoiceDetails,
+]);
+
   // Update only totalAmount when totals change (but skip during initial load)
   useEffect(() => {
     if (!initializationCompleteRef.current) {
@@ -496,11 +599,20 @@ const ProformaInvoiceFooterSection = ({
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
                             value={billDiscountPerc}
                             onChange={(e) => handleBillDiscountPercChange(e.target.value)}
+                              onKeyDown={(e) => {
+                                  if (["-", "e", "E", "+"].includes(e.key)) {
+                                  e.preventDefault();
+                                        }
+                            }}
                             onFocus={handleSelectAll}
                             className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                             placeholder="%"
+                            disabled = {Number(totals?.grandTotal) <= 0}
                           />
                           <span className="text-secondary dark:text-secondary">%</span>
                         </div>
@@ -548,6 +660,7 @@ const ProformaInvoiceFooterSection = ({
                           className="w-full bg-transparent focus:outline-none text-right"
                           placeholder="w/tax"
                           title="Discount amount from total including tax"
+                           disabled = {Number(totals?.grandTotal) <= 0}
                         />
                       </td>
                     )}
@@ -560,6 +673,7 @@ const ProformaInvoiceFooterSection = ({
                           value={billDiscount}
                           onChange={(e) => handleBillDiscountAmountChange(e.target.value)}
                           onFocus={handleSelectAll}
+                           disabled = {Number(totals?.grandTotal) <= 0}
                           className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                           placeholder={t("salesInvoice.form.footerSection.paymentSummery.amntPlaceholder")}
                         />
@@ -612,6 +726,10 @@ const ProformaInvoiceFooterSection = ({
                     <input
                       type="number"
                       value={otherChargeAmt}
+                      min={0}
+                      onKeyDown={(e) => {
+                        if(e.key === "-" || e.key === "+") e.preventDefault()
+                      }}
                       className="w-full bg-transparent text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none text-right"
                       // REPLACE onChange on the Other Charge amount <input>
                       onChange={(e) => {
@@ -621,7 +739,7 @@ const ProformaInvoiceFooterSection = ({
                           lastDistributedDetails.current = null; // force redistribution
                         }
                       }}
-                      disabled={!selectedLedger}
+                      disabled={!selectedLedger ||  Number(totals?.grandTotal) <= 0}
                       onFocus={handleSelectAll}
                       placeholder={t("salesInvoice.form.footerSection.paymentSummery.amntPlaceholder")}
                     />
@@ -657,6 +775,7 @@ const ProformaInvoiceFooterSection = ({
                           }
                         }}
                         onFocus={handleSelectAll}
+                         disabled = {Number(totals?.grandTotal) <= 0}
                         step={Math.pow(10, -(generalSettings?.RoundOffDigit ?? 2))}
                         className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                       />

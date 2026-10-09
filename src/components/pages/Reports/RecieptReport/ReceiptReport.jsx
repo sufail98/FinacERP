@@ -36,9 +36,9 @@ const ReceiptReport = () => {
     /* ------------------------------ Default dates ------------------------------ */
     const getDefaultDates = () => {
         const today    = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate:   today.toISOString().split('T')[0]
         };
     };
@@ -67,8 +67,8 @@ const ReceiptReport = () => {
         try {
             const [costCentreRes, ledgerRes, usersRes, employeesRes] = await Promise.all([
                 axiosInstance.get("cost-centres").catch(() => ({ data: { data: [] } })),
-                axiosInstance.post("account-ledgers", {
-                    group_ids: [5, 6, 28, 29],
+                axiosInstance.post("bank-account-ledgers", {
+                    group_ids: [5, 8, ],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("users").catch(() => ({ data: { data: [] } })),

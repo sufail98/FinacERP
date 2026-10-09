@@ -31,6 +31,7 @@ const ProformaInvoiceDetailedReportFilter = ({
                     name="fromDate"
                     value={filters.fromDate}
                     onChange={(e, value) => onFilterChange('fromDate', value)}
+                    max={new Date().toISOString().split(("T")[0])}
                     required
                     className='w-full'
                 />
@@ -85,14 +86,15 @@ const ProformaInvoiceDetailedReportFilter = ({
                 )}
 
                 {/* Condition Dropdown */}
-                <SearchableDropdown
+                {/* <SearchableDropdown
                     label={t('Condition')}
                     name="condition"
                     value={filters.condition}
                     onChange={(value) => onFilterChange('condition', value || 'All')}
                     options={conditionOptions}
                     placeholder={t('All')}
-                />
+                    clearable
+                /> */}
                 <SearchableDropdown
                     label={t('User')}
                     name="userId"
@@ -116,7 +118,7 @@ const ProformaInvoiceDetailedReportFilter = ({
                         </span>
                     </label>
                 </div>
-                <div className="flex items-end gap-6  border-gray-200 dark:border-gray-700">
+                <div className=" items-end gap-6  border-gray-200 dark:border-gray-700">
                     <label className="flex items-center gap-2 cursor-pointer group">
                         <input
                             type="radio"

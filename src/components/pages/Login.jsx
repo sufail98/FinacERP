@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../ui/button";
 import {
   Card,
@@ -18,20 +18,23 @@ import { fetchAllProducts } from "@/redux/slice/productSlice";
 import { useDispatch } from "react-redux";
 import { Eye, EyeOff } from "lucide-react";
 import { showToast } from "@/utils/toast";
+import { setOrganizationData } from "@/redux/slice/organizationSlice";
+import PlanExpired from "../common/PlanExpired";
+import { isPlanExpired } from "@/utils/planExpiry";
 
 // ─── helpers: use localStorage for remember-me (works in web + Electron) ───
 const REMEMBER_KEYS = {
   userName: "remember_userName",
-  slno:     "remember_slno",
+  slno: "remember_slno",
   password: "remember_password",
-  flag:     "remember_me",
+  flag: "remember_me",
 };
 
 const saveCredentials = (userName, slno, password) => {
   localStorage.setItem(REMEMBER_KEYS.userName, userName);
-  localStorage.setItem(REMEMBER_KEYS.slno,     slno);
+  localStorage.setItem(REMEMBER_KEYS.slno, slno);
   localStorage.setItem(REMEMBER_KEYS.password, password);
-  localStorage.setItem(REMEMBER_KEYS.flag,     "true");
+  localStorage.setItem(REMEMBER_KEYS.flag, "true");
 };
 
 const clearCredentials = () => {
@@ -42,24 +45,26 @@ const loadCredentials = () => {
   if (localStorage.getItem(REMEMBER_KEYS.flag) !== "true") return null;
   return {
     userName: localStorage.getItem(REMEMBER_KEYS.userName) || "",
-    slno:     localStorage.getItem(REMEMBER_KEYS.slno)     || "",
+    slno: localStorage.getItem(REMEMBER_KEYS.slno) || "",
     password: localStorage.getItem(REMEMBER_KEYS.password) || "",
   };
 };
 // ───────────────────────────────────────────────────────────────────────────
 
 const Login = () => {
-  const navigate  = useNavigate();
-  const dispatch  = useDispatch();
-  const { t }     = useTranslation();
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
 
-  const [slno, setSlno]               = useState("");
-  const [formData, setFormData]       = useState({ userName: "", Password: "" });
-  const [rememberMe, setRememberMe]   = useState(false);
-  const [errors, setErrors]           = useState({});
-  const [loading, setLoading]         = useState(false);
-  const [alert, setAlert]             = useState(null);
+  const [slno, setSlno] = useState("");
+  const [formData, setFormData] = useState({ userName: "", Password: "" });
+  const [rememberMe, setRememberMe] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [alert, setAlert] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [planExpired, setPlanExpired] = useState(false);
 
   // ✅ Populate saved credentials on mount
   useEffect(() => {
@@ -78,9 +83,9 @@ const Login = () => {
 
   const validateForm = () => {
     const newErrors = {};
-    if (!slno.trim())               newErrors.slno     = "Serial number is required";
-    if (!formData.userName.trim())  newErrors.userName = "Username is required";
-    if (!formData.Password.trim())  newErrors.Password = "Password is required";
+    if (!slno.trim()) newErrors.slno = "Serial number is required";
+    if (!formData.userName.trim()) newErrors.userName = "Username is required";
+    if (!formData.Password.trim()) newErrors.Password = "Password is required";
     else if (formData.Password.length < 2)
       newErrors.Password = "Password must be at least 2 characters long";
     setErrors(newErrors);
@@ -119,9 +124,17 @@ const Login = () => {
         setLoading(false);
         return;
       }
-
+      const org = companyRes.data.organization_details[0];
+      dispatch(setOrganizationData(companyRes.data.organization_details[0]));
       const dbName = companyRes.data.organization_details[0].DatabaseName;
       localStorage.setItem("dbNameEncrypted", dbName);
+      if (isPlanExpired(org.ExpiryDate)) {
+        localStorage.removeItem("customerSlno");
+        setPlanExpired(true);
+        setLoading(false);
+        return;
+      }
+
 
       // 2) Login
       const response = await axiosInstance.post("login", formData);
@@ -143,20 +156,25 @@ const Login = () => {
         }
 
         // Save auth details
-        localStorage.setItem("authToken",  token);
-        localStorage.setItem("userData",   JSON.stringify(user));
+        localStorage.setItem("authToken", token);
+        localStorage.setItem("userData", JSON.stringify(user));
         dispatch(fetchAllProducts());
 
-        if (user.userId   != null) localStorage.setItem("userId",      user.userId.toString());
-        if (user.userName)         localStorage.setItem("userName",    user.userName);
-        if (user.email)            localStorage.setItem("userEmail",   user.email);
-        if (user.UserRoleId != null) localStorage.setItem("userRole",  user.UserRoleId.toString());
-        if (user.branchIds)        localStorage.setItem("userBranches", JSON.stringify(user.branchIds));
+        if (user.userId != null) localStorage.setItem("userId", user.userId.toString());
+        if (user.userName) localStorage.setItem("userName", user.userName);
+        if (user.email) localStorage.setItem("userEmail", user.email);
+        if (user.UserRoleId != null) localStorage.setItem("userRole", user.UserRoleId.toString());
+        if (user.branchIds) localStorage.setItem("userBranches", JSON.stringify(user.branchIds));
 
         axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
         showToast.success("Login successful!");
-        setTimeout(() => navigate("/", { replace: true }), 500);
+
+        // ✅ Redirect back to the original page if present, else go home
+        const redirectTo = searchParams.get("redirect");
+        const destination = redirectTo ? decodeURIComponent(redirectTo) : "/";
+
+        setTimeout(() => navigate(destination, { replace: true }), 500);
 
       } else {
         showToast.error(response.data.message || "Login failed. Please check credentials.");
@@ -165,9 +183,9 @@ const Login = () => {
       console.error("Login error:", error.message);
       let errorMessage = "Login failed. Please try again.";
       if (error.response) {
-        if (error.response.status === 401)       errorMessage = "Invalid username or password";
-        else if (error.response.status === 422)  errorMessage = "Please check your input and try again";
-        else if (error.response.data?.message)   errorMessage = error.response.data.message;
+        if (error.response.status === 401) errorMessage = "Invalid username or password";
+        else if (error.response.status === 422) errorMessage = "Please check your input and try again";
+        else if (error.response.data?.message) errorMessage = error.response.data.message;
       } else if (error.request) {
         errorMessage = "Network error. Please check your connection.";
       }
@@ -176,7 +194,9 @@ const Login = () => {
       setLoading(false);
     }
   };
-
+  if (planExpired) {
+    return <PlanExpired />;
+  }
   return (
     <div className="flex flex-col md:flex-row h-screen justify-center" style={{
       backgroundImage: "url(./assets/images/paralax.png)",

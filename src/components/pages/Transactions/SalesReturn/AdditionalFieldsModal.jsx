@@ -4,6 +4,7 @@ import TextInput from '@/components/elements/theme/TextInput';
 import DateInput from '@/components/elements/theme/DateInput';
 import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
 import AddNewBtn from '@/components/common/AddNewBtn';
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
 const AdditionalFieldsModal = ({
   open,
@@ -26,7 +27,11 @@ const AdditionalFieldsModal = ({
   Plus,
   batches
 }) => {
+  const { hasAccess: hasTransactionBatchAccess } = usePrivileges("Transaction Batch");
+  const { hasAccess: hasEmployeeAccess, } = usePrivileges("Employee");
+
   if (!open) return null;
+
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
@@ -78,7 +83,7 @@ const AdditionalFieldsModal = ({
           <TextInput
             name="RefNo"
             label={t('salesInvoice.form.label.formHeaderSection.RefNo')}
-            type="number"
+            type="text"
             value={formData.RefNo}
             onChange={handleInputChange}
             className="w-full"
@@ -94,20 +99,22 @@ const AdditionalFieldsModal = ({
             className="w-full"
           />
 
-          <SearchableDropdown
-            name="BatchId"
-            label={t('salesInvoice.form.label.formHeaderSection.BatchId')}
-            options={batches.map(batch => ({
-              value: batch.batchid,
-              label: batch.batchname
-            }))}
-            value={formData.BatchId}
-            onChange={(value) => handleDropdownChange('BatchId', value)}
-            placeholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
-            searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
-            clearable={true}
-            className="w-full"
-          />
+          {hasTransactionBatchAccess && (
+            <SearchableDropdown
+              name="BatchId"
+              label={t('salesInvoice.form.label.formHeaderSection.BatchId')}
+              options={batches.map(batch => ({
+                value: batch.batchid,
+                label: batch.batchname
+              }))}
+              value={formData.BatchId}
+              onChange={(value) => handleDropdownChange('BatchId', value)}
+              placeholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
+              searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
+              clearable={true}
+              className="w-full"
+            />
+          )}
           <SearchableDropdown
             name="pricingLevelId"
             label={t('salesInvoice.form.label.formHeaderSection.pricingLevelId')}
@@ -123,31 +130,34 @@ const AdditionalFieldsModal = ({
             loading={loading.pricingLevel}
             className="w-full"
           />
-          <div className='flex gap-0.5 lg:gap-1 items-end'>
-            <div className='flex-1 min-w-0'>
-              <SearchableDropdown
-                name="employeeId"
-                label={t('salesInvoice.form.label.formHeaderSection.salesMan')}
-                options={employees?.map((data) => ({
-                  value: data.employeeId,
-                  label: data.employeeName,
-                }))}
-                value={formData.employeeId}
-                onChange={(value) => handleDropdownChange('employeeId', value)}
-                placeholder={t('salesInvoice.form.placeholders.formHeaderSection.salesMan')}
-                searchPlaceholder="Sales man..."
-                clearable={true}
-                className='w-full mb-0.5'
-                loading={loading.employees}
-              />
+          {hasEmployeeAccess && (
+            <div className='flex gap-0.5 lg:gap-1 items-end'>
+              <div className='flex-1 min-w-0'>
+                <SearchableDropdown
+                  name="employeeId"
+                  label={t('salesInvoice.form.label.formHeaderSection.salesMan')}
+                  options={employees?.map((data) => ({
+                    value: data.employeeId,
+                    label: data.employeeName,
+                  }))}
+                  value={formData.employeeId}
+                  onChange={(value) => handleDropdownChange('employeeId', value)}
+                  placeholder={t('salesInvoice.form.placeholders.formHeaderSection.salesMan')}
+                  searchPlaceholder="Sales man..."
+                  clearable={true}
+                  className='w-full mb-0.5'
+                  loading={loading.employees}
+
+                />
+              </div>
+              <div className='mb-0.5 flex-shrink-0'>
+                <AddNewBtn
+                  icon={Plus}
+                  onClick={() => setEmployeeModalOpen(true)}
+                />
+              </div>
             </div>
-            <div className='mb-0.5 flex-shrink-0'>
-              <AddNewBtn
-                icon={Plus}
-                onClick={() => setEmployeeModalOpen(true)}
-              />
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Modal Footer */}

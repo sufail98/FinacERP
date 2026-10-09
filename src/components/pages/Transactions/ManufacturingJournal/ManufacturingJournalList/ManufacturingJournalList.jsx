@@ -63,58 +63,72 @@ const ManufacturingJournalList = () => {
     const paginatedData = useMemo(() => {
         const startIndex = (page - 1) * limit;
         const endIndex = startIndex + limit;
-        
+
         return filteredData.slice(startIndex, endIndex).map((item, index) => ({
             ...item,
             SNo: startIndex + index + 1
         }));
     }, [filteredData, page, limit]);
-
-   const fetchAllJournals = async () => {
-    setFetchLoading(true);
-    try {
-         const payload = {
+    const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
+    const fetchAllJournals = async () => {
+        setFetchLoading(true);
+        try {
+            const payload = {
                 fromDate: fromDate,
                 toDate: toDate,
                 branchId: selectedBranchId,
             };
-        const res = await axiosInstance.post(`manufacturing-journal`,payload);
+            const res = await axiosInstance.post(`manufacturing-journal`, payload);
 
-        if (!res.data.error && res.data.data) {
-            // Flatten the nested structure for the table
-            const formattedData = res.data.data.map((item) => {
-                const master = item.master || {};
-                const firstDetail = item.details?.[0] || {}; // Taking the first produced item
-                const materials = firstDetail.materials || [];
+            if (!res.data.error && res.data.data) {
+                // Flatten the nested structure for the table
+                const formattedData = res.data.data.map((item) => {
+                    const master = item.master || {};
+                    const firstDetail = item.details?.[0] || {}; // Taking the first produced item
+                    const materials = firstDetail.materials || [];
 
-                return {
-                    // Unique ID for actions
-                    journalMasterId: master.JournalMasterId,
-                    // Columns for display
-                    journalNo: master.JournalNo || master.voucherNo,
-                    voucherNo: master.voucherNo,
-                    date: formatDate(master.date),
-                    // Based on your JSON, 'narration' in details seems to hold the product description
-                    productName: firstDetail.narration || "N/A", 
-                    quantity: firstDetail.quantity || 0,
-                    unitName: firstDetail.unitId || "-", // If you have a unit name, replace this
-                    detailCount: materials.length, // Number of raw materials used
-                };
+                    return {
+                        // Unique ID for actions
+                        journalMasterId: master.JournalMasterId,
+                        // Columns for display
+                        journalNo: master.JournalNo || master.voucherNo,
+                        voucherNo: master.voucherNo,
+                        date: (() => {
+                            const datePart = formatDate(master.date);
+                            const timePart = formatTime(master.CreatedDate);
+                            return timePart ? `${datePart} ${timePart}` : datePart;
+                        })(),
+                        // Based on your JSON, 'narration' in details seems to hold the product description
+                        productName: firstDetail.narration || "N/A",
+                        quantity: firstDetail.quantity || 0,
+                        unitName: firstDetail.unitId || "-", // If you have a unit name, replace this
+                        detailCount: materials.length, // Number of raw materials used
+                    };
+                });
+
+                setJournalData(formattedData);
+                setPage(1);
+            }
+        } catch (error) {
+            setAlert({
+                id: Date.now(),
+                type: "error",
+                message: error.response?.data?.message || "Error fetching manufacturing journals",
             });
-
-            setJournalData(formattedData);
-            setPage(1); 
+        } finally {
+            setFetchLoading(false);
         }
-    } catch (error) {
-        setAlert({
-            id: Date.now(),
-            type: "error",
-            message: error.response?.data?.message || "Error fetching manufacturing journals",
-        });
-    } finally {
-        setFetchLoading(false);
-    }
-};
+    };
 
     const handleFilter = () => {
         if (fromDate > toDate) {
@@ -194,9 +208,9 @@ const ManufacturingJournalList = () => {
         try {
             const res = await axiosInstance.get(`manufacturing-journal-delete/${id}`);
             if (!res.data.error) {
-                setAlert({ 
-                    id: Date.now(), 
-                    type: "success", 
+                setAlert({
+                    id: Date.now(),
+                    type: "success",
                     message: t("deleteSuccess") || "Manufacturing Journal deleted successfully"
                 });
 
@@ -219,26 +233,27 @@ const ManufacturingJournalList = () => {
     };
 
     const columns = [
-    { 
-        key: "SNo", 
-        label: t("manufacturingJournal.list.columns.sno") || "S.No", 
-        sortable: true, 
-        align: "center" 
-    },
-    { 
-        key: "journalNo", 
-        label: t("manufacturingJournal.list.columns.journalNo") || "Journal No", 
-        sortable: true, 
-        align: "left" 
-    },
-    { 
-        key: "date", 
-        label: t("manufacturingJournal.list.columns.date") || "Date", 
-        sortable: true, 
-        align: "center" 
-    },
-  
-];
+        {
+            key: "SNo",
+            label: t("manufacturingJournal.list.columns.sno") || "S.No",
+            sortable: true,
+            align: "center",
+            width:'100px'
+        },
+        {
+            key: "journalNo",
+            label: t("manufacturingJournal.list.columns.journalNo") || "Journal No",
+            sortable: true,
+            align: "left"
+        },
+        {
+            key: "date",
+            label: t("manufacturingJournal.list.columns.date") || "Date",
+            sortable: true,
+            align: "left"
+        },
+
+    ];
 
     const renderCell = (key, row) => {
         if (key === "quantity") {
@@ -305,9 +320,9 @@ const ManufacturingJournalList = () => {
                     { title: t("manufacturingJournal.breadcrumb.master") || "Transaction", url: "#" },
                     { title: t("manufacturingJournal.breadcrumb.title") || "Manufacturing Journal", url: "#" },
                 ]}
-                heading={{ 
-                    icon: PackageCheck, 
-                    title: t("manufacturingJournal.breadcrumb.title") || "Manufacturing Journal List" 
+                heading={{
+                    icon: PackageCheck,
+                    title: t("manufacturingJournal.breadcrumb.title") || "Manufacturing Journal List"
                 }}
                 actions={
                     privileges?.can_add
@@ -357,7 +372,7 @@ const ManufacturingJournalList = () => {
                     onItemsPerPageChange={handleItemsPerPageChange}
                     loading={fetchLoading}
                     renderCell={renderCell}
-                    
+
                 />
             </div>
         </div>

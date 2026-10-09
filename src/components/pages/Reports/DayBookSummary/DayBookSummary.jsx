@@ -21,8 +21,8 @@ const DayBookSummary = () => {
     const [reportData, setReportData] = useState(null);
     const [alert, setAlert] = useState(null);
 
-    const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Day Book Summary");
+    const { selectedBranchId,selectedBranchDetails } = useAuth();
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Daybook Summary");
     const { generalSettings } = useSelector((state) => state.settings);
     const navigate = useNavigate();
     const handleRowClick = (row) => {
@@ -40,9 +40,10 @@ const DayBookSummary = () => {
             'Material Receipt': `/transaction/material-receipt/edit/${row.MasterId}`,
             'Delivery Note': `/transaction/delivery-note/edit-delivery-note/${row.MasterId}`,
             'Payable': `/transaction/payable-voucher/edit/${row.MasterId}`,
-            'Receivable': `/transaction/receivable-voucher/edit/${row.MasterId}`,
+            'Receivable Voucher': `/transaction/receivable-voucher/edit/${row.MasterId}`,
             'Physical Stock': `/transaction/physical-stock/edit/${row.MasterId}`,
             'Damage Stock': `/transaction/damage-stock/edit/${row.MasterId}`,
+            'Payable Voucher': `/transaction/payable-voucher/edit/${row.MasterId}`,
         };
 
         const path = routes[row.VoucherType];
@@ -56,10 +57,10 @@ const DayBookSummary = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    
 
         return {
-            fromDate: firstDayOfMonth.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -111,8 +112,9 @@ const DayBookSummary = () => {
         const requestBody = {
             fromdate: filters.fromDate,
             todate: filters.toDate,
-            branchId: parseInt(selectedBranchId) || 1
+            branchId: selectedBranchDetails?.mainBranch ? null : parseInt(selectedBranchId) || 1
         };
+        
 
         try {
             const res = await axiosInstance.post("daybook-summery", requestBody);

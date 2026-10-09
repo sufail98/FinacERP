@@ -28,6 +28,7 @@ const PhysicalStockReportFilter = ({
                         name="fromDate"
                         value={filters.fromDate}
                         onChange={(e) => onFilterChange('fromDate', e.target.value)}
+                        max={new Date().toISOString().split(("T")[0])}
                         required
                         className='w-full'
                         format={generalSettings?.dateformat}

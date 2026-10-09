@@ -2,13 +2,17 @@ import React from 'react';
 import { RefreshCw } from 'lucide-react';
 import DateInput from '@/components/elements/theme/DateInput';
 import { useTranslation } from 'react-i18next';
+import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
+
 
 const ProfitAndLossAnalysisFilters = ({
     filters,
     onFilterChange,
     onGenerateReport,
     loading,
-    resetFilters
+    resetFilters,
+    branchOptions,       // ← new prop
+    isMainBranch         // ← new prop
 }) => {
     const { t } = useTranslation()
     return (
@@ -16,12 +20,13 @@ const ProfitAndLossAnalysisFilters = ({
             <div className="flex flex-wrap items-end gap-4">
                 {/* From Date */}
                 <div className="w-[150px]">
-               
+
                     <DateInput
                         label={t('reportFilters.fromDate')}
                         name="fromDate"
                         value={filters.fromDate}
                         onChange={(e, value) => onFilterChange('fromDate', value)}
+                        max={new Date().toISOString().split('T')[0]}
                         required
                         className='w-full'
                     />
@@ -29,7 +34,7 @@ const ProfitAndLossAnalysisFilters = ({
 
                 {/* To Date */}
                 <div className="w-[150px]">
-                   
+
                     <DateInput
                         label={t('reportFilters.toDate')}
                         name="toDate"
@@ -40,7 +45,18 @@ const ProfitAndLossAnalysisFilters = ({
                         className='w-full'
                     />
                 </div>
-
+                {isMainBranch && (
+                    <SearchableDropdown
+                        label={t('salesReport.filters.branch') || 'Branch'}
+                        name="branchId"
+                        value={filters.selectedBranchId ?? null}
+                        onChange={(value) => onFilterChange('selectedBranchId', value ?? null)}
+                        options={branchOptions}
+                        placeholder={t('salesReport.filters.allBranches') || 'All Branches'}
+                        searchPlaceholder={t('salesReport.filters.searchBranch') || 'Search branch...'}
+                        clearable
+                    />
+                )}
                 {/* Report Type Radio Buttons */}
                 <div className="flex-1">
 

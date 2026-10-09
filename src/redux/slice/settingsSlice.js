@@ -3,6 +3,7 @@ import { createSlice } from "@reduxjs/toolkit";
 
 const initialState = {
   generalSettings: {},
+  barcodeAlignmentSettings: {},
   financeSettings: {},
   inventorySettings: {},
   purchaseSettings: {},
@@ -20,6 +21,7 @@ const settingsSlice = createSlice({
   reducers: {
     setSettings: (state, action) => {
       state.generalSettings = action.payload.generalSettings || {};
+      state.barcodeAlignmentSettings = action.payload.barcodeAlignmentSettings || {};
       state.financeSettings = action.payload.financeSettings || {};
       state.inventorySettings = action.payload.inventorySettings || {};
       state.purchaseSettings = action.payload.purchaseSettings || {};
@@ -35,6 +37,7 @@ const settingsSlice = createSlice({
     },
     resetSettings: (state) => {
       state.generalSettings = {};
+      state.barcodeAlignmentSettings = {};
       state.financeSettings = {};
       state.inventorySettings = {};
       state.purchaseSettings = {};
@@ -66,6 +69,9 @@ const settingsSlice = createSlice({
     updatePrintSettings: (state, action) => {
       state.printSettings = { ...state.printSettings, ...action.payload }
     },
+    updateBarcodeAlignmentSettings: (state, action) => {
+      state.barcodeAlignmentSettings = { ...state.barcodeAlignmentSettings, ...action.payload }
+    },
     setLoading: (state, action) => {
       state.loading = action.payload;
     },
@@ -75,5 +81,5 @@ const settingsSlice = createSlice({
   },
 });
 
-export const { setSettings, resetSettings,setPrintSettings, setLoading, setError, updateGeneralSettings, updateInventorySettings, updateFinanceSettings, updateSalesSettings, updatePurchaseSettings, zatcaSettings, updateZatcaSettings, updatePrintSettings } = settingsSlice.actions;
+export const { setSettings, resetSettings,setPrintSettings, setLoading, setError, updateGeneralSettings, updateInventorySettings, updateFinanceSettings, updateSalesSettings, updatePurchaseSettings, zatcaSettings, updateZatcaSettings, updatePrintSettings, updateBarcodeAlignmentSettings } = settingsSlice.actions;
 export default settingsSlice.reducer;

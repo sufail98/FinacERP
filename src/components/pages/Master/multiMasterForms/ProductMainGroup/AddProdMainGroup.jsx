@@ -10,6 +10,7 @@ import AlertBox from "@/components/common/AlertBox";
 import { useTranslation } from "react-i18next";
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
+import { sanitize } from "@/lib/inputSanitizer";
 
 const AddProdGroup = ({ open, handleClose, onSuccess, editId }) => {
     const { t } = useTranslation();
@@ -71,7 +72,13 @@ const AddProdGroup = ({ open, handleClose, onSuccess, editId }) => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
+
+        let updatedValue = value
+
+        if (["groupName", "groupCode"].includes(name)){
+            updatedValue = sanitize.alphaNumericSpace(value);
+        }
+          setFormData((prev) => ({ ...prev, [name]: updatedValue }));
         if (finalError) setFinalError(null);
         
         // Clear error for the changed field
@@ -92,7 +99,7 @@ const AddProdGroup = ({ open, handleClose, onSuccess, editId }) => {
     const validateField = (name, value) => {
         let error = "";
 
-        if (["groupCode", "groupName"].includes(name)) {
+        if ([ "groupName"].includes(name)) {
             if (!value || value.toString().trim() === "") {
                 error = t("requiredFieldsError");
             }
@@ -118,7 +125,7 @@ const AddProdGroup = ({ open, handleClose, onSuccess, editId }) => {
         
         // Validate required fields
         Object.keys(formData).forEach((key) => {
-            if (["groupCode", "groupName"].includes(key)) {
+            if ([ "groupName"].includes(key)) {
                 const err = validateField(key, formData[key]);
                 if (err) newErrors[key] = err;
             }
@@ -300,7 +307,7 @@ const AddProdGroup = ({ open, handleClose, onSuccess, editId }) => {
                     <p className="text-center py-4">{t("productMainGroup.form.loading")}</p>
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <TextInput
+                        {/* <TextInput
                             id="groupCode"
                             name="groupCode"
                             label={t("productMainGroup.form.fields.groupCode.label")}
@@ -311,7 +318,7 @@ const AddProdGroup = ({ open, handleClose, onSuccess, editId }) => {
                             required
                             error={errors.groupCode}
                             onBlur={(e) => validateField(e.target.name, e.target.value)}
-                        />
+                        /> */}
 
                         <TextInput
                             id="groupName"

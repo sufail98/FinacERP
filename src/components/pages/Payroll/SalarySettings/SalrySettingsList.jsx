@@ -9,6 +9,8 @@ import AlertBox from "@/components/common/AlertBox";
 import useAuth from "@/redux/hook/auth/useAuth";
 import Swal from "sweetalert2";
 import { useTranslation } from "react-i18next";
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
 const SalarySettingsList = () => {
   const [open, setOpen] = useState(false);
@@ -19,6 +21,7 @@ const SalarySettingsList = () => {
   const [alert, setAlert] = useState(null);
   const { t } = useTranslation();
   const { selectedBranchId } = useAuth();
+   const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Salary Settings");
 
   useEffect(() => {
     fetchData();
@@ -107,6 +110,12 @@ const SalarySettingsList = () => {
   }, [open]);
 
   const handleDelete = async (id) => {
+
+    if (!privileges?.can_delete) {
+            setAlert({ key: new Date(), type: "error", message: t("deletePermission") });
+            return;
+        }
+
     const result = await Swal.fire({
       title: t("delete.title") || "Are you sure?",
       text: t("delete.text") || "You won't be able to revert this!",
@@ -167,9 +176,10 @@ const SalarySettingsList = () => {
     },
   ];
 
-  const actions = [
-    {
-      icon: <Edit className="h-4 w-4" />,
+  const actions = []
+  if(privileges?.can_edit){
+    actions.push({
+       icon: <Edit className="h-4 w-4" />,
       onClick: (row) => {
         setSelectedId(row.salarySettingsId);
         setMode("edit");
@@ -178,17 +188,20 @@ const SalarySettingsList = () => {
       className:
         "text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300",
       tooltip: "Edit",
-    },
-    {
-      icon: <Trash2 className="h-4 w-4" />,
+    })
+  }
+  if(privileges?.can_delete){
+    actions.push({
+       icon: <Trash2 className="h-4 w-4" />,
       className:
         "text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300",
       onClick: (row) => {
         handleDelete(row.salarySettingsId);
       },
       tooltip: "Delete",
-    },
-  ];
+    })
+  }
+
 
   const breadcrumbProps = {
     routes: [
@@ -199,9 +212,11 @@ const SalarySettingsList = () => {
       icon: DollarSign,
       title: "Salary Settings",
     },
-    actions: [
-      {
-        label: `${t("createNewBtn") || "Create New"} (Ctrl+C)`,
+    actions : 
+      privileges?.can_add 
+      ? [
+        {
+          label: `${t("createNewBtn") || "Create New"} (Ctrl+C)`,
         type: "primary",
         icon: Plus,
         onClick: () => {
@@ -209,17 +224,30 @@ const SalarySettingsList = () => {
           setSelectedId(null);
           setOpen(true);
         },
-      },
-    ],
+        }
+      ]
+      : []
+    
+    
   };
 
-  if (loading)
-    return (
-      <div>
-        <BreadCrumb {...breadcrumbProps} />
-        <Preloader />
-      </div>
-    );
+  if (privilegeLoading || loading) {
+        return <div>
+          <BreadCrumb {...breadcrumbProps} />
+            <Preloader />
+        </div>
+    }
+
+     if (!hasAccess) {
+        return (
+            <div>
+                <BreadCrumb {...breadcrumbProps} />
+                <NoAcessComponent message={message} />
+            </div>
+        );
+    }
+
+ 
 
   return (
     <div>

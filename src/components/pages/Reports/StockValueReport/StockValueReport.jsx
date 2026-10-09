@@ -21,15 +21,17 @@ const StockValueReport = () => {
     const [alert, setAlert] = useState(null);
     
     const [groupData, setGroupData] = useState([]);
-    const [productData, setProductData] = useState([]);
+        const { allProducts: productData } = useSelector((state) => state.products)
+    
     const [brandData, setBrandData] = useState([]);
     const [taxData, setTaxData] = useState([]);
     const [godownData, setGodownData] = useState([]);
     const [rackData, setRackData] = useState([]);
     
     const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Stock Value Report");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Stock Value");
     const { generalSettings } = useSelector((state) => state.settings);
+    const [tableMaxHeight,setTableMaxHeight]=useState('calc(100vh - 230px)')
 
     // Use the unified export hook
     const { 
@@ -54,11 +56,13 @@ const StockValueReport = () => {
         fetchDropdownData();
     }, [selectedBranchId]);
 
+    const [dropdownLoading,setDropdownLoading]=useState(false)
     const fetchDropdownData = async () => {
+        setDropdownLoading(true);
         try {
-            const [groupRes, productRes, brandRes, taxRes, godownRes] = await Promise.all([
+            const [groupRes, brandRes, taxRes, godownRes] = await Promise.all([
                 axiosInstance.get("product-groups").catch(() => ({ data: { data: [] } })),
-                axiosInstance.get("products-grid-fill?branchId=" + selectedBranchId).catch(() => ({ data: { data: [] } })),
+                // axiosInstance.get("products-grid-fill?branchId=" + selectedBranchId).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("brands").catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("tax-masters").catch(() => ({ data: { data: [] } })),
                 axiosInstance.get(`godowns/${selectedBranchId}`).catch(() => ({ data: { data: [] } }))
@@ -76,13 +80,15 @@ const StockValueReport = () => {
             }
 
             setGroupData(groupRes.data.data || []);
-            setProductData(productRes.data.data || []);
+            // setProductData(productRes.data.data || []);
             setBrandData(brandRes.data.data || []);
             setTaxData(taxRes.data.data || []);
             setGodownData(godownRes.data.data || []);
             setRackData(rackRes.data.data || []);
         } catch (error) {
             console.error("❌ Error fetching dropdown data:", error);
+        }finally {
+            setDropdownLoading(false);
         }
     };
 
@@ -98,7 +104,7 @@ const StockValueReport = () => {
             taxType: filters.taxType,
             godownId: filters.godownId,
             rackId: filters.rackId,
-            branchId: parseInt(selectedBranchId) || 1,
+            branchId: null,
             zeroStock: filters.zeroStock,
             negativeStock: filters.negativeStock
         };
@@ -112,6 +118,7 @@ const StockValueReport = () => {
             }));
             
             setReportData(dataWithSNo);
+            if(dataWithSNo.length >=100) setTableMaxHeight('calc(100vh - 255px)')
             
             if (dataWithSNo.length === 0) {
                 setAlert({
@@ -326,11 +333,11 @@ const StockValueReport = () => {
 
     const columns = [
         { key: 'SNo', label: '#', align: 'center' },
-        { key: 'Code', label: t('Product Code'), align: 'left' },
-        { key: 'Product', label: t('Product Name'), align: 'left' },
+        { key: 'barcode', label: t('Barcode'), align: 'left' },
+        { key: 'Product', label: t('Product Name'), align: 'left' ,width: '400px'},
         { key: 'PartNo', label: t('Part No'), align: 'left' },
         { key: 'Brand', label: t('Brand'), align: 'left' },
-        { key: 'Unit', label: t('Unit'), align: 'center' },
+        { key: 'Unit', label: t('Unit'), align: 'center' ,width: '60px'},
         { key: 'Stock Qty', label: t('Stock Qty'), align: 'right' },
         { key: 'Cost', label: t('Cost'), align: 'right' },
         { key: 'StockValue', label: t('Stock Value'), align: 'right' },
@@ -374,7 +381,7 @@ const StockValueReport = () => {
         return value ?? '-';
     };
 
-    if (privilegeLoading) {
+    if (privilegeLoading||dropdownLoading) {
         return (
             <div>
                 <BreadCrumb
@@ -451,7 +458,10 @@ const StockValueReport = () => {
                     loading={loading}
                     renderCell={renderCell}
                     footerData={footerData}
-                    maxHeight='calc(100vh - 260px)'
+                    maxHeight={tableMaxHeight}
+                    pageSize={100}
+                    staticSearchable
+                    sortable
                 />
             </div>
         </div>

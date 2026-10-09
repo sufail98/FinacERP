@@ -42,21 +42,21 @@ const getBranchName = () => {
         const state = store.getState();
         const authState = state.auth;
         const settingsState = state.settings;
-        
+
         const branches = authState?.branches;
         const selectedBranchId = authState?.selectedBranchId;
-        
+
         if (branches && selectedBranchId) {
             const selectedBranch = branches.find(branch => branch.branchId === selectedBranchId);
             if (selectedBranch?.branchName) {
                 return selectedBranch.branchName;
             }
         }
-        
+
         if (settingsState?.generalSettings?.companyName) {
             return settingsState.generalSettings.companyName;
         }
-        
+
         return 'EAST COAST ADVERTISING AGENCY';
     } catch (error) {
         console.error('Error getting branch name:', error);
@@ -68,8 +68,8 @@ const getBranchName = () => {
  * Generate Delivery Note HTML
  */
 const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
-    console.log(invoiceData,);
-    
+
+
     const state = store.getState().settings;
     const companyData = state.generalSettings;
     const headerImage = companyData.branchHeader;
@@ -98,7 +98,7 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
     const formattedDate = formatDate(date);
     const formattedLPODate = formatDate(LPODate);
 
-    const ROWS_PER_PAGE = 15;
+    const ROWS_PER_PAGE = 21;
     const filteredProducts = salesDetails.filter(item => item.productCode);
     const productPages = chunkArray(filteredProducts, ROWS_PER_PAGE);
     const totalPages = productPages.length || 1;
@@ -116,20 +116,31 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
 
         return `
             <div class="page">
-                <!-- Header Image - Fixed 2 inch height, full width stretched -->
+                <!-- Header Image - Fixed 100px inch height, full width stretched -->
                 <div class="header-image">
-                    ${headerImage 
-                        ? `<img src="${headerImage}" alt="header">` 
-                        :  `
+                    ${headerImage
+                ? `<img src="${headerImage}" alt="header">`
+                : `
     <div class="header-text">
         <div class="company-name">${companyName}</div>
         <div class="company-code">${companyCode}</div>
         <div class="company-vat">VAT No: ${companyVatNo}</div>
     </div>
 `
-                    }
+            }
                 </div>
-
+    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            })} ${new Date().toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            })}</div>
+        </div>
                 <!-- Content Area -->
                 <div class="content-wrapper ${isLastPage ? 'last-page' : ''}">
                     
@@ -231,29 +242,29 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
                         </thead>
                         <tbody>
                             ${pageProducts.map((item, index) => {
-                                const globalIndex = pageIndex * ROWS_PER_PAGE + index;
-                                
-                                const productName = item.productName || '';
-                                const productNameArb = item.productNameArb || '';
-                                const description = item.productDescription || '';
-                                const fullDescription = description 
-                                    ? `${productName} - ${description}` 
-                                    : productName;
-                                
-                                return `
-                                    <tr>
-                                        <td class="text-center">${globalIndex + 1}</td>
-                                        <td class="text-center">${item.productCode || ''}</td>
-                                        <td class="text-left product-cell">
-                                        ${productName} <br/>
-                                        ${productNameArb}
-                                        </td>
-                                        <td class="text-center">${item.qty || 0}</td>
-                                        <td class="text-center">${item.unitName || item.productDetails?.UnitName || ''}</td>
-                                        <td class="text-left">${item.Remark || ''}</td>
-                                    </tr>
-                                `;
-                            }).join('')}
+                                    const globalIndex = pageIndex * ROWS_PER_PAGE + index;
+
+                                    const productName = item.productName || '';
+                                    const productNameArb = item.productNameArb || '';
+                                    const description = item.productDescription || '';
+                                    const fullDescription = `${productName} ${productNameArb}`
+
+
+                                    return `
+                                                        <tr>
+                                                            <td class="text-center">${globalIndex + 1}</td>
+                                                            <td class="text-center">${item.productCode || ''}</td>
+                                                            <td class="text-left product-cell">
+                                                        <span> ${fullDescription}</span>
+                                                        <span style="font-size: 10px; color: #555;"> ${description}</span>
+
+                                                            </td>
+                                                            <td class="text-center">${Number(item.qty).toFixed(2) || 0}</td>
+                                                            <td class="text-center">${item.unitName || item.productDetails?.UnitName || 'PCS'}</td>
+                                                            <td class="text-left">${item.Remark || ''}</td>
+                                                        </tr>
+                                                    `;
+                                }).join('')}
 
                             ${emptyRows.map(() => `
                                 <tr class="empty-row">
@@ -319,10 +330,10 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
 
                 <!-- Footer Image - Fixed 1 inch height, full width stretched -->
                 <div class="footer-image">
-                    ${footerImage 
-                        ? `<img src="${footerImage}" alt="footer">` 
-                        : '<div class="footer-placeholder"></div>'
-                    }
+                    ${footerImage
+                ? `<img src="${footerImage}" alt="footer">`
+                : '<div class="footer-placeholder"></div>'
+            }
                 </div>
             </div>
         `;
@@ -355,6 +366,46 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
                     font-size: 11px;
                     font-family: "Inter", sans-serif;
                 }
+                    .print-timestamp {
+    position: absolute;
+    bottom: 15mm;
+    right: 3mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
+
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
                 .page {
                     width: 210mm;
                     height: 297mm;
@@ -391,25 +442,10 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
 }
 
                 /* ========== HEADER IMAGE - FIXED 2 INCH HEIGHT, FULL WIDTH ========== */
-                .header-image { 
-                    width: 210mm;
-                    height: 2in;
-                    position: absolute; 
-                    top: 0; 
-                    left: 0; 
-                    z-index: 1;
-                    overflow: hidden;
-                    background: #fff;
-                }
-                .header-image img { 
-                    width: 210mm !important;
-                    height: 2in !important;
-                    object-fit: fill !important;
-                    display: block; 
-                }
+               
                 .header-placeholder {
                     width: 210mm;
-                    height: 2in;
+                    height: 144px;
                     background: #f0f0f0;
                 }
 
@@ -439,7 +475,7 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
                 /* Content Wrapper */
                 .content-wrapper {
                     flex: 1;
-                    padding: calc(2in + 10px) 15px calc(1in + 10px) 15px;
+                    padding: 0 15px calc(1in + 10px) 15px;
                     position: relative;
                     z-index: 2;
                     display: flex;
@@ -451,10 +487,9 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
 
                 /* Section 1: Heading with curved border */
                 .heading-container {
-                    border: 2px solid #000;
                     border-radius: 12px;
-                    padding: 10px 20px;
-                    margin-bottom: 12px;
+                    padding: 2px 20px;
+                    margin-bottom: 2px;
                 }
                 .heading {
                     display: flex;
@@ -533,7 +568,7 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
                     font-size: 10px;
                 }
                 .product-table th {
-                    border: 2px solid #000;
+                    border: 1px solid #000;
                     padding: 6px 4px;
                     font-weight: bold;
                     text-align: center;
@@ -541,14 +576,14 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
                     background: #ddd;
                 }
                 .product-table tbody td {
-                    border-left: 2px solid #000;
-                    border-right: 2px solid #000;
+                    border-left: 1px solid #000;
+                    border-right: 1px solid #000;
                     border-top: none;
                     border-bottom: none;
                     padding: 4px 5px;
                 }
                 .product-table tbody tr:last-child td {
-                    border-bottom: 2px solid #000;
+                    border-bottom: 1px solid #000;
                 }
                 .th-ar {
                     font-size: 7px;
@@ -569,6 +604,8 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
 
                 .product-cell {
                     font-weight: 500;
+                    display:flex;
+                    flex-direction:column;
                 }
 
                 .empty-row td { 
@@ -593,9 +630,8 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
                 /* Section 4 & 5: Responsibility */
                 .responsibility-section {
                     display: flex;
-                    border: 2px solid #000;
-                    border-radius: 10px;
-                    margin-bottom: 12px;
+                    gap:10px;
+                    margin-bottom: 8px;
                     overflow: hidden;
                 }
                 .responsibility-left,
@@ -603,13 +639,12 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
                     flex: 1;
                     padding: 10px;
                     text-align: center;
-                    font-weight: bold;
                     font-size: 10px;
                     line-height: 1.3;
+                    border: 1px solid #000;
+
                 }
-                .responsibility-left {
-                    border-right: 2px solid #000;
-                }
+               
 
                 /* Receiver Signature */
                 .receiver-signature-section {
@@ -662,7 +697,15 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
                     min-width: 110px;
                     padding-bottom: 2px;
                 }
-
+   .header-image {
+                        width: 100% !important;
+                        height: 100px !important;
+                    }
+                    .header-image img {
+                        width: 100% !important;
+                        height: 100px !important;
+                        object-fit: fill !important;
+                    }
                 @media print {
                     body { 
                         background: white; 
@@ -675,15 +718,7 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
                         height: 297mm; 
                         margin-bottom: 0;
                     }
-                    .header-image {
-                        width: 210mm !important;
-                        height: 2in !important;
-                    }
-                    .header-image img {
-                        width: 210mm !important;
-                        height: 2in !important;
-                        object-fit: fill !important;
-                    }
+                 
                     .footer-image {
                         width: 210mm !important;
                         height: 1in !important;
@@ -707,23 +742,23 @@ const generateDeliveryNoteHTML = (invoiceData, branchData, currentCurrency) => {
  * Main print delivery note function - SILENT PRINT
  */
 export const deliveryNotePrintOne = async (invoiceData, branchData, time, invoiceQr, currentCurrency) => {
-    
+
     // Generate HTML
     const invoiceHTML = generateDeliveryNoteHTML(invoiceData, branchData, currentCurrency);
 
     if (isElectron()) {
         try {
-            
+
             const savedPrinter = await getPrinterPreference('a4');
-            
+
             const result = await printSilent(invoiceHTML, savedPrinter, 'a4');
-            
+
             if (result.success) {
                 console.log('✅ [DELIVERY NOTE] Printed successfully!');
             } else {
                 console.error('❌ [DELIVERY NOTE] Print failed:', result.error);
             }
-            
+
             return result;
         } catch (error) {
             console.error('❌ [DELIVERY NOTE] Error:', error);
@@ -741,6 +776,36 @@ export const deliveryNotePrintOne = async (invoiceData, branchData, time, invoic
         } else {
             console.error('❌ [DELIVERY NOTE] Popup blocked');
             return { success: false, error: 'Popup blocked' };
+        }
+        return { success: true };
+    }
+};
+export const saveDeliveryNotAsPDF = async (invoiceData, branchData, time, currentCurrency) => {
+    const invoiceHTML = await generateDeliveryNoteHTML(invoiceData, branchData, time, currentCurrency);
+    const invoiceNumber = invoiceData.invoiceNo || 'invoice';
+    const filename = `${invoiceNumber}.pdf`;
+
+    if (isElectron()) {
+        try {
+            const result = await window.electronAPI.savePDF(invoiceHTML, filename);
+            if (result.success) {
+                return result;
+            } else {
+                console.error('❌ [SALES INVOICE] PDF save failed:', result.error);
+                return result;
+            }
+        } catch (error) {
+            console.error('❌ [SALES INVOICE] Error saving PDF:', error);
+            return { success: false, error: error.message };
+        }
+    } else {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(invoiceHTML);
+            printWindow.document.close();
+            printWindow.onload = () => {
+                printWindow.print();
+            };
         }
         return { success: true };
     }

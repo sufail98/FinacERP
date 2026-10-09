@@ -39,6 +39,8 @@ const DateInput = ({
   const isInternalUpdate = useRef(false);
   const lastValidValue = useRef("");
 
+  // const max = new Date().toISOString().split(("T")[0])
+
   const { generalSettings } = useSelector((state) => state.settings);
   const dateFormat = generalSettings?.dateformat || "dd-MM-yyyy";
   const separator = dateFormat.includes("/") ? "/" : "-";
@@ -72,6 +74,8 @@ const DateInput = ({
     return dateFormat.replace("dd", dd).replace("MM", mm).replace("yyyy", yyyy);
   };
 
+
+
   // Convert display format to API value (yyyy-MM-dd)
   const displayToValue = (display) => {
     if (!display || display.length !== 10) return null;
@@ -95,6 +99,14 @@ const DateInput = ({
 
     return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
   };
+
+  // Check if an API-format date (yyyy-MM-dd) is within the allowed min/max range
+const isWithinRange = (apiVal) => {
+  if (!apiVal) return true;
+  if (min && apiVal < min) return false;
+  if (max && apiVal > max) return false;
+  return true;
+};
 
   // Format digits to display format
   const formatDigits = (digits) => {
@@ -180,19 +192,19 @@ const DateInput = ({
       const formatted = formatDigits(digits);
       const apiVal = displayToValue(formatted);
 
-      if (apiVal) {
-        setDisplayText(formatted);
-        updateParent(apiVal);
-        return true;
-      }
+       if (apiVal && isWithinRange(apiVal)) {
+    setDisplayText(formatted);
+    updateParent(apiVal);
+    return true;
+  }
     }
 
     if (text.length === 10) {
       const apiVal = displayToValue(text);
-      if (apiVal) {
-        updateParent(apiVal);
-        return true;
-      }
+      if (apiVal && isWithinRange(apiVal)) {
+    updateParent(apiVal);
+    return true;
+  }
     }
 
     // Could not parse — revert display to last known good value.
@@ -234,9 +246,12 @@ const DateInput = ({
 
     if (input.length === 10) {
       const apiVal = displayToValue(input);
-      if (apiVal) {
-        updateParent(apiVal);
-      }
+      // if (apiVal) {
+      //   updateParent(apiVal);
+      // }
+      if (apiVal && isWithinRange(apiVal)) {
+    updateParent(apiVal);
+  }
     }
   };
 
@@ -316,10 +331,20 @@ const DateInput = ({
       testDate.getMonth() === month - 1 &&
       testDate.getFullYear() === year;
 
+    // if (isValidDate) {
+    //   const newApiVal = `${yyyy}-${mm}-${dd}`;
+    //   updateParent(newApiVal);
+    // }
+
     if (isValidDate) {
-      const newApiVal = `${yyyy}-${mm}-${dd}`;
-      updateParent(newApiVal);
-    }
+  const newApiVal = `${yyyy}-${mm}-${dd}`;
+  if (isWithinRange(newApiVal)) {
+    updateParent(newApiVal);
+  } else {
+    // don't commit, and don't leave displayText showing an out-of-range value
+    setDisplayText(valueToDisplay(value || lastValidValue.current));
+  }
+}
 
     requestAnimationFrame(() => {
       inputRef.current?.setSelectionRange(cursorPos, cursorPos);

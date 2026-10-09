@@ -328,6 +328,7 @@ const SalaryMasterForm = () => {
       LedgerId: Number(formData.LedgerId),
       branchId: selectedBranchId,
       CreatedUser: user?.userId || "admin",
+       ModifiedUser: editMode ? user?.userId : null,
       EmployeeId: Number(formData.EmployeeId),
       SalaryDate: formData.SalaryDate,
       Bonus: Number(formData.Bonus || 0),
@@ -337,6 +338,8 @@ const SalaryMasterForm = () => {
       SalaryDetails2: salaryDetails.map((d) => ({
         PayheadId: Number(d.PayheadId),
         Amount: Number(d.Amount || 0),
+         CreatedUser: user?.userId || "admin",
+       ModifiedUser: editMode ? user?.userId : null,
       })),
     };
 
@@ -526,7 +529,7 @@ const SalaryMasterForm = () => {
               <div className="text-red-500 text-xs font-semibold">{errors.details}</div>
             )}
 
-            <div className="overflow-x-auto">
+            <div className="">
               <table className="w-full text-left border-collapse border border-gray-100 dark:border-gray-800">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-[#252525] border-b border-gray-150 dark:border-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -572,6 +575,9 @@ const SalaryMasterForm = () => {
                               value={detail.Amount === 0 ? "" : detail.Amount}
                               placeholder="0.00"
                               onChange={(e) => handleDetailChange(index, "Amount", e.target.value)}
+                              onKeyDown={(e) => {
+                                if(e.key === "-" || e.key === "+") e.preventDefault()
+                              }}
                               onBlur={(e) => {
                                 const val = Number(e.target.value);
                                 handleDetailChange(index, "Amount", isNaN(val) ? 0 : val);
@@ -634,6 +640,9 @@ const SalaryMasterForm = () => {
                       const val = Number(e.target.value);
                       setFormData((p) => ({ ...p, Bonus: isNaN(val) ? 0 : val }));
                     }}
+                    onKeyDown={(e) => {
+                      if(e.key === "-" || e.key === "+") e.preventDefault()
+                    }}
                   />
 
                   <span className="text-gray-500 dark:text-gray-400">Deduction:</span>
@@ -648,6 +657,9 @@ const SalaryMasterForm = () => {
                       const val = Number(e.target.value);
                       setFormData((p) => ({ ...p, Deduction: isNaN(val) ? 0 : val }));
                     }}
+                    onKeyDown={(e) => {
+                      if(e.key === "-" || e.key === "+") e.preventDefault()
+                    }}
                   />
 
                   <span className="text-gray-500 dark:text-gray-400">Lop (Loss of Pay):</span>
@@ -661,6 +673,9 @@ const SalaryMasterForm = () => {
                     onBlur={(e) => {
                       const val = Number(e.target.value);
                       setFormData((p) => ({ ...p, Lop: isNaN(val) ? 0 : val }));
+                    }}
+                     onKeyDown={(e) => {
+                      if(e.key === "-" || e.key === "+") e.preventDefault()
                     }}
                   />
 

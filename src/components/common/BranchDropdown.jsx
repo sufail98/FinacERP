@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, MapPin, Building2 } from 'lucide-react';
 import useAuth from "@/redux/hook/auth/useAuth";
+import { useLocation } from 'react-router-dom';
 
 const BranchDropdown = ({ isOpen, onToggle, onClose }) => {
   const {
@@ -11,6 +12,7 @@ const BranchDropdown = ({ isOpen, onToggle, onClose }) => {
     currentCurrency,
     currentCurrencyConversion
   } = useAuth();
+  const location=useLocation();
 
   const [selectedBranch, setSelectedBranch] = useState(null);
 
@@ -328,7 +330,7 @@ const BranchDropdown = ({ isOpen, onToggle, onClose }) => {
         {/* ✅ FIX 3: Dropdown has explicit z-50 and stopPropagation */}
         {isOpen && (
           <div
-            className={`absolute top-full right-0 mt-3 shadow-2xl w-80 bg-white border border-gray-200 rounded-xl z-50 branch-dropdown-enter`}
+           className={`absolute top-full left-0 right-auto md:left-auto md:right-0 mt-3 shadow-2xl w-[280px] sm:w-80 bg-white border border-gray-200 rounded-xl z-50 branch-dropdown-enter`}
             onClick={(e) => e.stopPropagation()} // ✅ Prevent clicks from reaching overlay
           >
             {/* Header */}

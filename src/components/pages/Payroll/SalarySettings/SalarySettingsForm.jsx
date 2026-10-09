@@ -16,6 +16,7 @@ import useAutoFocus from "@/lib/hooks/useAutoFocus";
 import PropTypes from "prop-types";
 import { useSelector } from "react-redux";
 import { Plus, Trash2 } from "lucide-react";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const style = {
   position: "absolute",
@@ -215,8 +216,16 @@ const SalarySettingsForm = ({
   const handleDetailChange = (index, e) => {
     setFinalError("");
     const { name, value } = e.target;
+    let updatedValue = value
+    if(["AmtOrPer"].includes(name)){
+     if (updatedValue === "" || /^\d*\.?\d{0,2}$/.test(updatedValue)) {
+    // Valid
+  } else {
+    return;
+  }
+    }
     setDetails((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, [name]: value } : row))
+      prev.map((row, i) => (i === index ? { ...row, [name]: updatedValue } : row))
     );
   };
 
@@ -233,11 +242,21 @@ const SalarySettingsForm = ({
     setDetailErrors((prev) => [...prev, {}]);
   };
 
+  // const removeDetailRow = (index) => {
+  //   if (details.length === 1) return;
+  //   setDetails((prev) => prev.filter((_, i) => i !== index));
+  //   setDetailErrors((prev) => prev.filter((_, i) => i !== index));
+  // };
   const removeDetailRow = (index) => {
-    if (details.length === 1) return;
+    if (details.length === 1) {
+        // Only one row left — clear it instead of removing it
+        setDetails([{ ...EMPTY_DETAIL }]);
+        setDetailErrors([{}]);
+        return;
+    }
     setDetails((prev) => prev.filter((_, i) => i !== index));
     setDetailErrors((prev) => prev.filter((_, i) => i !== index));
-  };
+};
 
   // Enter key navigation
   const handleFormKeyDown = (e) => {
@@ -350,11 +369,14 @@ const SalarySettingsForm = ({
       date: formData.date,
       branchId: selectedBranchId,
       CreatedUser: user?.userId,
+      ModifiedUser: mode === "edit" ? user?.userId : null,
       details: details.map((d) => ({
         payheadId: Number(d.payheadId),
         AmtOrPer: d.AmtOrPer,
         amount: parseFloat(d.amount),
         payheadIdOf: d.payheadIdOf ? Number(d.payheadIdOf) : Number(d.payheadId),
+        CreatedUser: user?.userId,
+      ModifiedUser: mode === "edit" ? user?.userId : null,
       })),
     };
 
@@ -464,22 +486,23 @@ const SalarySettingsForm = ({
                         </button>
                       </div>
 
+                      
                       {/* Table header */}
-                      <div className="hidden sm:grid grid-cols-12 gap-2 mb-1 px-1">
-                        <div className="col-span-4 text-xs font-medium text-gray-500 dark:text-gray-400">
-                          {t("salarySettings.payheadLabel") || "Payhead"} <span className="text-red-500">*</span>
-                        </div>
-                        <div className="col-span-3 text-xs font-medium text-gray-500 dark:text-gray-400">
-                          {t("salarySettings.amtOrPerLabel") || "Amt / Per"} <span className="text-red-500">*</span>
-                        </div>
-                        <div className="col-span-3 text-xs font-medium text-gray-500 dark:text-gray-400">
-                          {t("salarySettings.amountLabel") || "Amount"} <span className="text-red-500">*</span>
-                        </div>
-                        <div className="col-span-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-                          {t("salarySettings.payheadOfLabel") || "Of"}
-                        </div>
-                        <div className="col-span-1" />
-                      </div>
+<div className="hidden sm:grid grid-cols-12 gap-2 mb-1 px-1">
+    <div className="col-span-4 text-xs font-medium text-gray-500 dark:text-gray-400">
+        {t("salarySettings.payheadLabel") || "Payhead"} <span className="text-red-500">*</span>
+    </div>
+    <div className="col-span-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+        {t("salarySettings.amtOrPerLabel") || "Amt / Per"} <span className="text-red-500">*</span>
+    </div>
+    <div className="col-span-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+        {t("salarySettings.amountLabel") || "Amount"} <span className="text-red-500">*</span>
+    </div>
+    <div className="col-span-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+        {t("salarySettings.payheadOfLabel") || "Of"}
+    </div>
+    <div className="col-span-1" />
+</div>
 
                       <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                         {details.map((row, index) => (
@@ -525,7 +548,7 @@ const SalarySettingsForm = ({
                             </div>
 
                             {/* AmtOrPer input */}
-                            <div className="col-span-6 sm:col-span-3">
+                            <div className="col-span-6 sm:col-span-2">
                               <label className="sm:hidden text-xs text-gray-500 dark:text-gray-400 mb-1 block">
                                 {t("salarySettings.amtOrPerLabel") || "Amt/Per"} *
                               </label>
@@ -535,6 +558,8 @@ const SalarySettingsForm = ({
                                 value={row.AmtOrPer}
                                 onChange={(e) => handleDetailChange(index, e)}
                                 onBlur={(e) => handleDetailBlur(index, e)}
+                                 min="0"
+                                  step="0.01"
                                 placeholder={t("salarySettings.amtOrPerPlaceholder") || "e.g. amt"}
                                 className={`w-full text-sm rounded-md border px-2 py-1.5 bg-white dark:bg-[#1e1e1e]
                                   text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500
@@ -552,7 +577,7 @@ const SalarySettingsForm = ({
                             </div>
 
                             {/* Amount input */}
-                            <div className="col-span-6 sm:col-span-3">
+                            <div className="col-span-6 sm:col-span-2">
                               <label className="sm:hidden text-xs text-gray-500 dark:text-gray-400 mb-1 block">
                                 {t("salarySettings.amountLabel") || "Amount"} *
                               </label>
@@ -563,6 +588,9 @@ const SalarySettingsForm = ({
                                 value={row.amount}
                                 onChange={(e) => handleDetailChange(index, e)}
                                 onBlur={(e) => handleDetailBlur(index, e)}
+                                onKeyDown={(e) => {
+                                  if(e.key === "-") e.preventDefault()
+                                }}
                                 placeholder="0.00"
                                 className={`w-full text-sm rounded-md border px-2 py-1.5 bg-white dark:bg-[#1e1e1e]
                                   text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500
@@ -579,45 +607,50 @@ const SalarySettingsForm = ({
                               )}
                             </div>
 
-                            {/* payheadIdOf select */}
-                            <div className="col-span-11 sm:col-span-1">
-                              <label className="sm:hidden text-xs text-gray-500 dark:text-gray-400 mb-1 block">
-                                {t("salarySettings.payheadOfLabel") || "Of"}
-                              </label>
-                              <select
-                                name="payheadIdOf"
-                                value={row.payheadIdOf}
-                                onChange={(e) => handleDetailChange(index, e)}
-                                title={t("salarySettings.payheadOfTooltip") || "Payhead Of (optional)"}
-                                className="w-full text-sm rounded-md border border-gray-300 dark:border-gray-600
-                                  px-1 py-1.5 bg-white dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-100
-                                  focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
-                              >
-                                <option value="">-</option>
-                                {payheads.map((ph) => (
-                                  <option
-                                    key={ph.payheadId || ph.PayheadId || ph.id}
-                                    value={ph.payheadId || ph.PayheadId || ph.id}
-                                  >
-                                    {ph.payheadName}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                        
+                           {/* payheadIdOf select */}
+<div className="col-span-11 sm:col-span-3">
+    <label className="sm:hidden text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+        {t("salarySettings.payheadOfLabel") || "Of"}
+    </label>
+    <select
+        name="payheadIdOf"
+        value={row.payheadIdOf}
+        onChange={(e) => handleDetailChange(index, e)}
+        title={
+            payheads.find(
+                (ph) => String(ph.payheadId || ph.PayheadId || ph.id) === String(row.payheadIdOf)
+            )?.payheadName || (t("salarySettings.payheadOfTooltip") || "Payhead Of (optional)")
+        }
+        className="w-full text-sm rounded-md border border-gray-300 dark:border-gray-600
+          px-2 py-1.5 bg-white dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-100
+          focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors
+          truncate"
+    >
+        <option value="">-</option>
+        {payheads.map((ph) => (
+            <option
+                key={ph.payheadId || ph.PayheadId || ph.id}
+                value={ph.payheadId || ph.PayheadId || ph.id}
+                title={ph.payheadName}
+            >
+                {ph.payheadName}
+            </option>
+        ))}
+    </select>
+</div>
 
                             {/* Delete row */}
                             <div className="col-span-1 flex items-center justify-center pt-1">
-                              <button
-                                type="button"
-                                onClick={() => removeDetailRow(index)}
-                                disabled={details.length === 1}
-                                className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300
-                                  disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                title="Remove row"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
+    <button
+        type="button"
+        onClick={() => removeDetailRow(index)}
+        className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+        title={details.length === 1 ? "Clear row" : "Remove row"}
+    >
+        <Trash2 className="h-4 w-4" />
+    </button>
+</div>
                           </div>
                         ))}
                       </div>

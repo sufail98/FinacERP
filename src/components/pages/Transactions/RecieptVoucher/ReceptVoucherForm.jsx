@@ -1,7 +1,7 @@
 import BreadCrumb from '@/components/common/BreadCrumb'
 import usePrivileges from '@/lib/hooks/usePrivileges'
-import { Banknote, Eraser, SaveAll, Table } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import { Banknote, Eraser, Loader2, SaveAll, Table } from 'lucide-react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import ReciptVoucherFormHeader from './ReciptVoucherFormHeader'
@@ -12,18 +12,30 @@ import RecieptVoucherFormFooter from './RecieptVoucherFormFooter'
 import axiosInstance from '@/lib/axiosConfig'
 import AlertBox from '@/components/common/AlertBox'
 import Preloader from '@/components/common/Preloader'
+import PopupPreloader from '@/components/common/PopupPreloader'
+import PrintDropdown from '@/components/common/PrintDropdown'
+import { Checkbox } from '@/components/ui/checkbox'
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+
 import { formatDateWithTime, parseDateFromAPI, parseLocalDate } from '@/lib/dateFormat'
 import Swal from 'sweetalert2'
 import { showToast } from '@/utils/toast'
+// import printReceiptVoucher, { saveReceiptVoucherAsPDF } from '@/utils/prints/'
+import { isElectron } from '@/utils/electronPrint'
+import printReceiptVoucher, { saveReceiptVoucherAsPDF } from '@/utils/prints/recieptVoucherPrint/RecieptVoucherPrintOne'
+import printReceiptVoucherA5, { saveReceiptVoucherAsPDFA5 } from '@/utils/prints/recieptVoucherPrint/RecieptVoucherPrintA5'
 
 const ReceptVoucherForm = () => {
     const { t } = useTranslation();
-    const { reciptVoucherId } = useParams()
+    const { reciptVoucherId } = useParams();
     const editMode = Boolean(reciptVoucherId);
-    const { userId, currentFinancialYear, selectedBranchId, currentCurrencyConversion, currentCurrency } = useAuth();
+    const { userId, currentFinancialYear, selectedBranchId, selectedBranchDetails, currentCurrencyConversion, currentCurrency } = useAuth();
 
 
-    const { generalSettings, purchaseSettings } = useSelector((state) => state.settings);
+    const { generalSettings, purchaseSettings, financeSettings, printSettings } = useSelector((state) => state.settings);
+    const invoiceTypes = Object.keys(printSettings?.["Receipt Voucher"]?.types || {});
+    const invoicePrintConfig = printSettings?.["Receipt Voucher"]?.default || Object.values(printSettings?.["Receipt Voucher"]?.types || {})[0];
+
     const navigate = useNavigate();
     const [alert, setAlert] = useState(null);
     const [fetchLoading, setFetchLoading] = useState(false);
@@ -36,12 +48,22 @@ const ReceptVoucherForm = () => {
     const [employees, setEmplyees] = useState([]);
     const [costCenters, setCostCenters] = useState([]);
     const [currency, setCurrency] = useState([]);
+    const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
     const [ledgers, setLedgers] = useState([]);
     const [time, setTime] = useState("");
+    const [documents, setDocuments] = useState([]);            // File[] — newly attached
+    const [existingDocuments, setExistingDocuments] = useState([]); // string[] — URLs from server
+    const [removedDocuments, setRemovedDocuments] = useState([]);   // string[] — URLs user removed
+
+    // ===== PRINT STATE =====
+    const [isPrinting, setIsPrinting] = useState(false);
+
+    const hasFetchedVoucherRef = React.useRef(false);
 
     // Add useEffect to fetch data in edit mode
     useEffect(() => {
-        if (editMode && reciptVoucherId && ledgers.length > 0) {
+        if (editMode && reciptVoucherId && ledgers.length > 0 && !hasFetchedVoucherRef.current) {
+            hasFetchedVoucherRef.current = true;
             fetchReceiptData();
         }
     }, [reciptVoucherId, editMode, ledgers]);
@@ -61,7 +83,8 @@ const ReceptVoucherForm = () => {
         }
     }
 
-    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Reciept Voucher");
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Receipt Voucher");
+
     const [formData, setFormData] = useState({
         voucherType: "Receipt Voucher",
         yearId: currentFinancialYear?.yearId || 0,
@@ -83,6 +106,8 @@ const ReceptVoucherForm = () => {
         CreatedUser: userId,
         exchangeRate: currentCurrencyConversion?.rate,
         exchangeDate: currentCurrencyConversion?.date,
+        printAfterSave: purchaseSettings?.printAfterSave !== undefined ? purchaseSettings.printAfterSave : true,
+        printType: invoicePrintConfig?.printType || 'A4',
         receiptDetails: [
             {
                 SlNo: 1,
@@ -96,6 +121,13 @@ const ReceptVoucherForm = () => {
             }
         ]
     });
+
+    useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            printType: invoicePrintConfig?.printType || 'A4'
+        }));
+    }, [printSettings]);
 
     useEffect(() => {
         const updateTime = () => {
@@ -113,24 +145,24 @@ const ReceptVoucherForm = () => {
         return () => clearInterval(interval);
     }, []);
 
-    useEffect(() => {
-        if (editMode) return;
+    // useEffect(() => {
+    //     if (editMode) return;
 
-        setFormData(prev => {
-            const prevDate = new Date(prev.date);
-            const today = new Date();
+    //     setFormData(prev => {
+    //         const prevDate = new Date(prev.date);
+    //         const today = new Date();
 
-            const isSameDate =
-                prevDate.getFullYear() === today.getFullYear() &&
-                prevDate.getMonth() === today.getMonth() &&
-                prevDate.getDate() === today.getDate();
+    //         const isSameDate =
+    //             prevDate.getFullYear() === today.getFullYear() &&
+    //             prevDate.getMonth() === today.getMonth() &&
+    //             prevDate.getDate() === today.getDate();
 
-            if (!isSameDate) {
-                return { ...prev, date: today };
-            }
-            return prev;
-        });
-    }, [time]);
+    //         if (!isSameDate) {
+    //             return { ...prev, date: today };
+    //         }
+    //         return prev;
+    //     });
+    // }, [time]);
 
     const [baseDataloading, setBaseDataloading] = useState(false)
 
@@ -188,6 +220,7 @@ const ReceptVoucherForm = () => {
             CreatedUser: userId,
             exchangeRate: currentCurrencyConversion?.rate,
             exchangeDate: currentCurrencyConversion?.date,
+            printAfterSave: purchaseSettings?.printAfterSave !== undefined ? purchaseSettings.printAfterSave : true,
             receiptDetails: [
                 {
                     SlNo: 1,
@@ -201,6 +234,9 @@ const ReceptVoucherForm = () => {
                 }
             ]
         });
+        setDocuments([]);
+        setExistingDocuments([]);
+        setRemovedDocuments([]);
         setErrors({});
         setResetTableKey(prev => prev + 1);
     };
@@ -229,35 +265,58 @@ const ReceptVoucherForm = () => {
     };
 
 
-    useEffect(() => {
-        const getSalesRequiredData = async () => {
-            setBaseDataloading(true)
-            try {
-                const res = await axiosInstance.post('all-finance-data', {
-                    voucherType: "Receipt Voucher",
-                    branchId: selectedBranchId,
-                    yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Supplier"],
-                    ledgerId: formData.ledgerId,
-                    currencyId: currentCurrency
-                })
-                const data = res?.data?.data;
+    const fetchFinanceData = async (silent = false) => {
+        if (!silent) setBaseDataloading(true)
+        try {
+            const res = await axiosInstance.post('all-finance-data', {
+                voucherType: "Receipt Voucher",
+                branchId: selectedBranchId,
+                yearId: currentFinancialYear.yearId,
+                ledgerTypes: ["Supplier", "Customer&Supplier"],
+                ledgerId: formData.ledgerId,
+                currencyId: currentCurrency
+            })
+            const data = res?.data?.data;
 
-                setBankCash(data?.bankaccountledgers5and8);
-                setEmplyees(data?.employees)
-                setCostCenters(data?.costcentre)
-                setCurrency(data?.currencywithConversion)
-                setLedgers(data?.accountLedger)
-                setVoucherNo(data?.voucherdata?.voucherCode)
+            setBankCash(data?.bankaccountledgers5and8);
+            setEmplyees(data?.employees)
+            setCostCenters(data?.costcentre)
+            setCurrency(data?.currencywithConversion)
+            setLedgers(data?.accountLedger)
+            setVoucherNo(data?.voucherdata?.voucherCode)
+            setFormData(prev => ({
+                ...prev,
+                costCentreId: data?.costcentre?.length > 0 ? data?.costcentre[0]?.costCentreId : 1,
+            }))
 
-            } catch (error) {
-                console.error('error fetching default data', error)
-            } finally {
-                setBaseDataloading(false)
-            }
+        } catch (error) {
+            console.error('error fetching default data', error)
+        } finally {
+            if (!silent) setBaseDataloading(false)
         }
-        getSalesRequiredData()
+    }
+
+    useEffect(() => {
+        fetchFinanceData()
     }, [])
+
+    // Fetch currency conversion records (same API as SalesInvoice)
+    // This gives camelCase currencyId that SelecteCurrecyModal expects
+    const fetchCurrencyConvertion = async () => {
+        try {
+            const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+            const formattedData = (response.data.data || []).map((item) => ({
+                ...item,
+            }));
+            setCurrencyConvertionData(formattedData);
+        } catch (error) {
+            console.error('Error fetching currency conversions:', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchCurrencyConvertion();
+    }, [selectedBranchId]);
 
     const handleFormChange = (name, valueOrEvent) => {
         const value = valueOrEvent?.target ? valueOrEvent.target.value : valueOrEvent;
@@ -279,7 +338,7 @@ const ReceptVoucherForm = () => {
             return 0;
         }
     };
-
+  
     const fetchReceiptData = async () => {
         setFetchLoading(true)
         try {
@@ -349,7 +408,7 @@ const ReceptVoucherForm = () => {
                 totalAmount: parseFloat(data.totalAmount) || 0,
                 userId: userId,
                 employeeId: data.employeeId || "",
-                costCentreId: data.costCentreId || null,
+                costCentreId: data.costCentreId || 1,
                 ReferenceNo: data.ReferenceNo || "",
                 ReferenceDate: data.ReferenceDate ? parseDateFromAPI(data.ReferenceDate) : new Date(),
                 postedStatus: data.postedStatus,
@@ -360,9 +419,13 @@ const ReceptVoucherForm = () => {
                 CreatedUser: data.CreatedUser,
                 exchangeRate: currentCurrencyConversion?.rate,
                 exchangeDate: currentCurrencyConversion?.date,
-                receiptDetails: receiptDetailsForForm
+                printAfterSave: purchaseSettings?.printAfterSave !== undefined ? purchaseSettings.printAfterSave : true,
+                receiptDetails: receiptDetailsForForm,
+                partyDetails: data.partyDetails || [],
+                printType: (invoicePrintConfig?.printType || 'A4'),
             });
-
+            setExistingDocuments(data.Documents || []);
+            setRemovedDocuments([]);
             // Fetch ledger balances for each detail
             if (data.receiptDetails && data.receiptDetails.length > 0) {
                 const updatedDetails = await Promise.all(
@@ -427,6 +490,108 @@ const ReceptVoucherForm = () => {
         }
     }, [ledgers]);
 
+    // ===== PRINT HELPERS =====
+    // Cash/Bank ledger name shown at the top of the voucher (formData.ledgerId is the
+    // Cash/Bank account this receipt was posted against, resolved from `bankCash`).
+    const getBankCashName = useCallback((sourceFormData) => {
+        const source = sourceFormData || formData;
+        return bankCash?.find(b => b.ledgerId === source.ledgerId)?.ledgerName || '';
+    }, [bankCash, formData]);
+
+    const buildVoucherDataForPrint = useCallback((voucherNumber, overrideData) => {
+        const base = overrideData || formData;
+        return {
+            ...base,
+            voucherNo: base?.voucherNo || voucherNumber || voucherNo,
+            bankCashName: getBankCashName(base),
+        };
+    }, [formData, voucherNo, getBankCashName]);
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // SINGLE SOURCE OF TRUTH for receipt voucher print types.
+    // To add a new layout: import it above, add ONE entry here. Nothing else
+    // needs to change — the dropdown (invoiceTypes) already reads from
+    // printSettings["Receipt Voucher"].types, so as soon as that config exists
+    // server-side and a matching key is added here, it shows up automatically.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const RECEIPT_PRINT_HANDLERS = {
+        'A4': { print: printReceiptVoucher, pdf: saveReceiptVoucherAsPDF },
+        'A5': { print: printReceiptVoucherA5, pdf: saveReceiptVoucherAsPDFA5 },
+        // 'Thermal': { print: printReceiptVoucherThermal, pdf: saveReceiptVoucherThermalAsPDF },
+    };
+
+    const DEFAULT_RECEIPT_PRINT_TYPE = 'A4';
+    const DEFAULT_RECEIPT_PDF_TYPE = 'A4';
+
+    // mode: 'print' | 'pdf'
+    const runVoucherOutput = useCallback((mode, voucherDataForPrint) => {
+
+        const handlers = RECEIPT_PRINT_HANDLERS[formData.printType];
+
+
+        const fn = handlers?.[mode]
+            ?? RECEIPT_PRINT_HANDLERS[mode === 'pdf' ? DEFAULT_RECEIPT_PDF_TYPE : DEFAULT_RECEIPT_PRINT_TYPE][mode];
+
+        fn(voucherDataForPrint, selectedBranchDetails, time, currentCurrency);
+    }, [formData.printType, selectedBranchDetails, time, currentCurrency]);
+
+    const printToPrinterFn = useCallback((voucherDataForPrint) => {
+        runVoucherOutput('print', voucherDataForPrint);
+    }, [runVoucherOutput]);
+
+    const printToPdfFn = useCallback((voucherDataForPrint) => {
+        runVoucherOutput('pdf', voucherDataForPrint);
+    }, [runVoucherOutput]);
+    // ===== EDIT MODE: Reprint to Printer =====
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this receipt voucher?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const voucherDataForPrint = buildVoucherDataForPrint(existingReciptNo);
+            printToPrinterFn(voucherDataForPrint);
+
+            if (isElectron()) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        } catch (error) {
+            console.error('Error printing receipt voucher:', error);
+            showToast.error('Failed to print receipt voucher');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, buildVoucherDataForPrint, existingReciptNo, printToPrinterFn]);
+
+    // ===== EDIT MODE: Reprint to PDF =====
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const voucherDataForPrint = buildVoucherDataForPrint(existingReciptNo);
+            printToPdfFn(voucherDataForPrint);
+
+            if (isElectron()) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        } catch (error) {
+            console.error('Error generating receipt voucher PDF:', error);
+            showToast.error('Failed to generate receipt voucher PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [buildVoucherDataForPrint, existingReciptNo, printToPdfFn]);
+
     useEffect(() => {
         const handleKeyDown = (e) => {
             // Check for Ctrl+S or Cmd+S
@@ -470,6 +635,10 @@ const ReceptVoucherForm = () => {
 
                 return;
             }
+            if (formData.totalAmount <= 0) {
+                showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
+                return;
+            }
             if (editMode && generalSettings?.askConfirmationEdit) {
                 const result = await Swal.fire({
                     title: t("ConfirmUpdateTitle"), text: t("ConfirmUpdateText"),
@@ -488,11 +657,30 @@ const ReceptVoucherForm = () => {
                 if (!result.isConfirmed) return;
             }
             setIsSubmitting(true);
-
+            const appendFormData = (fd, key, value, options = {}) => {
+                const { keepEmpty = false } = options;
+                if (value === null || value === undefined) {
+                    if (keepEmpty) fd.append(key, '');
+                    return;
+                }
+                if (Array.isArray(value)) {
+                    value.forEach((item, index) => {
+                        appendFormData(fd, `${key}[${index}]`, item, { keepEmpty: true });
+                    });
+                } else if (value instanceof Date) {
+                    fd.append(key, value.toISOString());
+                } else if (typeof value === 'object' && !(value instanceof File)) {
+                    Object.entries(value).forEach(([subKey, subValue]) => {
+                        appendFormData(fd, `${key}[${subKey}]`, subValue, { keepEmpty });
+                    });
+                } else {
+                    fd.append(key, value);
+                }
+            };
             // Format the data
-            // WITH THIS:
             const formattedData = {
                 ...formData,
+                totalAmount: (parseFloat(formData.totalAmount) || 0).toFixed(generalSettings?.decimalPart ?? 2),
                 date: formData.date instanceof Date ? formData.date.toISOString().split('T')[0] : formData.date,
                 ReferenceDate: formData.ReferenceDate instanceof Date ? formData.ReferenceDate.toISOString().split('T')[0] : formData.ReferenceDate,
                 postedDate: formData.postedDate instanceof Date ? formData.postedDate.toISOString().split('T')[0] : formData.postedDate,
@@ -520,17 +708,47 @@ const ReceptVoucherForm = () => {
                 const updateData = {
                     ...formattedData,
                     date: formatDateWithTime(formData.date),
-                    ModifiedUser: userId
+                    ModifiedUser: userId,
+                    receiptDetails: (formData.receiptDetails || []).map((detail) => ({
+                        ...detail,
+                        ModifiedUser: editMode ? userId : detail?.ModifiedUser ?? null,
+                        ModifiedDate: editMode ? formatDateWithTime(new Date()) : null,
+                    })),
                 };
                 delete updateData.voucherType;
                 delete updateData.yearId;
                 delete updateData.CreatedUser;
 
-                const response = await axiosInstance.post(`update-sales-receipt/${reciptVoucherId}`, updateData);
+                const hasDocuments = documents.length > 0;
+                let response;
+
+                if (hasDocuments) {
+                    const fd = new FormData();
+                    Object.entries(updateData).forEach(([key, value]) => {
+                        appendFormData(fd, key, value);
+                    });
+                    documents.forEach((file) => fd.append('Documents[]', file));
+
+                    const config = { headers: { "Content-Type": "multipart/form-data" } };
+                    response = await axiosInstance.post(`update-sales-receipt/${reciptVoucherId}`, fd, config);
+                } else {
+                    response = await axiosInstance.post(`update-sales-receipt/${reciptVoucherId}`, updateData);
+                }
 
                 if (response.data && !response.data.error) {
-                    if (purchaseSettings?.CloseAfterSave) {
+                    showToast.success(t('saveSuccess'));
 
+                    // ===== PRINT LOGIC (edit mode: honor printAfterSave toggle) =====
+                    if (formData?.printAfterSave) {
+                        const freshData = response?.data?.data || {};
+                        const voucherDataForPrint = buildVoucherDataForPrint(
+                            existingReciptNo,
+                            { ...formData, ...freshData }
+                        );
+                        printToPrinterFn(voucherDataForPrint);
+                    }
+
+                    if (purchaseSettings?.CloseAfterSave) {
                         navigate('/transaction/reciept-voucher');
                     }
                 } else {
@@ -542,11 +760,53 @@ const ReceptVoucherForm = () => {
                     date: formatDateWithTime(formData.date)
                 };
 
-                const response = await axiosInstance.post('save-sales-receipt', dataToSave);
+                const hasDocuments = documents.length > 0;
+                let response;
 
+                if (hasDocuments) {
+                    const fd = new FormData();
+                    Object.entries(dataToSave).forEach(([key, value]) => {
+                        appendFormData(fd, key, value);
+                    });
+                    documents.forEach((file) => fd.append('Documents[]', file));
+
+                    const config = { headers: { "Content-Type": "multipart/form-data" } };
+                    response = await axiosInstance.post('save-sales-receipt', fd, config);
+                } else {
+                    response = await axiosInstance.post('save-sales-receipt', dataToSave);
+                }
                 genarateSalesReciptVoucherNo()
                 if (response.data && !response.data.error) {
                     showToast.success(t('saveSuccess'));
+
+                    // ===== PRINT LOGIC (new voucher) =====
+                    const freshData = response?.data?.data || {};
+                    const voucherDataForPrint = buildVoucherDataForPrint(
+                        freshData?.voucherNo || voucherNo,
+                        { ...formData, ...freshData }
+                    );
+
+                    if (formData?.printAfterSave) {
+                        printToPrinterFn(voucherDataForPrint);
+                    } else {
+                        const pdfResult = await Swal.fire({
+                            title: t('Print As Pdf') || 'Print as PDF?',
+                            text: t('Do you want to download this voucher as a PDF?') ||
+                                'Do you want to download this voucher as a PDF?',
+                            icon: 'question',
+                            showCancelButton: true,
+                            confirmButtonColor: '#3085d6',
+                            cancelButtonColor: '#d33',
+                            confirmButtonText: t('Yes, Download PDF') || 'Yes, Download PDF',
+                            cancelButtonText: t('No, Just Save') || 'No, Just Save',
+                        });
+
+                        if (pdfResult.isConfirmed) {
+                            setTimeout(() => {
+                                printToPdfFn(voucherDataForPrint);
+                            }, 500);
+                        }
+                    }
 
                     if (purchaseSettings?.CloseAfterSave) {
                         navigate('/transaction/reciept-voucher');
@@ -568,8 +828,9 @@ const ReceptVoucherForm = () => {
             setIsSubmitting(false);
         }
     };
+    
 
-    if (fetchLoading || baseDataloading) {
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return <>
             <BreadCrumb
                 routes={[
@@ -583,9 +844,19 @@ const ReceptVoucherForm = () => {
         </>
     }
 
+    if (!hasAccess) return <NoAcessComponent message={message} />
+
+
     return (
         <div>
             {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+
+            <PopupPreloader
+                isOpen={isSubmitting || isPrinting}
+                state="loading"
+                title={isPrinting ? (t("Printing") || "Preparing Print...") : (isSubmitting ? (editMode ? t("updating") : t("saving")) : "")}
+                subtitle={isPrinting ? (t("printingDesc") || "Please wait while we prepare your voucher for printing...") : (t("loadingDesc") || "Please wait...")}
+            />
 
             <BreadCrumb
                 routes={[
@@ -623,6 +894,50 @@ const ReceptVoucherForm = () => {
                         : []
                     ),
                 ]}
+                customActions={
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="printAfterSaveReceiptVoucher"
+                                checked={formData.printAfterSave || false}
+                                onCheckedChange={(value) =>
+                                    setFormData(prev => ({ ...prev, printAfterSave: value }))
+                                }
+                            />
+                            <label
+                                htmlFor="printAfterSaveReceiptVoucher"
+                                className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300 whitespace-nowrap cursor-pointer select-none"
+                            >
+                                {t("salesInvoice.form.footerSection.otherDetails.label.printAfterSave") || "Print After Save"}
+                            </label>
+                        </div>
+                        {invoiceTypes.length > 0 && (
+                            <select
+                                name="printType"
+                                id="printType"
+                                className='border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none'
+                                value={formData.printType}
+                                onChange={(e) => {
+                                    setFormData(prev => ({ ...prev, printType: e.target.value }));
+
+                                }}
+                            >
+                                {
+                                    invoiceTypes.map(type => (
+                                        <option key={type} value={type}>{type}</option>
+                                    ))
+                                }
+                            </select>
+                        )}
+                        {editMode && !fetchLoading && (
+                            <PrintDropdown
+                                onPrintToPrinter={handleReprintToPrinter}
+                                onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
+                            />
+                        )}
+                    </div>
+                }
             />
             <div className='p-1' key={resetTableKey}>
                 <ReciptVoucherFormHeader
@@ -638,6 +953,15 @@ const ReceptVoucherForm = () => {
                     employees={employees}
                     setEmplyees={setEmplyees}
                     costCenters={costCenters}
+                    documents={documents}
+                    setDocuments={setDocuments}
+                    existingDocuments={existingDocuments}
+                    setExistingDocuments={setExistingDocuments}
+                    removedDocuments={removedDocuments}
+                    setRemovedDocuments={setRemovedDocuments}
+                    currency={currency}
+                    currencyConvertionData={currencyConvertionData}
+                    financeSettings={financeSettings}
                 />
                 <RecieptVoucherFormTable
                     formData={formData}
@@ -645,6 +969,7 @@ const ReceptVoucherForm = () => {
                     currency={currency}
                     ledgers={ledgers}
                     onRowRemove={handleRowRemove}
+                    onLedgerCreated={() => fetchFinanceData(true)}
                 />
                 <RecieptVoucherFormFooter
                     formData={formData}

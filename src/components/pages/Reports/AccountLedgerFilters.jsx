@@ -1,5 +1,6 @@
 import DateInput from '@/components/elements/theme/DateInput';
 import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
+import { showToast } from '@/utils/toast';
 import { Filter, RefreshCw, Download, Printer } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -22,6 +23,14 @@ const AccountLedgerFilters = ({
     const { t } = useTranslation();
     const { generalSettings } = useSelector((state) => state.settings);
 
+    //  const handleGenerateClick = () => {
+    //         if (acGroupOptions.length > 1 && !filters.groupId) {
+    //             showToast.error(t("Please select an Account Group"));
+    //             return;
+    //         }
+    //         onGenerateReport();
+    //     };
+
     return (
         <div className="bg-white dark:bg-[#1e1e1e] rounded-lg  p-2  transition-colors ">
 
@@ -31,6 +40,7 @@ const AccountLedgerFilters = ({
                     name="fromDate"
                     value={filters.fromDate}
                     onChange={(e, value) => onFilterChange('fromDate', value)}
+                    max={new Date().toISOString().split('T')[0]}
                     required
                     className='w-full'
                 />
@@ -60,7 +70,7 @@ const AccountLedgerFilters = ({
                     />
                 )}
 
-                {!(fromPage === 'customer&Supplier') && (
+                {! (fromPage === 'customer&Supplier' || fromPage === 'cashBook' )  && (
                     <SearchableDropdown
                         label={fromPage === 'accountLedgerreport' ? t("recieptVoucher.form.placeholders.selectLedger") : t("accountGroups.heading")}
                         name="groupId"

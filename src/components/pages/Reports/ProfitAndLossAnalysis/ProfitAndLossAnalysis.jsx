@@ -20,10 +20,25 @@ const ProfitAndLossAnalysis = () => {
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState(null);
     const [alert, setAlert] = useState(null);
+    const { selectedBranchId, currentCurrency, branches, selectedBranchDetails } = useAuth();
 
-    const { selectedBranchId, currentCurrency } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Profit And Loss Analysis");
-    const { generalSettings } = useSelector((state) => state.settings);
+    const isMainBranch = selectedBranchDetails?.mainBranch === true; // Check if the user is in the main branch and there are multiple branches
+
+
+    const branchOptions = useMemo(() => {
+        if (!branches || !Array.isArray(branches)) return [];
+        return [
+            { label: 'All', value: null },
+            ...branches.map(b => ({
+                label: b.branchCode,
+                value: Number(b.branchId)
+            }))
+        ];
+    }, [branches]);
+
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Profit & Loss Accounts");
+    const { generalSettings, inventorySettings } = useSelector((state) => state.settings);
+
     const decimalPart = generalSettings?.decimalPart || 2;
     // Use the unified export hook
     const {
@@ -45,21 +60,58 @@ const ProfitAndLossAnalysis = () => {
     const [filters, setFilters] = useState({
         fromDate: defaultDates.fromDate,
         toDate: defaultDates.toDate,
+        selectedBranchId: isMainBranch ? null : Number(selectedBranchId),
         reportType: 'condensed'
     });
     useEffect(() => {
-    fetchReport();
-}, []);
+        fetchReport();
+    }, []);
+    // Map stockValueCalculation setting -> calculation-method API endpoint + response value key
+    const STOCK_CALCULATION_CONFIG = {
+        'FIFO': {
+            endpoint: 'calculation-method/profit-and-loss-opening-stock-fifo',
+            valueKey: 'totalCost'
+        },
+        'Low Cost': {
+            endpoint: 'calculation-method/opening-stock-low-cost',
+            valueKey: 'actualvalue'
+        },
+        'High Cost': {
+            endpoint: 'calculation-method/stock-opening-high-cost',
+            valueKey: 'actualvalue'
+        },
+        'Last Purchase Rate': {
+            endpoint: 'calculation-method/stock-opening-value-last-purchase-rate',
+            valueKey: 'actualvalue'
+        },
+        'Average Cost': {
+            endpoint: 'calculation-method/stock-opening-value-avco',
+            valueKey: 'actualvalue'
+        }
+    }
+    const getStockCalculationConfig = (method) => {
+        const config = STOCK_CALCULATION_CONFIG[method]
+        if (!config) {
+            console.warn(`No config mapped for stockValueCalculation: "${method}", falling back to FIFO`)
+            return STOCK_CALCULATION_CONFIG['FIFO']
+        }
+        return config
+    }
+
+
     const fetchReport = async (filterOverrides = {}) => {
         const activeFilters = { ...filters, ...filterOverrides };  // ← merge overrides
         setLoading(true);
         setAlert(null);
+        const resolvedBranchId = isMainBranch
+            ? (filters.selectedBranchId ?? null)
+            : Number(selectedBranchId);
 
         try {
             const requestBody = {
                 from_date: activeFilters.fromDate,   // ← use activeFilters
                 to_date: activeFilters.toDate,
-                branch_id: parseInt(selectedBranchId) || 1,
+                branch_id: resolvedBranchId,
                 currency_id: parseInt(currentCurrency?.currencyId) || 1
             };
 
@@ -69,30 +121,49 @@ const ProfitAndLossAnalysis = () => {
 
             const reportResponse = await axiosInstance.post(endpoint, requestBody);
 
+            // Normalize condensed ("analysis") response keys to match what the UI expects.
+            // The condensed API returns plural/renamed keys (e.g. "Direct Expenses",
+            // "Purchase Accounts") while the detailed API already returns the singular
+            // keys the grid uses (e.g. "Direct Expense", "Purchase").
+            let normalizedData = reportResponse.data.data;
+            if (activeFilters.reportType !== 'detailed') {
+                const raw = reportResponse.data.data || {};
+                normalizedData = {
+                    Purchase: raw['Purchase'] || raw['Purchase Accounts'],
+                    Sales: raw['Sales'] || raw['Sales Accounts'],
+                    'Direct Expense': raw['Direct Expense'] || raw['Direct Expenses'],
+                    'Direct Income': raw['Direct Income'] || raw['Direct Incomes'],
+                    'Indirect Expense': raw['Indirect Expense'] || raw['Indirect Expenses'],
+                    'Indirect Income': raw['Indirect Income'] || raw['Indirect Incomes'],
+                };
+            }
+
+            const stockConfig = getStockCalculationConfig(inventorySettings?.stockValueCalculation)
+
             const openingStockResponse = await axiosInstance.post(
-                'calculation-method/profit-and-loss-opening-stock-fifo',
+                stockConfig.endpoint,
                 {
                     date: filters.fromDate,
                     from_date: filters.fromDate,
-                    branch_id: parseInt(selectedBranchId) || 1,
+                    branch_id: parseInt(resolvedBranchId),
                     currency_id: parseInt(currentCurrency?.currencyId) || 1
                 }
             );
 
             const closingStockResponse = await axiosInstance.post(
-                'calculation-method/profit-and-loss-opening-stock-fifo',
+                stockConfig.endpoint,
                 {
                     date: filters.toDate,
                     from_date: filters.fromDate,
-                    branch_id: parseInt(selectedBranchId) || 1,
+                    branch_id: parseInt(resolvedBranchId),
                     currency_id: parseInt(currentCurrency?.currencyId) || 1
                 }
             );
 
             const combinedData = {
-                ...reportResponse.data.data,
-                openingStock: openingStockResponse.data.data[0].totalCost || 0,
-                closingStock: closingStockResponse.data.data[0].totalCost || 0
+                ...normalizedData,
+                openingStock: openingStockResponse.data.data[0]?.[stockConfig.valueKey] || 0,
+                closingStock: closingStockResponse.data.data[0]?.[stockConfig.valueKey] || 0
             };
 
             setReportData(combinedData);
@@ -405,6 +476,8 @@ const ProfitAndLossAnalysis = () => {
                     loading={loading}
                     hasReportData={!!reportData}
                     resetFilters={resetFilters}
+                    branchOptions={branchOptions}
+                    isMainBranch={isMainBranch}
                 />
 
                 {reportData && (

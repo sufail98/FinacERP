@@ -53,7 +53,7 @@ const AccountGroupReport = () => {
             const res = await axiosInstance.post("accountgroup-detailed-report", {
                 fromDate: filters.fromDate,
                 toDate: filters.toDate,
-                branchId: selectedBranchId,
+                branchId: selectedBranchDetails?.mainBranch ? null : selectedBranchId,
                 groupId: filters.groupId || null,
                 currencyId: currentCurrency.currencyId,
                 isShowOpeningBalance: true,
@@ -378,7 +378,7 @@ const AccountGroupReport = () => {
         setSelectedLedger(null);
     };
 
-    if (loading || privilegeLoading) {
+    if (privilegeLoading) {
         return (
             <div>
                 <BreadCrumb

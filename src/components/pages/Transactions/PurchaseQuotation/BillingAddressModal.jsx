@@ -6,6 +6,7 @@ import useAuth from "@/redux/hook/auth/useAuth";
 import TextInput from "@/components/elements/theme/TextInput";
 import TextArea from "@/components/elements/theme/TextArea";
 import axiosInstance from "@/lib/axiosConfig";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const BillingAddressModal = ({ open, handleClose, onSuccess, editId }) => {
     
@@ -60,9 +61,16 @@ const BillingAddressModal = ({ open, handleClose, onSuccess, editId }) => {
     // Input handler
     const handleInputChange = (e) => {
         const { name, value } = e.target;
+        let updatedValue = value
+        if(["customerName"].includes(name)){
+            updatedValue = sanitize.alphaNumericSpace(value)
+        }
+        if(["vatNo","phoneNo"].includes(name)){
+            updatedValue = sanitize.numbers(value)
+        }
         setFormData((prev) => ({
             ...prev,
-            [name]: value,
+            [name]: updatedValue,
         }));
     };
 
@@ -121,6 +129,8 @@ const BillingAddressModal = ({ open, handleClose, onSuccess, editId }) => {
                     />
                     <TextInput
                         name="phoneNo"
+                        type = "text"
+                        maxLength = {10}
                         label="Phone Number"
                         value={formData.phoneNo}
                         onChange={handleInputChange}

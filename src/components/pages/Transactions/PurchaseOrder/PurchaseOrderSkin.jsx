@@ -16,9 +16,46 @@ import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
 import PrintDropdown from '@/components/common/PrintDropdown';
 import { Checkbox } from '@/components/ui/checkbox';
 import purchaseOrderPrintOne from '@/utils/prints/purchaseOrderPrints/purchaseOrderPrintOne';
+import purchaseOrderPrintTwo from '@/utils/prints/purchaseOrderPrints/purchaseOrderPrintTwo';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import { showToast } from '@/utils/toast';
+import PurchaseOrderPrintThree from '@/utils/prints/purchaseOrderPrints/PurchaseOrderPrintThree';
+
+// ━━━ SINGLE SOURCE OF TRUTH for Purchase Order print types ━━━
+// Add ONE entry per new type. Keys must match the keys under
+// printSettings["Purchase Order"].types.
+// Each handler signature: (data, branchDetails, billTime, currency)
+const PO_PRINT_HANDLERS = {
+    'Type 1': {
+        print: (d, branch, time, cur) => purchaseOrderPrintOne(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => purchaseOrderPrintOne(d, branch, time, null, cur), // swap in a real PDF saver when available
+    },
+    // Keep the legacy key so already-saved settings still resolve
+    'Type 2': {
+        print: (d, branch, time, cur) => purchaseOrderPrintTwo(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => purchaseOrderPrintTwo(d, branch, time, null, cur),
+    },
+     'Type 3': {
+        print: (d, branch, time, cur) => PurchaseOrderPrintThree(d, branch, time, null, cur),
+        pdf: (d, branch, time, cur) => PurchaseOrderPrintThree(d, branch, time, null, cur),
+    },
+    // 'Type 2': { print: ..., pdf: ... },
+};
+
+const DEFAULT_PO_PRINT_TYPE = 'Type 1';
 
 const PurchaseOrderSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Purchase Order");
+    const { generalSettings, financeSettings, purchaseSettings, printSettings } = useSelector((state) => state.settings);  // ✅ ADD purchaseSettings
+
+
+    const poPrintSettings = printSettings?.["Purchase Order"];
+    const poPrintTypes = Object.keys(poPrintSettings?.types || {});
+    const poPrintConfig = poPrintSettings?.default || Object.values(poPrintSettings?.types || {})[0];
+
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
+    const [updateCustomerId, setUpdateCustomerId] = useState(null);
 
     const { purchaseOrdermasterId } = useParams();
     const editMode = Boolean(purchaseOrdermasterId);
@@ -34,14 +71,16 @@ const PurchaseOrderSkin = () => {
     const [batches, setBatches] = useState([]);
     const [godowns, setGodowns] = useState([]);
     const [invoiceId, setInvoiceId] = useState('');
-    const [alert, setAlert] = useState(null);
     const { userId, selectedBranchId, currentFinancialYear, currentCurrencyConversion, currentCurrency, selectedBranchDetails } = useAuth();  // ✅ ADD selectedBranchDetails
     const [time, setTime] = useState("");
-    const { generalSettings, financeSettings, purchaseSettings } = useSelector((state) => state.settings);  // ✅ ADD purchaseSettings
     const [resetTableKey, setResetTableKey] = useState(0);
     const [billingAddress, setBlillingAddress] = useState(null);
     const [currentledgerBalance, setCurrentLedgerBalance] = useState('');
     const [otherChargeLedgers, setOtherChargLedgers] = useState([]);
+    const [isPrinting, setIsPrinting] = useState(false);
+    const [loadingCustomer, setLoadingCustomer] = useState(false);
+
+
 
     useEffect(() => {
         const updateTime = () => {
@@ -69,9 +108,9 @@ const PurchaseOrderSkin = () => {
         PaymentTerms: '',
         ledgerId: financeSettings.defaultPurchaseAccount || '',
         currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-        taxType: 'Applicable to product',
-        costCentreId: '',
-        BatchId: '',
+        taxType: generalSettings?.taxType,
+        costCentreId: 1,
+        BatchId: null,
         partyName: '',
         partyAddress: '',
         partyMobile: '',
@@ -92,10 +131,12 @@ const PurchaseOrderSkin = () => {
         totalAmount: "",
         branchId: selectedBranchId,
         CreatedUser: userId,
+        ModifiedUser: editMode ? userId : null,
         OtherCharge: 0,
+        supplierData: {},
         // ✅ ADD PRINT FIELDS
         printAfterSave: purchaseSettings?.printAfterSave !== undefined ? purchaseSettings.printAfterSave : true,
-        printType: 'a4',
+        printType: poPrintConfig?.printType || DEFAULT_PO_PRINT_TYPE,
         purchaseDetails: [
             {
                 SlNo: "",
@@ -117,7 +158,7 @@ const PurchaseOrderSkin = () => {
                 productDescription: "",
                 billDiscOnProduct: null,
                 AddCostonProduct: null,
-                otherchargeonproduct: null,
+                OtherChargeOnProduct: null,
                 salesManId: null,
                 RackId: null,
                 branchId: selectedBranchId
@@ -143,6 +184,43 @@ const PurchaseOrderSkin = () => {
             return prev;
         });
     }, [time]);
+    const fetchCustomerData = async (ledgerId) => {
+        setLoadingCustomer(true);
+        try {
+            const response = await axiosInstance.get(`get-account-ledger-byId/${ledgerId || formData?.ledgerId}`);
+
+            if (response.data) {
+                const data = response.data.data;
+
+
+
+                setUpdateCustomerId(data?.ledgerId);
+
+
+
+                setBlillingAddress({
+                    name: data?.ledgerName || '',
+                    email: data?.email || '',
+                    phoneNo: data?.phoneNo || '',
+                    vatNo: data?.tinNumber || '',
+                    address: data?.address || ''
+                });
+
+                setFormData((prev) => ({
+                    ...prev,
+                    supplierData: data,
+                    partyName: data?.ledgerName || '',
+                    partyAddress: data?.address || '',
+                    partyMobile: data?.phoneNo || '',
+                    partyVatNo: data?.tinNumber || '',
+                }));
+            }
+        } catch (error) {
+            console.error("Error fetching customer data:", error);
+        } finally {
+            setLoadingCustomer(false);
+        }
+    };
 
     useEffect(() => {
         const getSalesRequiredData = async () => {
@@ -150,11 +228,14 @@ const PurchaseOrderSkin = () => {
             try {
                 const res = await axiosInstance.post('all-purchase-data', {
                     voucherType: "Purchase Order", branchId: selectedBranchId,
-                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Supplier"],
+                    yearId: currentFinancialYear.yearId, ledgerTypes: ["Supplier", "Customer&Supplier"],
                     ledgerId: formData.ledgerId, currencyId: currentCurrency.currencyId
                 });
                 const data = res?.data?.data;
 
+                fetchCustomerData(formData.ledgerId)
+
+                setUpdateCustomerId(formData.ledgerId)
                 const filteredCurrencies = data?.currencies?.filter(
                     c => c.branchid_conversion == selectedBranchId
                 ) || [];
@@ -178,8 +259,9 @@ const PurchaseOrderSkin = () => {
                 }
                 setFormData(prev => ({
                     ...prev,
-                    customerData: data?.customeraddress,
-                    BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : ''
+                    supplierData: data?.customeraddress,
+                    BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : null,
+                    costCentreId: data?.costcentre?.length > 0 ? data.costcentre[0].costCentreId : 1,
                 }));
                 if (!editMode) {
                     setBlillingAddress({
@@ -211,8 +293,9 @@ const PurchaseOrderSkin = () => {
         setFormData(prev => ({
             ...prev,
             ledgerId: financeSettings?.defaultPurchaseAccount || '',
+            costCentreId: costCenters?.length > 0 ? costCenters[0].costCentreId : '',
         }));
-    }, [financeSettings, batches]);
+    }, [financeSettings, batches, costCenters]);
 
     const handleListNavigate = async () => {
         if (generalSettings?.askConfirmationClose) {
@@ -244,9 +327,9 @@ const PurchaseOrderSkin = () => {
             date: new Date(),
             ledgerId: financeSettings.defaultPurchaseAccount || '',
             currencyConversionId: currentCurrencyConversion?.currencyConversionId,
-            taxType: 'Applicable to product',
-            costCentreId: '',
-            BatchId: '',
+            taxType: generalSettings?.taxType,
+            costCentreId: 1,
+            BatchId: null,
             partyName: '',
             partyAddress: '',
             partyMobile: '',
@@ -272,9 +355,10 @@ const PurchaseOrderSkin = () => {
             branchId: selectedBranchId,
             CreatedUser: userId,
             OtherCharge: 0,
+            supplierData: {},
             // ✅ KEEP PRINT FIELDS ON CLEAR
             printAfterSave: purchaseSettings?.printAfterSave !== undefined ? purchaseSettings.printAfterSave : true,
-            printType: 'a4',
+            printType: poPrintConfig?.printType || DEFAULT_PO_PRINT_TYPE,
             purchaseDetails: [
                 {
                     SlNo: "",
@@ -296,7 +380,7 @@ const PurchaseOrderSkin = () => {
                     productDescription: "",
                     billDiscOnProduct: null,
                     AddCostonProduct: null,
-                    otherchargeonproduct: null,
+                    OtherChargeOnProduct: null,
                     salesManId: null,
                     RackId: null,
                     branchId: selectedBranchId
@@ -311,6 +395,15 @@ const PurchaseOrderSkin = () => {
             getSalesById();
         }
     }, [editMode]);
+
+    useEffect(() => {
+        // if (editMode) return; // don't override while viewing a saved order
+        setFormData(prev => ({
+            ...prev,
+            printAfterSave: purchaseSettings?.printAfterSave !== undefined ? purchaseSettings.printAfterSave : true,
+            printType: poPrintConfig?.printType || DEFAULT_PO_PRINT_TYPE,
+        }));
+    }, [purchaseSettings, printSettings]);
 
     const getSalesById = async () => {
         setFetchLoading(true);
@@ -358,7 +451,7 @@ const PurchaseOrderSkin = () => {
                                 mrp: productData.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
@@ -387,7 +480,7 @@ const PurchaseOrderSkin = () => {
                         productDescription: item.productDescription,
                         billDiscOnProduct: item.billDiscOnProduct,
                         AddCostonProduct: item.AddCostonProduct,
-                        otherchargeonproduct: item.otherchargeonproduct,
+                        OtherChargeOnProduct: item.OtherChargeOnProduct,
                         branchId: item.branchId,
                         CreatedDate: item.CreatedDate,
                         CreatedUser: item.CreatedUser,
@@ -434,6 +527,7 @@ const PurchaseOrderSkin = () => {
                 branchId: data.branchId,
                 CreatedUser: data.CreatedUser,
                 OtherCharge: data.OtherCharge ? parseFloat(data.OtherCharge) : 0,
+                otherChargeLedgerId: data.otherChargeLedgerId || null,
                 purchaseDetails: salesDetailsWithProducts,
             }));
             setBlillingAddress({
@@ -451,33 +545,129 @@ const PurchaseOrderSkin = () => {
             setFetchLoading(false);
         }
     };
+    const { purchaseProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products)
 
     // ✅ ADD PRINT HELPER FUNCTIONS (mirrored from PurchaseInvoiceSkin)
-    const buildInvoiceDataForPrint = useCallback((orderNumber, qrLink) => {
+    const buildInvoiceDataForPrint = useCallback((orderNumber, qrLink, overrideData) => {
+        const base = overrideData || formData;
+        const rawDetails = base.purchaseDetails || [];
+        // ✅ Enrich with productName / productNameArb from allProducts by matching productCode
+        const enrichedDetails = rawDetails.map((detail) => {
+            const matchedProduct = allProducts?.find(
+                (p) => p.productCode === detail.productCode
+            );
+            
+            let unitName = detail.unitName || detail.UnitName || detail.productDetails?.UnitName || '';
+            if (!unitName && matchedProduct?.units) {
+                const selectedUnit = matchedProduct.units.find(u => u.unitId === detail.unitId);
+                if (selectedUnit) {
+                    unitName = selectedUnit.unitname || selectedUnit.unitName || selectedUnit.UnitName || '';
+                }
+            }
+
+            if (detail.productName && detail.productNameArb && detail.unitName === unitName) return detail;
+
+            return {
+                ...detail,
+                productName: detail.productName || matchedProduct?.productName || '',
+                productNameArb: detail.productNameArb || matchedProduct?.productNameArb || '',
+                unitName: unitName,
+            };
+        });
         return {
-            ...formData,
-            invoiceNo: orderNumber,
-            date: formData.date,
-            purchaseDetails: formData.purchaseDetails,
-            qr_link: qrLink || formData.qr_link,
+            ...base,
+            invoiceNo: base?.orderNo || base?.voucherNo || orderNumber,
+            supplierData:formData.supplierData,
+            date: base.date,
+            purchaseDetails: enrichedDetails,
+            qr_link: qrLink || base.qr_link,
+            taxType: formData?.taxType
         };
     }, [formData]);
+    const fetchOrderDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`get-purchase-order-byId/${purchaseOrdermasterId}`);
+        const data = response.data.data;
 
-    const printToPrinterFn = useCallback((invoiceDataForPrint) => {
-        if (formData.printType === 'a4') {
-            purchaseOrderPrintOne(invoiceDataForPrint, selectedBranchDetails, time, null, currentCurrency);
-        }
+        const taxResponse = await axiosInstance.get("tax-masters");
+        const taxData = taxResponse.data.data || [];
+
+        const purchaseDetailsWithProducts = (data.purchaseDetails || []).map((item) => {
+            const taxInfo = taxData.find(t => t.taxId === item?.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo?.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productname || item?.productName || '',
+                taxRate,
+                qty: parseFloat(item.qty) || 0,
+                freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                rate: parseFloat(item.rate) || 0,
+                discountPercentage: parseFloat(item.discountPercentage) || 0,
+                PurchaseRate: parseFloat(item.PurchaseRate) || 0,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
+
+        return {
+            ...data,
+            date: data.date ? parseDateFromAPI(data.date) : formData.date,
+            purchaseDetails: purchaseDetailsWithProducts,
+        };
+    }, [purchaseOrdermasterId, formData.date]);
+
+    const runOrderOutput = useCallback((mode, invoiceDataForPrint) => {
+        const handlers = PO_PRINT_HANDLERS[formData.printType];
+        const fn = handlers?.[mode] ?? PO_PRINT_HANDLERS[DEFAULT_PO_PRINT_TYPE][mode];
+        fn(invoiceDataForPrint, selectedBranchDetails, time, currentCurrency);
     }, [formData.printType, selectedBranchDetails, time, currentCurrency]);
 
-    const handleReprintToPrinter = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, formData.qr_link);
-        printToPrinterFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, formData.qr_link, printToPrinterFn]);
+    const printToPrinterFn = useCallback((data) => runOrderOutput('print', data), [runOrderOutput]);
+    const printToPdfFn = useCallback((data) => runOrderOutput('pdf', data), [runOrderOutput]);
 
-    const handleReprintToPdf = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, formData.qr_link);
-        printToPrinterFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, formData.qr_link, printToPrinterFn]);
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this order?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchOrderDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+        } catch (error) {
+            console.error('Error fetching order for reprint:', error);
+            Swal.fire({ icon: 'error', title: t('Error') || 'Error', text: 'Failed to fetch order data for printing' });
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, fetchOrderDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchOrderDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData.qr_link, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+        } catch (error) {
+            console.error('Error fetching order for PDF reprint:', error);
+            Swal.fire({ icon: 'error', title: t('Error') || 'Error', text: 'Failed to fetch order data for PDF' });
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [fetchOrderDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
 
     const [loading, setLoading] = useState({
         employees: false,
@@ -504,7 +694,7 @@ const PurchaseOrderSkin = () => {
         setLoading(prev => ({ ...prev, customers: true }));
         try {
             const { data } = await axiosInstance.post("customer-supplier-account-ledgers", {
-                ledgerTypes: ["Supplier"], branchId: selectedBranchId
+                ledgerTypes: ["Supplier", "Customer&Supplier"], branchId: selectedBranchId
             });
             setCustomers(data.data);
         } catch (err) {
@@ -558,12 +748,16 @@ const PurchaseOrderSkin = () => {
     const handleSave = useCallback(async () => {
         if (!validateForm(formData, validationRules)) return;
         if (formData.BillBalanceAmount < 0) {
-            setAlert({ id: Date.now(), type: "error", message: t("salesInvoice.alert.billBalanceAmtError") });
+            showToast.error(t("purchaseInvoice.form.messages.billBalanceError"));
+            return;
+        }
+        if (formData.totalAmount <= 0) {
+            showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
             return;
         }
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
-            setAlert({ id: Date.now(), type: "error", message: validationErrors.join('\n') });
+            showToast.error(validationErrors.join('\n'));
             return;
         }
 
@@ -589,7 +783,15 @@ const PurchaseOrderSkin = () => {
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                ModifiedUser: editMode ? userId : null,
+                CreatedUser: userId,
+                purchaseDetails: (formData.purchaseDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: editMode ? userId : null,
+                    CreatedUser: userId,
+                })),
+
             };
             const api = editMode
                 ? `update-purchase-order/${purchaseOrdermasterId}`
@@ -598,13 +800,14 @@ const PurchaseOrderSkin = () => {
             const response = await axiosInstance.post(api, dataToSave);
 
             if (!response.data.error) {
-                setAlert({ id: Date.now(), type: "success", message: t("saveSuccess") });
+                showToast.success(t('SaveSuccess') || 'Purchase Order saved successfully');
 
                 const orderNumber = editMode ? existingInvoiceNo : response.data.orderNo || invoiceId;
+                const freshOrderData = response?.data?.data?.payload?.purchaseOrderMaster; // ⚠️ confirm this key against your actual API response shape
 
                 // ✅ PRINT LOGIC (mirrored from PurchaseInvoiceSkin)
                 if (formData.printAfterSave) {
-                    const invoiceDataForPrint = buildInvoiceDataForPrint(orderNumber, null);
+                    const invoiceDataForPrint = buildInvoiceDataForPrint(orderNumber, null, freshOrderData);
                     printToPrinterFn(invoiceDataForPrint);
                 } else {
                     const pdfResult = await Swal.fire({
@@ -619,8 +822,8 @@ const PurchaseOrderSkin = () => {
                     });
                     if (pdfResult.isConfirmed) {
                         setTimeout(() => {
-                            const invoiceDataForPrint = buildInvoiceDataForPrint(orderNumber, null);
-                            printToPrinterFn(invoiceDataForPrint);
+                            const invoiceDataForPrint = buildInvoiceDataForPrint(orderNumber, null, freshOrderData);
+                            printToPdfFn(invoiceDataForPrint);
                         }, 500);
                     }
                 }
@@ -656,7 +859,7 @@ const PurchaseOrderSkin = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [handleSave]);
 
-    if (fetchLoading || baseDataloading) {
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
@@ -671,10 +874,11 @@ const PurchaseOrderSkin = () => {
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className="bg-primary dark:bg-primary">
-            {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+
             <BreadCrumb
                 routes={[
                     { title: t("purchaseOrder.breadcrumb.master"), url: "#" },
@@ -723,15 +927,20 @@ const PurchaseOrderSkin = () => {
                                 </label>
                             </div>
                         )}
-                        <select
-                            name="printType"
-                            id="printType"
-                            className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
-                            value={formData.printType}
-                            onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
-                        >
-                            <option value="a4">A4</option>
-                        </select>
+
+                        {poPrintTypes.length > 0 && (
+                            <select
+                                name="printType"
+                                id="printType"
+                                className="border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none"
+                                value={formData.printType}
+                                onChange={(e) => setFormData(prev => ({ ...prev, printType: e.target.value }))}
+                            >
+                                {poPrintTypes.map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
+                            </select>
+                        )}
                         {editMode && !fetchLoading && (
                             <PrintDropdown
                                 onPrintToPrinter={handleReprintToPrinter}
@@ -770,6 +979,11 @@ const PurchaseOrderSkin = () => {
                 currentledgerBalance={currentledgerBalance}
                 otherChargeLedgers={otherChargeLedgers}
                 currency={currency}
+                setUpdateCustomerId={setUpdateCustomerId}
+                updateCustomerId={updateCustomerId}
+                loadingCustomer={loadingCustomer}
+                setLoadingCustomer={setLoadingCustomer}
+                fetchCustomerData={fetchCustomerData}
             />
         </div>
     );

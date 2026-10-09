@@ -36,9 +36,9 @@ const PurchaseReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -67,7 +67,7 @@ const PurchaseReport = () => {
         try {
             const [suppliersRes, costCentreRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Supplier"],
+                    ledgerTypes: ["Supplier","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("cost-centres").catch(() => ({ data: { data: [] } }))
@@ -229,68 +229,85 @@ const PurchaseReport = () => {
     };
 
     // ─── Footer totals ────────────────────────────────────────────────────────────
-    const footerData = useMemo(() => {
-        if (!reportData || !Array.isArray(reportData) || reportData.length === 0) return null;
+ // ─── Footer totals ────────────────────────────────────────────────────────────
+const footerData = useMemo(() => {
+    if (!reportData || !Array.isArray(reportData) || reportData.length === 0) return null;
 
-        const decimalPart = generalSettings?.decimalPart || 2;
+    const decimalPart = generalSettings?.decimalPart || 2;
 
-        const sumOf = (...keys) => reportData.reduce((acc, row) => {
-            for (const k of keys) {
-                const v = parseFloat(row[k]);
-                if (!isNaN(v)) return acc + v;
-            }
-            return acc;
-        }, 0);
-
-        if (filters.mode === 'Summary') {
-            return {
-                SNo:              '',
-                PurchaseDate:     '',
-                PurchaseNo:       <strong>{t('Total')}</strong>,
-                AccountLedger:    '',
-                CostCentre:       '',
-                VendorInvoiceNo:  '',
-                PaymentMode:      '',
-                TaxableAmt:       sumOf('TaxableAmt').toFixed(decimalPart),
-                BillDiscount:     sumOf('BillDiscount').toFixed(decimalPart),
-                TotalTax:         sumOf('TotalTax').toFixed(decimalPart),
-                RoundOff:         sumOf('RoundOff').toFixed(decimalPart),
-                BillAmount:       sumOf('BillAmount').toFixed(decimalPart),
-                PaidAmount:       sumOf('PaidAmount').toFixed(decimalPart),
-                Balance:          sumOf('Balance').toFixed(decimalPart),
-                DueDate:          '',
-                OrderNoOrReceiptNo: ''
-            };
+    const sumOf = (...keys) => reportData.reduce((acc, row) => {
+        for (const k of keys) {
+            const v = parseFloat(row[k]);
+            if (!isNaN(v)) return acc + v;
         }
+        return acc;
+    }, 0);
 
-        // Detailed — sum item-level numeric fields
+    // ✅ Sums a header-level field once per unique PurchaseNo (avoids double-count in Detailed)
+    const sumUniqueByInvoice = (key) => {
+        const seen = new Set();
+        return reportData.reduce((acc, row) => {
+            if (seen.has(row.PurchaseNo)) return acc;
+            seen.add(row.PurchaseNo);
+            const v = parseFloat(row[key]);
+            return isNaN(v) ? acc : acc + v;
+        }, 0);
+    };
+
+    if (filters.mode === 'Summary') {
         return {
             SNo:              '',
             PurchaseDate:     '',
             PurchaseNo:       <strong>{t('Total')}</strong>,
             AccountLedger:    '',
             CostCentre:       '',
-            ProductCode:      '',
-            BarCode:          '',
-            partNo:           '',
-            productName:      '',
-            Unit:             '',
-            qty:              sumOf('qty').toFixed(3),
-            rate:             '',
-            Gross:            sumOf('Gross').toFixed(decimalPart),
-            DiscPer:          '',
-            TaxName:          '',
-            TaxAmt:           sumOf('TaxAmt').toFixed(decimalPart),
-            Amount:           sumOf('Amount').toFixed(decimalPart),
-            BillAmount:       sumOf('BillAmount').toFixed(decimalPart),
             VendorInvoiceNo:  '',
             PaymentMode:      '',
+            TaxableAmt:       sumOf('TaxableAmt').toFixed(decimalPart),
+            BillDiscount:     sumOf('BillDiscount').toFixed(decimalPart),
+            TotalTax:         sumOf('TotalTax').toFixed(decimalPart),
+            RoundOff:         sumOf('RoundOff').toFixed(decimalPart),
+            BillAmount:       sumOf('BillAmount').toFixed(decimalPart),
+            PaidAmount:       sumOf('PaidAmount').toFixed(decimalPart),
+            Balance:          sumOf('Balance').toFixed(decimalPart),
             DueDate:          '',
-            OrderNoOrReceiptNo: '',
-            Narration:        ''
+            OrderNoOrReceiptNo: ''
         };
-    }, [reportData, generalSettings?.decimalPart, t, filters.mode]);
+    }
 
+    // Detailed — sum item-level fields normally, dedupe invoice-header fields by PurchaseNo
+    return {
+        SNo:              '',
+        PurchaseDate:     '',
+        PurchaseNo:       <strong>{t('Total')}</strong>,
+        AccountLedger:    '',
+        CostCentre:       '',
+        ProductCode:      '',
+        BarCode:          '',
+        partNo:           '',
+        productName:      '',
+        Unit:             '',
+        qty:              sumOf('qty').toFixed(3),                          // ✅ item-level, safe as-is
+        rate:             '',
+        Gross:            sumOf('Gross').toFixed(decimalPart),              // ✅ item-level, safe as-is
+        DiscPer:          '',
+        TaxName:          '',
+        TaxAmt:           sumOf('TaxAmt').toFixed(decimalPart),             // ✅ item-level, safe as-is
+        Amount:           sumOf('Amount').toFixed(decimalPart),             // ✅ item-level, safe as-is
+        BillAmount:       sumUniqueByInvoice('BillAmount').toFixed(decimalPart),   // ✅ fix — header-level
+        TaxableAmt:       sumUniqueByInvoice('TaxableAmt').toFixed(decimalPart),   // ✅ fix if shown
+        BillDiscount:     sumUniqueByInvoice('BillDiscount').toFixed(decimalPart), // ✅ fix if shown
+        TotalTax:         sumUniqueByInvoice('TotalTax').toFixed(decimalPart),     // ✅ fix if shown
+        RoundOff:         sumUniqueByInvoice('RoundOff').toFixed(decimalPart),     // ✅ fix if shown
+        PaidAmount:       sumUniqueByInvoice('PaidAmount').toFixed(decimalPart),   // ✅ fix if shown
+        Balance:          sumUniqueByInvoice('Balance').toFixed(decimalPart),      // ✅ fix if shown
+        VendorInvoiceNo:  '',
+        PaymentMode:      '',
+        DueDate:          '',
+        OrderNoOrReceiptNo: '',
+        Narration:        ''
+    };
+}, [reportData, generalSettings?.decimalPart, t, filters.mode]);
     // ─── Cell renderer ────────────────────────────────────────────────────────────
     const renderCell = (key, row) => {
         const decimalPart = generalSettings?.decimalPart || 2;

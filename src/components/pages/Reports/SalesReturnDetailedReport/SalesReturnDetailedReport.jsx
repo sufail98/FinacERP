@@ -39,9 +39,9 @@ const SalesReturnDetailedReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -70,7 +70,7 @@ const SalesReturnDetailedReport = () => {
         try {
             const [customersRes, salesmanRes, costCentreRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Customer"],
+                    ledgerTypes: ["Customer","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("employees").catch(() => ({ data: { data: [] } })),
@@ -195,7 +195,7 @@ const SalesReturnDetailedReport = () => {
                 { key: 'Type',         label: t('salesReturnReport.grid.columns.type')         || 'Type',            align: 'center', width: '120' },
                 { key: 'Party',        label: t('salesReturnReport.grid.columns.party')        || 'Party',           align: 'left',   width: '180' },
                 { key: 'Salesman',     label: t('salesReturnReport.grid.columns.salesman')     || 'Salesman',        align: 'left',   width: '140' },
-                { key: 'TotalAmount',  label: t('salesReturnReport.grid.columns.totalAmount')  || 'Total Amount',    align: 'right',  width: '120' },
+                // { key: 'TotalAmount',  label: t('salesReturnReport.grid.columns.totalAmount')  || 'Total Amount',    align: 'right',  width: '120' },
                 { key: 'BillDiscount', label: t('salesReturnReport.grid.columns.discount')     || 'Discount',        align: 'right',  width: '100' },
                 { key: 'TaxableAmt',   label: t('salesReturnReport.grid.columns.taxableAmount')|| 'Taxable Amt',     align: 'right',  width: '120' },
                 { key: 'TotalTax',     label: t('salesReturnReport.grid.columns.taxAmount')    || 'Total Tax',       align: 'right',  width: '100' },
@@ -218,7 +218,7 @@ const SalesReturnDetailedReport = () => {
             { key: 'qty',          label: t('salesReturnReport.grid.columns.qty')          || 'Qty',             align: 'right',  width: '80'  },
             { key: 'rate',         label: t('salesReturnReport.grid.columns.rate')         || 'Rate',            align: 'right',  width: '100' },
             { key: 'grossAmount',  label: t('salesReturnReport.grid.columns.grossAmount')  || 'Gross Amount',    align: 'right',  width: '120' },
-            { key: 'netAmount',    label: t('salesReturnReport.grid.columns.netAmount')    || 'Net Amount',      align: 'right',  width: '120' },
+            // { key: 'netAmount',    label: t('salesReturnReport.grid.columns.netAmount')    || 'Net Amount',      align: 'right',  width: '120' },
             { key: 'taxAmount',    label: t('salesReturnReport.grid.columns.taxAmount')    || 'Tax Amount',      align: 'right',  width: '120' },
             { key: 'amount',       label: t('salesReturnReport.grid.columns.amount')       || 'Amount',          align: 'right',  width: '120' }
         ];

@@ -10,6 +10,7 @@ import { useSelector } from 'react-redux';
 import AlertBox from '@/components/common/AlertBox';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
+import ConvertMenu from '@/components/common/ConvertMenu';
 import useFormValidation from '@/lib/hooks/useFormValidation';
 import salesOrderInvoicePrintOne from '@/utils/prints/salesOrderPints/salesOrderInvoicePrintOne';
 import salesOrderInvoicePrintTwo from '@/utils/prints/salesOrderPints/salesOrderInvoicePrintTwo';
@@ -18,13 +19,21 @@ import { parseDateFromAPI, parseLocalDate } from '../SalesQuotation/salesQuotati
 import PrintDropdown from '@/components/common/PrintDropdown';
 import { Checkbox } from '@/components/ui/checkbox';
 import PopupPreloader from '@/components/common/PopupPreloader';
+import HelpShortcuts from '@/components/common/HelpShortcuts';
 import { showToast } from '@/utils/toast';
 import salesOrderInvoicePrintThree from '@/utils/prints/salesOrderPints/salesOrderPrintThree';
 import salesOrderInvoicePrintfour from '@/utils/prints/salesOrderPints/salesOrderInvoicePrintFour';
 import salesOrderInvoicePrintFive from '@/utils/prints/salesOrderPints/salesOrderPrintFive';
+import { isElectron } from '@/utils/electronPrint';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+
 
 const SalesOrderSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Sales Order");
+
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
+    const [isPrinting, setIsPrinting] = useState(false);
     const { salesOrderId } = useParams();
     const editMode = Boolean(salesOrderId);
     const [isEditMode, setIsEditMode] = useState(Boolean(salesOrderId));
@@ -62,7 +71,8 @@ const SalesOrderSkin = () => {
     const [showHeldOrders, setShowHeldOrders] = useState(false);
     const [restoredHeldOrderId, setRestoredHeldOrderId] = useState(null);
     const decimalPart = generalSettings?.decimalPart ?? 2;
-
+    // add near other useState hooks
+    const [helpOpen, setHelpOpen] = useState(false);
     // ─── empty order details template (reused in multiple places) ───────────
     const emptyOrderDetail = {
         deliveryNoteDetails1Id: "",
@@ -96,6 +106,19 @@ const SalesOrderSkin = () => {
         RackId: null,
         branchId: selectedBranchId
     };
+    const handleConvert = useCallback((type) => {
+        switch (type) {
+
+            case 'deliveryNote':
+                navigate(`/transaction/delivery-note?fromOrder=${salesOrderId}`, { state: { againstOrder: true, masterId: salesOrderId } });
+                break;
+            case 'sale':
+                navigate(`/transaction/sales-invoice?fromOrder=${salesOrderId}`, { state: { againstOrder: true, masterId: salesOrderId } });
+                break;
+            default:
+                break;
+        }
+    }, [navigate, salesOrderId]);
 
     useEffect(() => {
         if (location.state?.shouldClear && !editMode) {
@@ -233,7 +256,10 @@ const SalesOrderSkin = () => {
         if (savedHeldOrders) {
             const allHeldOrders = JSON.parse(savedHeldOrders);
             const branchHeldOrders = allHeldOrders.filter(order => order.branchId === selectedBranchId);
-            setHeldOrders(branchHeldOrders);
+            const deduped = Array.from(
+                new Map(branchHeldOrders.map(o => [o.id, o])).values()
+            );
+            setHeldOrders(deduped);
         }
     }, [selectedBranchId]);
 
@@ -242,7 +268,12 @@ const SalesOrderSkin = () => {
         const savedHeldOrders = localStorage.getItem('heldSalesOrders');
         const allHeldOrders = savedHeldOrders ? JSON.parse(savedHeldOrders) : [];
         const otherBranchOrders = allHeldOrders.filter(order => order.branchId !== selectedBranchId);
-        const updatedAllOrders = [...otherBranchOrders, ...heldOrders];
+
+        const dedupedHeldOrders = Array.from(
+            new Map(heldOrders.map(o => [o.id, o])).values()
+        );
+
+        const updatedAllOrders = [...otherBranchOrders, ...dedupedHeldOrders];
         if (updatedAllOrders.length > 0) {
             localStorage.setItem('heldSalesOrders', JSON.stringify(updatedAllOrders));
         } else {
@@ -268,11 +299,13 @@ const SalesOrderSkin = () => {
             branchId: selectedBranchId,
             formData: { ...formData }
         };
-        setHeldOrders(prev => [...prev, heldOrder]);
+        setHeldOrders(prev => {
+            if (prev.some(o => o.id === heldOrder.id)) return prev;
+            return [...prev, heldOrder];
+        });
         showToast.success(`Order held successfully. Total held orders: ${heldOrders.length + 1}`);
-        clearForm(true); // skip confirmation when holding
+        clearForm(true);
     }, [formData, invoiceId, heldOrders.length, selectedBranchId]);
-
     // ===== HOLD ORDER: Keyboard shortcut Ctrl+H =====
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -532,7 +565,7 @@ const SalesOrderSkin = () => {
                 const res = await axiosInstance.post('all-sales-data', {
                     voucherType: "Sales Order", branchId: selectedBranchId,
                     yearId: currentFinancialYear.yearId,
-                    ledgerTypes: ["Customer"],
+                    ledgerTypes: ["Customer", "Customer&Supplier"],
                     ledgerId: financeSettings?.defaultSalesAccount,
                     orderLedgerId: financeSettings?.defaultSalesAccount,
                     currencyId: currentCurrency.currencyId,
@@ -622,14 +655,22 @@ const SalesOrderSkin = () => {
         });
     }, [time, editMode]);
 
-    const loadProformaByProformaId = async (id) => {
+    useEffect(() => {
+        if (location.state && location.state.againstProforma && location.state.masterId) {
+            loadProformaByProformaId(location.state.masterId);
+        }
+    }, [location.state]);
+
+    const loadProformaByProformaId = async (ids) => {
+        const idsArray = Array.isArray(ids)
+            ? ids
+            : [Number(ids)];
         setFetchLoading(true)
         try {
             const response = await axiosInstance.post(`get-proforma-details-for-sales-order`,
-                { in_proforma_master_id: id, in_branch_id: selectedBranchId, in_order_master_id: null }
+                { in_proforma_master_id: idsArray, in_branch_id: selectedBranchId, in_order_master_id: null }
             );
             const data = response.data.data;
-            setExistingInvoiceNo(data.orderNo)
 
             const salesDetailsWithProducts = await Promise.all(
                 (data.orderDetails || []).map(async (item) => {
@@ -672,6 +713,7 @@ const SalesOrderSkin = () => {
                     return {
                         ...item,
                         productName: productName,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         qty: parseFloat(item.qty) || 0,
                         rate: parseFloat(item.rate) || 0,
                         taxRate: taxRate,
@@ -688,6 +730,7 @@ const SalesOrderSkin = () => {
             setFormData((prev) => ({
                 ...prev,
                 ...data,
+                quotationMasterId: idsArray,
                 date: parseDateFromAPI(data.date),
                 partyRefDate: data.partyRefDate ? parseLocalDate(data.partyRefDate) : "",
                 LPODate: data.LPODate ? parseLocalDate(data.LPODate) : "",
@@ -695,6 +738,7 @@ const SalesOrderSkin = () => {
                 exchangeDate: data.exchangeDate ? parseLocalDate(data.exchangeDate) : "",
                 billDiscountWithTax: data.billDiscountWithTax || '',
                 orderDetails: salesDetailsWithProducts,
+                AgainstNo: data?.voucherNo
             }));
 
             setResetTableKey((prev) => prev + 1);
@@ -705,15 +749,21 @@ const SalesOrderSkin = () => {
             setFetchLoading(false)
         }
     };
-
+    useEffect(() => {
+        if (location.state && location.state.againstQuotation && location.state.masterId) {
+            loadQuotationDetailsByQtnId(location.state.masterId);
+        }
+    }, [location.state]);
     const loadQuotationDetailsByQtnId = async (qId) => {
         setFetchLoading(true)
+        const idsArray = Array.isArray(qId)
+            ? qId
+            : [Number(qId)];
         try {
             const response = await axiosInstance.post(`get-quotation-details-for-sales-order`,
-                { In_quotationmasterId: qId, In_branchId: selectedBranchId, in_ordermasterid: null }
+                { In_quotationmasterId: idsArray, In_branchId: selectedBranchId, in_ordermasterid: null }
             );
             const data = response.data.data;
-            setExistingInvoiceNo(data.orderNo)
 
             const salesDetailsWithProducts = await Promise.all(
                 (data.orderDetails || []).map(async (item) => {
@@ -746,7 +796,7 @@ const SalesOrderSkin = () => {
                                 mrp: item.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
@@ -755,6 +805,7 @@ const SalesOrderSkin = () => {
                     return {
                         ...item,
                         productName: productName,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         qty: parseFloat(item.qty) || 0,
                         rate: parseFloat(item.rate) || 0,
                         taxRate: taxRate,
@@ -771,6 +822,7 @@ const SalesOrderSkin = () => {
             setFormData((prev) => ({
                 ...prev,
                 ...data,
+                quotationMasterId: idsArray,
                 date: parseDateFromAPI(data.date),
                 partyRefDate: data.partyRefDate ? parseLocalDate(data.partyRefDate) : "",
                 LPODate: data.LPODate ? parseLocalDate(data.LPODate) : "",
@@ -778,6 +830,7 @@ const SalesOrderSkin = () => {
                 exchangeDate: data.exchangeDate ? parseLocalDate(data.exchangeDate) : "",
                 billDiscountWithTax: data.billDiscountWithTax || false,
                 orderDetails: salesDetailsWithProducts,
+                AgainstNo: data?.voucherNo
             }));
 
             setResetTableKey((prev) => prev + 1);
@@ -843,7 +896,7 @@ const SalesOrderSkin = () => {
                                 mrp: item.mrp || '',
                                 purchase: item.PurchaseRate || '',
                                 productDescription: item.productDescription || '',
-                                UnitName: selectedUnit?.unitname || ''
+                                UnitName: selectedUnit?.unitname || selectedUnit?.unitName || selectedUnit?.UnitName || item.unitName || item.UnitName || ''
                             };
                         } catch (err) {
                             console.error(`Error fetching product ${item.productCode}:`, err);
@@ -854,6 +907,7 @@ const SalesOrderSkin = () => {
                         ...item,
                         productName: productName,
                         productNameArb: productNameArb,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         qty: parseFloat(item.qty) || 0,
                         rate: parseFloat(item.rate) || 0,
                         taxRate: taxRate,
@@ -927,7 +981,7 @@ const SalesOrderSkin = () => {
     const fetchCustomer = async () => {
         setLoading(prev => ({ ...prev, customers: true }));
         try {
-            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer"], branchId: selectedBranchId });
+            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer", "Customer&Supplier"], branchId: selectedBranchId });
             setCustomers(data.data);
         } catch (err) {
             console.error("Failed to fetch customers:", err);
@@ -957,12 +1011,23 @@ const SalesOrderSkin = () => {
 
     // ===== PRINT HELPERS =====
 
-    const buildInvoiceDataForPrint = useCallback((invoiceNumber) => ({
-        ...formData,
-        invoiceNo: invoiceNumber,
-        date: formData.date,
-        salesDetails: formData.orderDetails,
-    }), [formData]);
+    const buildInvoiceDataForPrint = useCallback((invoiceNumber, overrideData) => {
+        const base = overrideData || formData;
+        const mergedCustomerData = {
+            ...(formData.customerData || {}),
+            ...(base.customerData || {}),
+        };
+        return {
+            ...base,
+            invoiceNo: invoiceNumber,
+            date: base.date,
+            customerData: mergedCustomerData,
+            salesDetails: (base.orderDetails || formData.orderDetails)?.map((detail, idx) => ({
+                ...detail,
+                unitName: detail.unitName || formData.orderDetails?.[idx]?.unitName || detail.UnitName || ''
+            })),
+        };
+    }, [formData]);
 
     const printToPrinterFn = useCallback((invoiceDataForPrint) => {
         setTimeout(async () => {
@@ -1033,9 +1098,22 @@ const SalesOrderSkin = () => {
         }
 
         setIsSaving(true);
+
         try {
+
             const dataToSave = {
                 ...formData,
+                ModifiedUser: isInEditMode ? userId : null,
+                ModifiedDate: isInEditMode ? formatDateWithTime(new Date()) : null,
+                vatLedgerId: generalSettings?.taxLedgerId,
+                CreatedUser: userId,
+                orderDetails: (formData.orderDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: isInEditMode ? userId : detail?.ModifiedUser ?? null,
+                    CreatedUser: isInEditMode ? detail?.CreatedUser ?? userId : userId,
+                    ModifiedDate: isInEditMode ? formatDateWithTime(new Date()) : null,
+
+                })),
                 date: formatDateWithTime(formData.date)
             };
             const api = isInEditMode ? `update-sales-order/${salesOrderId}` : 'save-sales-order';
@@ -1044,8 +1122,9 @@ const SalesOrderSkin = () => {
             if (!response.data.error) {
                 showToast.success(t("saveSuccess"));
                 setIsSaving(false);
-
-                const invoiceDataForPrint = buildInvoiceDataForPrint(isInEditMode ? existingInvoiceNo : invoiceId);
+                const orderData = response?.data?.data?.payload?.salesOrderMaster
+                const invoiceId = isInEditMode ? existingInvoiceNo : response?.data?.data?.orderNo
+                const invoiceDataForPrint = buildInvoiceDataForPrint(invoiceId, orderData);
 
                 // ===== HOLD ORDER: Clean up restored held order after save =====
                 if (restoredHeldOrderId) {
@@ -1140,30 +1219,167 @@ const SalesOrderSkin = () => {
                 await genarateSalesInvoiceId();
 
                 if (saleSettings.CloseAfterSave) {
-                    setTimeout(() => {
-                        navigate('/transaction/sales-order/sales-order-list');
-                    }, formData.printAfterSave ? 1500 : 500);
+                    navigate('/transaction/sales-order/sales-order-list');
                 }
             }
         } catch (error) {
             console.error('Error saving sales order:', error);
-            showToast.error(t("saveError"));
+
+            // ✅ AUTO-HOLD ORDER ON ERROR
+            const hasValidData = formData.orderDetails.some(detail => detail.productCode && detail.qty > 0);
+
+            if (hasValidData) {
+                const heldOrder = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    invoiceId: invoiceId,
+                    customerName: formData.partyName || 'Unknown Customer',
+                    customerAddress: formData.partyAddress || '',
+                    totalAmount: formData.totalAmount || 0,
+                    itemCount: formData.orderDetails.filter(d => d.productCode).length,
+                    branchId: selectedBranchId,
+                    formData: { ...formData },
+                    errorHeld: true // Mark as error-held
+                };
+
+                setHeldOrders(prev => [...prev, heldOrder]);
+
+                showToast.warning(
+                    `Save failed. Order has been automatically held. Total held orders: ${heldOrders.length + 1}`
+                );
+            }
+
+            Swal.fire({
+                icon: 'error',
+                title: t('Error') || 'Error',
+                html: `
+                    <div class="text-left">
+                        <p class="mb-2">${error.response?.data?.message || t("saveError") || "Error saving sales order"}</p>
+                        ${hasValidData ? '<p class="text-sm text-blue-600">Your order data has been automatically held and can be restored later.</p>' : ''}
+                    </div>
+                `,
+                confirmButtonColor: '#3085d6',
+                confirmButtonText: 'OK'
+            });
         } finally {
             setIsSaving(false);
         }
-    }, [formData, generalSettings, t, isInEditMode, salesOrderId, saleSettings, invoiceId, buildInvoiceDataForPrint, printToPrinterFn, printToPdfFn, currentFinancialYear, financeSettings, invoicePrintConfig, currentCurrencyConversion, selectedBranchId, userId, restoredHeldOrderId]);
+    }, [
+        formData,
+        generalSettings,
+        t,
+        isInEditMode,
+        salesOrderId,
+        saleSettings,
+        invoiceId,
+        buildInvoiceDataForPrint,
+        printToPrinterFn,
+        printToPdfFn,
+        currentFinancialYear,
+        financeSettings,
+        invoicePrintConfig,
+        currentCurrencyConversion,
+        selectedBranchId,
+        userId,
+        restoredHeldOrderId,
+        heldOrders.length
+    ]);
+    const fetchOrderDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`get-sales-order-byId/${salesOrderId}`);
+        const data = response.data.data;
 
+        let freshTaxData = taxData;
+        if (!freshTaxData || freshTaxData.length === 0) {
+            try {
+                const taxRes = await axiosInstance.get("tax-masters");
+                freshTaxData = taxRes.data.data || [];
+                setTaxData(freshTaxData);
+            } catch (e) {
+                console.error('Error fetching tax data', e);
+            }
+        }
+
+        const salesDetailsWithProducts = (data.orderDetails || []).map((item) => {
+            const taxInfo = freshTaxData.find(t => t.taxId === item.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productname || item?.productName || '',
+                productNameArb: item?.productNameArb || '',
+                unitName: item?.units?.find(u => u.unitid === item.unitId)?.unitname || item?.units?.find(u => u.unitId === item.unitId)?.unitName || item?.unitName || item?.UnitName || '',
+                qty: parseFloat(item.qty) || 0,
+                rate: parseFloat(item.rate) || 0,
+                taxRate,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
+
+        return {
+            ...data,
+            date: parseDateFromAPI(data.date),
+            partyRefDate: data.partyRefDate ? parseLocalDate(data.partyRefDate) : "",
+            LPODate: data.LPODate ? parseLocalDate(data.LPODate) : "",
+            dueDate: data.dueDate ? parseLocalDate(data.dueDate) : "",
+            exchangeDate: data.exchangeDate ? parseLocalDate(data.exchangeDate) : "",
+            billDiscountWithTax: data.billDiscountWithTax || '',
+            orderDetails: salesDetailsWithProducts,
+            payments: data.payments,
+        };
+    }, [salesOrderId, taxData]);
     // ===== EDIT MODE: Print to Printer =====
-    const handleReprintToPrinter = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo);
-        printToPrinterFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this invoice?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
 
-    // ===== EDIT MODE: Print as PDF =====
-    const handleReprintToPdf = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo);
-        printToPdfFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, printToPdfFn]);
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchOrderDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching order for reprint:', error);
+            showToast.error('Failed to fetch order data for printing');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, fetchOrderDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn, isElectron]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchOrderDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData);
+            printToPdfFn(invoiceDataForPrint);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching order for PDF reprint:', error);
+            showToast.error('Failed to fetch order data for PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [fetchOrderDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPdfFn, isElectron]);
 
     // Keyboard shortcut: Ctrl+S
     useEffect(() => {
@@ -1187,7 +1403,7 @@ const SalesOrderSkin = () => {
         },
         // ===== HOLD ORDER: Breadcrumb buttons (mirrors SalesInvoiceSkin) =====
         !isEditMode && {
-            label: `Hold Order${heldOrders.length > 0 ? ` (${heldOrders.length})` : ''}`,
+            label: `Hold${heldOrders.length > 0 ? ` (${heldOrders.length})` : ''}`,
             icon: Archive,
             type: "secondary",
             onClick: holdCurrentOrder,
@@ -1221,7 +1437,53 @@ const SalesOrderSkin = () => {
         },
     ].filter(Boolean);
 
-    if (fetchLoading || baseDataloading) {
+    const salesOrderShortcuts = [
+        {
+            heading: 'General',
+            items: [
+                { keys: ['Ctrl', 'S'], description: 'Save / update sales order' },
+                { keys: ['Ctrl', 'H'], description: 'Hold current sales order' },
+                { keys: ['Alt', '/'], description: 'Open help and shortcuts panel' },
+            ],
+        },
+        {
+            heading: 'Product Grid',
+            items: [
+                { keys: ['Enter'], description: 'Move to next field or add a new row' },
+                { keys: ['←', '→'], description: 'Move between editable columns' },
+                { keys: ['↑', '↓'], description: 'Move between rows' },
+            ],
+        },
+    ];
+
+    const salesOrderManual = [
+        {
+            heading: 'Creating a New Sales Order',
+            steps: [
+                'Select the customer and fill in the order header details before adding products.',
+                'Add products from the grid by entering the product name or scanning a barcode.',
+                'Set quantity and rate, then review the totals before storing the order.',
+                'Press Ctrl+S to save or update the order.',
+            ],
+        },
+        {
+            heading: 'Holding & Restoring Orders',
+            steps: [
+                'Press Ctrl+H or click Hold Order to temporarily save the current order and start a new one.',
+                'Use Restore to view held orders and bring one back into the form.',
+            ],
+        },
+        {
+            heading: 'Printing & Conversion',
+            steps: [
+                'Choose a print layout from the Print Type dropdown before printing or saving as PDF.',
+                'Use the Print dropdown in edit mode to reprint or download a PDF for the order.',
+                'Convert the sales order into related documents such as a delivery note or sales invoice using the Convert menu.',
+            ],
+        },
+    ];
+
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
@@ -1237,13 +1499,15 @@ const SalesOrderSkin = () => {
         );
     }
 
+    if (!hasAccess) return <NoAcessComponent message={message} />
+
     return (
         <div className='bg-primary dark:bg-primary'>
             <PopupPreloader
-                isOpen={isSaving}
+                isOpen={isSaving || isPrinting}
                 state="loading"
-                title={t("loadingText")}
-                subtitle={t("loadingDesc")}
+                title={isPrinting ? t("Printing") || "Preparing Print..." : t("loadingText")}
+                subtitle={isPrinting ? t("printingDesc") || "Please wait while we prepare your invoice for printing..." : t("loadingDesc")}
             />
 
             {/* ===== HOLD ORDER: Render panel ===== */}
@@ -1295,10 +1559,13 @@ const SalesOrderSkin = () => {
                             <PrintDropdown
                                 onPrintToPrinter={handleReprintToPrinter}
                                 onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
                             />
                         )}
+                        {isEditMode && <ConvertMenu onConvert={handleConvert} page="order" />}
                     </div>
                 }
+                onHelpClick={() => setHelpOpen(true)}
             />
 
             <FormSectionMain
@@ -1338,6 +1605,15 @@ const SalesOrderSkin = () => {
                 setQuotationData={setQuotationData}
                 proformaData={proformaData}
                 quotationData={quotationData}
+            />
+            <HelpShortcuts
+                title="Sales Order Help"
+                groups={salesOrderShortcuts}
+                manual={salesOrderManual}
+                buttonPosition="bottom-6 right-22"
+                showFloatingButton={false}
+                open={helpOpen}
+                onOpenChange={setHelpOpen}
             />
         </div>
     )

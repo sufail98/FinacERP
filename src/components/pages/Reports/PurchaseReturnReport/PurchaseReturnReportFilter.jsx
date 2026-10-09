@@ -24,50 +24,17 @@ const PurchaseReturnReportFilter = ({
     const isDetailed = filters.reportType === 'Detailed';
 
     return (
-        <div className="bg-white dark:bg-[#1e1e1e] rounded-lg p-4 mb-4 border border-gray-200 dark:border-gray-700 transition-colors">
+        <div className="bg-white dark:bg-[#1e1e1e] rounded-lg p-1 mb-1  dark:border-gray-700 transition-colors">
 
-            {/* Report Type Toggle - Row 0 */}
-            <div className="flex items-center gap-4 mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {t('purchaseReturnReport.filters.reportType')}:
-                </span>
-                <div className="flex gap-4">
-                    <label className="flex items-center cursor-pointer">
-                        <input
-                            type="radio"
-                            name="reportType"
-                            value="Detailed"
-                            checked={filters.reportType === 'Detailed'}
-                            onChange={(e) => onFilterChange('reportType', e.target.value)}
-                            className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                            {t('purchaseReturnReport.filters.detailed')}
-                        </span>
-                    </label>
-                    <label className="flex items-center cursor-pointer">
-                        <input
-                            type="radio"
-                            name="reportType"
-                            value="Summary"
-                            checked={filters.reportType === 'Summary'}
-                            onChange={(e) => onFilterChange('reportType', e.target.value)}
-                            className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                            {t('purchaseReturnReport.filters.summary')}
-                        </span>
-                    </label>
-                </div>
-            </div>
-
+          
             {/* Row 1: Dates and Primary Filters */}
-            <div className={`grid grid-cols-1 sm:grid-cols-2 ${isDetailed ? 'lg:grid-cols-5' : 'lg:grid-cols-6'} gap-3 mb-3`}>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${isDetailed ? 'lg:grid-cols-5' : 'lg:grid-cols-6'} gap-1 mb-1`}>
                 <DateInput
                     label={t('purchaseReturnReport.filters.fromDate')}
                     name="fromDate"
                     value={filters.fromDate}
                     onChange={(e, value) => onFilterChange('fromDate', value)}
+                    max={new Date().toISOString().split(("T")[0])}
                     required
                     className='w-full'
                 />
@@ -116,6 +83,40 @@ const PurchaseReturnReportFilter = ({
                     searchPlaceholder={t('purchaseReturnReport.filters.search')}
                     clearable
                 />
+  {/* Report Type Toggle - Row 0 */}
+            <div className="flex items-center gap-4 mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {t('purchaseReturnReport.filters.reportType')}:
+                </span>
+                <div className="flex gap-4">
+                    <label className="flex items-center cursor-pointer">
+                        <input
+                            type="radio"
+                            name="reportType"
+                            value="Detailed"
+                            checked={filters.reportType === 'Detailed'}
+                            onChange={(e) => onFilterChange('reportType', e.target.value)}
+                            className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        />
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                            {t('purchaseReturnReport.filters.detailed')}
+                        </span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                        <input
+                            type="radio"
+                            name="reportType"
+                            value="Summary"
+                            checked={filters.reportType === 'Summary'}
+                            onChange={(e) => onFilterChange('reportType', e.target.value)}
+                            className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        />
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                            {t('purchaseReturnReport.filters.summary')}
+                        </span>
+                    </label>
+                </div>
+            </div>
 
                 {/* Only show for Summary Report */}
                 {!isDetailed && (

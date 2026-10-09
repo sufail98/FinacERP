@@ -1,5 +1,6 @@
 import DateInput from '@/components/elements/theme/DateInput';
 import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
+import { showToast } from '@/utils/toast';
 import { RefreshCw } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +20,15 @@ const LedgerDetailedReportFilter = ({
   const { t } = useTranslation();
   const { generalSettings } = useSelector((state) => state.settings);
 
+    const handleGenerateClick = () => {
+        if (ledgerOptions.length > 1 && !filters.ledgerId) {
+            showToast.error(t("Please select an Account Group"));
+            return;
+        }
+        onGenerateReport();
+    };
+
+  
   return (
     <div className="bg-white dark:bg-[#1e1e1e] rounded-lg p-2 mb-1 transition-colors">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
@@ -28,6 +38,7 @@ const LedgerDetailedReportFilter = ({
           name="fromDate"
           value={filters.fromDate}
           onChange={(e, value) => onFilterChange('fromDate', value)}
+          max={new Date().toISOString().split('T')[0]}
           required
           className="w-full"
         />
@@ -43,7 +54,7 @@ const LedgerDetailedReportFilter = ({
         />
 
         <SearchableDropdown
-          label={t("reportFilters.selectLedger")}
+          label={t("reportFilters.SelectingLedger")}
           name="ledgerId"
           value={filters.ledgerId}
           onChange={(value) => onFilterChange('ledgerId', value)}
@@ -51,6 +62,7 @@ const LedgerDetailedReportFilter = ({
           placeholder={t("Select Ledger")}
           searchPlaceholder={t("Search Ledger")}
           clearable
+          required
         />
 
         {generalSettings?.costCentre && (
@@ -69,7 +81,7 @@ const LedgerDetailedReportFilter = ({
         <div>
           <div className="flex gap-2 mt-3">
             <button
-              onClick={onGenerateReport}
+              onClick={handleGenerateClick}
               disabled={loading}
               className="px-4 h-8 main-bg dark:bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-700 dark:hover:main-bg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >

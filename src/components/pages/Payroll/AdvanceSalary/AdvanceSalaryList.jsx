@@ -10,6 +10,8 @@ import Swal from "sweetalert2";
 import { useTranslation } from "react-i18next";
 import FormattedDate from "@/components/common/FormattedDate";
 import { useNavigate } from "react-router-dom";
+import NoAcessComponent from '@/components/common/NoAcessComponent';
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
 const AdvanceSalaryList = () => {
   const [data, setData] = useState([]);
@@ -18,6 +20,9 @@ const AdvanceSalaryList = () => {
   const { t } = useTranslation();
   const { selectedBranchId } = useAuth();
   const navigate = useNavigate();
+
+   const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Advance Salary");
+
 
   useEffect(() => {
     fetchData();
@@ -65,6 +70,12 @@ const AdvanceSalaryList = () => {
   }, [navigate]);
 
   const handleDelete = async (id) => {
+
+     if (!privileges?.can_delete) {
+            setAlert({ key: new Date(), type: "error", message: t("deletePermission") });
+            return;
+        }
+
     const result = await Swal.fire({
       title: t("delete.title") || "Are you sure?",
       text: t("delete.text") || "You won't be able to revert this!",
@@ -157,8 +168,9 @@ const AdvanceSalaryList = () => {
     },
   ];
 
-  const actions = [
-    {
+  const actions = []
+  if(privileges?.can_edit){
+    actions.push( {
       icon: <Edit className="h-4 w-4" />,
       onClick: (row) => {
         const id =
@@ -168,8 +180,10 @@ const AdvanceSalaryList = () => {
       className:
         "text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300",
       tooltip: "Edit",
-    },
-    {
+    },)
+  }
+  if(privileges?.can_delete){
+    actions.push({
       icon: <Trash2 className="h-4 w-4" />,
       className:
         "text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300",
@@ -179,30 +193,35 @@ const AdvanceSalaryList = () => {
         handleDelete(id);
       },
       tooltip: "Delete",
-    },
-  ];
-
-  if (loading)
-    return (
-      <div>
-        <BreadCrumb
+    },)
+  }
+ 
+  if (privilegeLoading || loading) {
+        return <div>
+           <BreadCrumb
           routes={[
             { title: "Payroll", url: "#" },
             { title: "Advance Salary", url: "#" },
           ]}
           heading={{ icon: Wallet, title: "Advance Salary List" }}
-          actions={[
-            {
-              label: "Create New",
-              type: "primary",
-              icon: Plus,
-              onClick: () => navigate("/payroll/advance-salary/add-new"),
-            },
-          ]}
         />
-        <Preloader />
-      </div>
-    );
+            <Preloader />
+        </div>
+    }
+     if (!hasAccess) {
+        return (
+            <div>
+                <BreadCrumb
+          routes={[
+            { title: "Payroll", url: "#" },
+            { title: "Advance Salary", url: "#" },
+          ]}
+          heading={{ icon: Wallet, title: "Advance Salary List" }}
+        />
+                <NoAcessComponent message={message} />
+            </div>
+        );
+    }
 
   return (
     <div>
@@ -214,14 +233,15 @@ const AdvanceSalaryList = () => {
           { title: "Advance Salary", url: "#" },
         ]}
         heading={{ icon: Wallet, title: "Advance Salary List" }}
-        actions={[
+        actions={ 
+          privileges?.can_add ? [
           {
             label: `${t("createNewBtn") || "Create New"} (Ctrl+C)`,
             type: "primary",
             icon: Plus,
             onClick: () => navigate("/payroll/advance-salary/add-new"),
           },
-        ]}
+        ] : [] }
       />
 
       <div className="w-full bg-white dark:bg-[#1e1e1e] px-2 py-2 transition-colors">

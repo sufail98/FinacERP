@@ -26,7 +26,7 @@ const SAUDI_BANKS = [
   "Saudi National Bank (SNB)",
 ];
 
-const AddBankPage = () => {
+const AddBankPage = ({ isModal = false, onClose, onSuccess }) => {
   const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
   const { t } = useTranslation();
   const { editId } = useParams();
@@ -177,7 +177,7 @@ const AddBankPage = () => {
   const fetchAccountGroupData = async () => {
     setFetchGrpLoading(true);
     try {
-      const response = await axiosInstance.post('bank-customer-supplier-accountgroups', { group_ids: [5, 6] });
+      const response = await axiosInstance.post('bank-customer-supplier-accountgroups', { group_ids: [5] });
       setAccoutGroups(response.data.data);
     } catch (error) {
       console.error("Error fetching account groups:", error);
@@ -243,11 +243,32 @@ const AddBankPage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+
+    let updatedValue = value;
+
+    // Fields: letters, numbers, and spaces
+    if (["ledgerName", "bankaccname", "bankBranchName"].includes(name)) {
+      updatedValue = value.replace(/[^A-Za-z0-9 ]/g, "");
     }
-  };
+
+    // Fields: letters and numbers only, uppercase
+    else if (["ledgerCode", "bankSwiftCode"].includes(name)) {
+      updatedValue = value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    }
+
+    // Fields: IBAN and Account Number
+    else if (["ibanno", "accountNo"].includes(name)) {
+      updatedValue = value
+        .replace(/[^A-Za-z0-9]/g, "")
+        .toUpperCase()
+        .slice(0, 34);
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: updatedValue }));
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+  };;
 
   const handleSelectChange = (name, value) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -291,24 +312,46 @@ const AddBankPage = () => {
   };
 
   const handleBranchDetailChange = (branchId, field, value) => {
-  let processedValue = value;
-
-  if (field === "openingBalance") {
-    processedValue =
-      value === ""
-        ? ""
-        : parseFloat(value).toFixed(generalSettings.decimalPart);
+ if (field === "openingBalance") {
+    if (value !== "" && (value === "-" || Number(value) < 0)){
+      return; // reject negative values no matter how they got in
+    }
   }
+
+  // let processedValue = value;
+  // if (field === "openingBalance") {
+  //   processedValue =
+  //     value === ""
+  //       ? ""
+  //       : parseFloat(value).toFixed(generalSettings.decimalPart);
+  // }
 
   setBranchDetails(prev => ({
     ...prev,
     [branchId]: {
       ...prev[branchId],
-      [field]: processedValue
+      [field]: value
     }
   }));
 
   setFinalError(null);
+};
+
+  const handleBranchDetailBlur = (branchId, field) => {
+  setBranchDetails(prev => {
+    const raw = prev[branchId]?.[field];
+    if (raw === "" || raw === undefined) return prev;
+
+    const formatted = parseFloat(raw).toFixed(generalSettings.decimalPart);
+
+    return {
+      ...prev,
+      [branchId]: {
+        ...prev[branchId],
+        [field]: formatted
+      }
+    };
+  });
 };
 
   const fields = ["ledgerName", "ledgerCode", "groupId"];
@@ -394,7 +437,7 @@ const AddBankPage = () => {
         activeFinancialYear_fromDate: currentFinancialYear?.fromDate || '',
         ledgerName: formData.ledgerName,
         groupId: parseInt(formData.groupId) || 1,
-        narration: `Opening ${formData.ledgerName} account`,
+        // narration: `Opening ${formData.ledgerName} account`,
         ledgerCode: formData.ledgerCode,
         accountNo: formData.accountNo,
         bankaccname: formData.bankaccname,
@@ -419,7 +462,14 @@ const AddBankPage = () => {
             ? 'Bank account updated successfully!'
             : 'Bank account created successfully!'
         });
-        setTimeout(() => navigate('/master/bank'), 1000);
+        setTimeout(() => {
+          if (isModal) {
+            if (onSuccess) onSuccess();
+            if (onClose) onClose();
+          } else {
+            navigate('/master/bank');
+          }
+        }, 1000);
       } else {
         setFinalError(response.data.message || 'Failed to save bank account');
       }
@@ -453,7 +503,11 @@ const AddBankPage = () => {
         });
         if (!result.isConfirmed) return;
     }
-    navigate('/master/bank');
+    if (isModal) {
+      if (onClose) onClose();
+    } else {
+      navigate('/master/bank');
+    }
 };
 
   useSaveShortcut(handleSubmit);
@@ -525,6 +579,11 @@ const AddBankPage = () => {
           step={1 / Math.pow(10, generalSettings.decimalPart)}
           value={branchDetails[branchIdStr]?.openingBalance || ""}
           onChange={(e) => handleBranchDetailChange(branchIdStr, 'openingBalance', e.target.value)}
+          onKeyDown={(e) => {
+                                if (["-", "+", "e", "E"].includes(e.key)) {
+                                  e.preventDefault();
+                                  }
+                               }}
           disabled={!isSelected || isLoading}
           className="w-full px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#242424] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-[#1a1a1a] disabled:cursor-not-allowed"
           placeholder={(0).toFixed(generalSettings.decimalPart)}
@@ -555,13 +614,22 @@ const AddBankPage = () => {
 
   return (
     <>
-      <BreadCrumb {...breadcrumbConfig} />
+      {!isModal && <BreadCrumb {...breadcrumbConfig} />}
 
-      <div className="mx-auto px-4 py-2 dark:bg-[#121212] transition-colors">
-        <div className="max-w-5xl mx-auto bg-white dark:bg-[#1e1e1e] rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
-
-          <div className="px-4 py-3" ref={formRef} onKeyDown={handleFormKeyDown}>
-            {alert && <AlertBox key={alert.id} message={alert.message} type={alert.type} />}
+      <div className={`mx-auto ${isModal ? 'px-0 py-0' : 'px-4 py-2'} dark:bg-[#121212] transition-colors`}>
+        <div className={`mx-auto bg-white dark:bg-[#1e1e1e] ${isModal ? '' : 'max-w-5xl rounded-lg shadow-lg border border-gray-200 dark:border-gray-700'}`}>
+          <div
+            className="px-4 py-3"
+            ref={formRef}
+            onKeyDown={handleFormKeyDown}
+          >
+            {alert && (
+              <AlertBox
+                key={alert.id}
+                message={alert.message}
+                type={alert.type}
+              />
+            )}
 
             {/* Bank Registered Name */}
             <div className="mb-4">
@@ -582,13 +650,14 @@ const AddBankPage = () => {
                          focus:outline-none focus:border-teal-600 dark:focus:border-teal-400 pb-2 transition-colors"
               />
               {errors.ledgerName && (
-                <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{errors.ledgerName}</p>
+                <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                  {errors.ledgerName}
+                </p>
               )}
             </div>
 
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-2">
-
                 {/* Left Column */}
                 <div className="space-y-2">
                   {/* Bank */}
@@ -611,12 +680,12 @@ const AddBankPage = () => {
                         <div className="absolute right-0 flex items-center">
                           <button
                             type="button"
-                            onClick={() => setShowBankDropdown(prev => !prev)}
+                            onClick={() => setShowBankDropdown((prev) => !prev)}
                             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-0.5"
                           >
                             <ChevronDown
                               size={14}
-                              className={`transition-transform duration-200 ${showBankDropdown ? 'rotate-180' : ''}`}
+                              className={`transition-transform duration-200 ${showBankDropdown ? "rotate-180" : ""}`}
                             />
                           </button>
                         </div>
@@ -630,7 +699,7 @@ const AddBankPage = () => {
                               onClick={() => handleBankSelect(bank)}
                               className={`w-full text-left px-3 py-2 text-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 
                                        text-gray-900 dark:text-gray-100 transition-colors
-                                       ${formData.bankname === bank ? 'bg-teal-50 dark:bg-teal-900/20 font-medium' : ''}`}
+                                       ${formData.bankname === bank ? "bg-teal-50 dark:bg-teal-900/20 font-medium" : ""}`}
                             >
                               {bank}
                             </button>
@@ -650,23 +719,29 @@ const AddBankPage = () => {
                         <input
                           type="text"
                           name="groupId"
-                          value={accountGroups.find(g => g.groupId?.toString() === formData.groupId)?.accountGroupName || ""}
+                          value={
+                            accountGroups.find(
+                              (g) => g.groupId?.toString() === formData.groupId,
+                            )?.accountGroupName || ""
+                          }
                           readOnly
                           placeholder="Select Group"
                           className="w-full px-0 py-1.5 bg-transparent border-0 border-b border-gray-300 dark:border-gray-600 
                                    text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500
                                    focus:outline-none focus:border-gray-900 dark:focus:border-gray-300 pr-8 text-sm transition-colors cursor-pointer"
-                          onClick={() => setShowGroupDropdown(prev => !prev)}
+                          onClick={() => setShowGroupDropdown((prev) => !prev)}
                         />
                         <div className="absolute right-0 flex items-center">
                           <button
                             type="button"
-                            onClick={() => setShowGroupDropdown(prev => !prev)}
+                            onClick={() =>
+                              setShowGroupDropdown((prev) => !prev)
+                            }
                             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-0.5"
                           >
                             <ChevronDown
                               size={14}
-                              className={`transition-transform duration-200 ${showGroupDropdown ? 'rotate-180' : ''}`}
+                              className={`transition-transform duration-200 ${showGroupDropdown ? "rotate-180" : ""}`}
                             />
                           </button>
                         </div>
@@ -678,12 +753,15 @@ const AddBankPage = () => {
                               key={group.groupId}
                               type="button"
                               onClick={() => {
-                                handleSelectChange("groupId", group.groupId?.toString());
+                                handleSelectChange(
+                                  "groupId",
+                                  group.groupId?.toString(),
+                                );
                                 setShowGroupDropdown(false);
                               }}
                               className={`w-full text-left px-3 py-2 text-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 
                                          text-gray-900 dark:text-gray-100 transition-colors
-                                         ${formData.groupId === group.groupId?.toString() ? 'bg-teal-50 dark:bg-teal-900/20 font-medium' : ''}`}
+                                         ${formData.groupId === group.groupId?.toString() ? "bg-teal-50 dark:bg-teal-900/20 font-medium" : ""}`}
                             >
                               {group.accountGroupName}
                             </button>
@@ -691,7 +769,9 @@ const AddBankPage = () => {
                         </div>
                       )}
                       {errors.groupId && (
-                        <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{errors.groupId}</p>
+                        <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                          {errors.groupId}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -715,7 +795,9 @@ const AddBankPage = () => {
                                  focus:outline-none focus:border-gray-900 dark:focus:border-gray-300 text-sm transition-colors"
                       />
                       {errors.ledgerCode && (
-                        <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{errors.ledgerCode}</p>
+                        <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                          {errors.ledgerCode}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -748,6 +830,7 @@ const AddBankPage = () => {
                     <input
                       type="text"
                       name="ibanno"
+                      maxLength={34}
                       value={formData.ibanno}
                       onChange={handleChange}
                       placeholder="Type IBAN number"
@@ -782,6 +865,7 @@ const AddBankPage = () => {
                     <input
                       type="text"
                       name="accountNo"
+                      maxLength={34}
                       value={formData.accountNo}
                       onChange={handleChange}
                       placeholder="Type account number"
@@ -815,19 +899,27 @@ const AddBankPage = () => {
                 <div className="mt-3">
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {t("accountLedger.form.branches") || "Branches"} <span className="text-red-500">*</span>
+                      {t("accountLedger.form.branches") || "Branches"}{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={selectedBranches.length === activeBranches.length}
+                        checked={
+                          selectedBranches.length === activeBranches.length
+                        }
                         onChange={(e) => {
                           if (e.target.checked) {
-                            const allBranchIds = activeBranches.map(b => String(b.branchId));
+                            const allBranchIds = activeBranches.map((b) =>
+                              String(b.branchId),
+                            );
                             setSelectedBranches(allBranchIds);
                             const newDetails = {};
-                            allBranchIds.forEach(id => {
-                              newDetails[id] = branchDetails[id] || { openingBalance: "", crOrDr: "2" };
+                            allBranchIds.forEach((id) => {
+                              newDetails[id] = branchDetails[id] || {
+                                openingBalance: "",
+                                crOrDr: "2",
+                              };
                             });
                             setBranchDetails(newDetails);
                           } else {
@@ -847,15 +939,27 @@ const AddBankPage = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-2 bg-gray-50 dark:bg-[#252525] border-b border-gray-300 dark:border-gray-600">
                       <div className="grid grid-cols-[20px_1fr_120px_70px] items-center gap-2 px-3 py-1.5 lg:border-r border-gray-300 dark:border-gray-600">
                         <span></span>
-                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Branch</span>
-                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Balance</span>
-                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cr/Dr</span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Branch
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Balance
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Cr/Dr
+                        </span>
                       </div>
                       <div className="hidden lg:grid grid-cols-[20px_1fr_120px_70px] items-center gap-2 px-3 py-1.5">
                         <span></span>
-                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Branch</span>
-                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Balance</span>
-                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cr/Dr</span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Branch
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Balance
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Cr/Dr
+                        </span>
                       </div>
                     </div>
 
@@ -863,15 +967,13 @@ const AddBankPage = () => {
                     {branchPairs.map((pair, pairIndex) => (
                       <div
                         key={pairIndex}
-                        className={`grid grid-cols-1 lg:grid-cols-2 ${pairIndex < branchPairs.length - 1 ? 'border-b border-gray-200 dark:border-gray-600' : ''}`}
+                        className={`grid grid-cols-1 lg:grid-cols-2 ${pairIndex < branchPairs.length - 1 ? "border-b border-gray-200 dark:border-gray-600" : ""}`}
                       >
                         <div className="lg:border-r border-gray-200 dark:border-gray-600">
                           {renderBranchRow(pair[0])}
                         </div>
                         {pair[1] ? (
-                          <div>
-                            {renderBranchRow(pair[1])}
-                          </div>
+                          <div>{renderBranchRow(pair[1])}</div>
                         ) : (
                           <div className="hidden lg:block"></div>
                         )}
@@ -888,73 +990,101 @@ const AddBankPage = () => {
               )}
 
               {/* Single Branch - Full width row */}
-              {!showBranchGrid && activeBranches && activeBranches.length === 1 && (
-                <div className="mt-3">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
-                    Branch
-                  </label>
-                  <div className="border border-gray-300 dark:border-gray-600 rounded overflow-hidden">
-                    {/* Header */}
-                    <div className="grid grid-cols-[20px_1fr_180px_70px] items-center gap-3 px-3 py-1.5 bg-gray-50 dark:bg-[#252525] border-b border-gray-300 dark:border-gray-600">
-                      <span></span>
-                      <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Branch</span>
-                      <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Opening Balance</span>
-                      <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cr/Dr</span>
-                    </div>
-                    {/* Row */}
-                    {(() => {
-                      const branch = activeBranches[0];
-                      const branchIdStr = String(branch.branchId);
-                      const isSelected = selectedBranches.includes(branchIdStr);
-                      const crOrDrValue = branchDetails[branchIdStr]?.crOrDr || "";
-                      const showCrDrWarning = isSelected && !crOrDrValue;
+              {!showBranchGrid &&
+                activeBranches &&
+                activeBranches.length === 1 && (
+                  <div className="mt-3">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
+                      Branch
+                    </label>
+                    <div className="border border-gray-300 dark:border-gray-600 rounded overflow-hidden">
+                      {/* Header */}
+                      <div className="grid grid-cols-[20px_1fr_180px_70px] items-center gap-3 px-3 py-1.5 bg-gray-50 dark:bg-[#252525] border-b border-gray-300 dark:border-gray-600">
+                        <span></span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Branch
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Opening Balance
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Cr/Dr
+                        </span>
+                      </div>
+                      {/* Row */}
+                      {(() => {
+                        const branch = activeBranches[0];
+                        const branchIdStr = String(branch.branchId);
+                        const isSelected =
+                          selectedBranches.includes(branchIdStr);
+                        const crOrDrValue =
+                          branchDetails[branchIdStr]?.crOrDr || "";
+                        const showCrDrWarning = isSelected && !crOrDrValue;
 
-                      return (
-                        <div
-                          className={`grid grid-cols-[20px_1fr_180px_70px] items-center gap-3 px-3 py-2
-                                     ${isSelected ? 'bg-teal-50 dark:bg-teal-900/20' : 'hover:bg-gray-50 dark:hover:bg-[#252525]'}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleBranchToggle(branch.branchId)}
-                            disabled={isLoading}
-                            className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600 text-teal-600 focus:ring-teal-500"
-                          />
-                          <span
-                            className="text-xs text-gray-900 dark:text-gray-100 font-medium truncate"
-                            title={branch.branchCode}
+                        return (
+                          <div
+                            className={`grid grid-cols-[20px_1fr_180px_70px] items-center gap-3 px-3 py-2
+                                     ${isSelected ? "bg-teal-50 dark:bg-teal-900/20" : "hover:bg-gray-50 dark:hover:bg-[#252525]"}`}
                           >
-                            {branch.branchCode}
-                          </span>
-                          <input
-                            type="number"
-                            step={1 / Math.pow(10, generalSettings.decimalPart)}
-                            value={branchDetails[branchIdStr]?.openingBalance || ""}
-                            onChange={(e) => handleBranchDetailChange(branchIdStr, 'openingBalance', e.target.value)}
-                            disabled={!isSelected || isLoading}
-                            className="w-full px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#242424] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-[#1a1a1a] disabled:cursor-not-allowed"
-                            placeholder={(0).toFixed(generalSettings.decimalPart)}
-                          />
-                          <select
-                            value={crOrDrValue}
-                            onChange={(e) => handleBranchDetailChange(branchIdStr, 'crOrDr', e.target.value)}
-                            disabled={!isSelected || isLoading}
-                            className={`w-full px-1 py-1 text-xs rounded border bg-white dark:bg-[#242424] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-[#1a1a1a] disabled:cursor-not-allowed
-                                       ${showCrDrWarning
-                                ? 'border-red-300 dark:border-red-500 bg-red-50 dark:bg-red-900/20'
-                                : 'border-gray-300 dark:border-gray-600'}`}
-                          >
-                            <option value="">Cr/Dr</option>
-                            <option value="1">Cr</option>
-                            <option value="2">Dr</option>
-                          </select>
-                        </div>
-                      );
-                    })()}
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() =>
+                                handleBranchToggle(branch.branchId)
+                              }
+                              disabled={isLoading}
+                              className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600 text-teal-600 focus:ring-teal-500"
+                            />
+                            <span
+                              className="text-xs text-gray-900 dark:text-gray-100 font-medium truncate"
+                              title={branch.branchCode}
+                            >
+                              {branch.branchCode}
+                            </span>
+                           
+                            <input
+                              type="number"
+                              min="0"
+                              step={1 / Math.pow(10, generalSettings.decimalPart)}
+                              value={branchDetails[branchIdStr]?.openingBalance ?? ""}
+                                   onChange={(e) => handleBranchDetailChange(branchIdStr, 'openingBalance', e.target.value)}
+                              onBlur={() => handleBranchDetailBlur(branchIdStr, 'openingBalance')}
+                              onKeyDown={(e) => {
+                                if (["-", "+", "e", "E"].includes(e.key)) {
+                                  e.preventDefault();
+                                  }
+                               }}
+                              disabled={!isSelected || isLoading}
+                             className="..."
+                             placeholder={(0).toFixed(generalSettings.decimalPart)}
+                              />
+                            <select
+                              value={crOrDrValue}
+                              onChange={(e) =>
+                                handleBranchDetailChange(
+                                  branchIdStr,
+                                  "crOrDr",
+                                  e.target.value,
+                                )
+                              }
+                              disabled={!isSelected || isLoading}
+                              className={`w-full px-1 py-1 text-xs rounded border bg-white dark:bg-[#242424] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-[#1a1a1a] disabled:cursor-not-allowed
+                                       ${
+                                         showCrDrWarning
+                                           ? "border-red-300 dark:border-red-500 bg-red-50 dark:bg-red-900/20"
+                                           : "border-gray-300 dark:border-gray-600"
+                                       }`}
+                            >
+                              <option value="">Cr/Dr</option>
+                              <option value="1">Cr</option>
+                              <option value="2">Dr</option>
+                            </select>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {finalError && (
                 <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-2 py-1.5 mt-2">
@@ -962,6 +1092,13 @@ const AddBankPage = () => {
                 </div>
               )}
             </form>
+
+            {isModal && (
+              <div className="flex justify-end gap-2 p-4 mt-4 border-t border-gray-200 dark:border-gray-700">
+                 <button type="button" onClick={handleCancel} className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 font-medium">Cancel</button>
+                 <button type="button" onClick={handleSubmit} disabled={isSaving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded font-medium disabled:opacity-50">{isSaving ? t('saving') : t('save')}</button>
+              </div>
+            )}
           </div>
         </div>
       </div>

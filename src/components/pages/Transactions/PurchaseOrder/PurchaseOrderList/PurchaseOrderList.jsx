@@ -4,7 +4,7 @@ import Preloader from '@/components/common/Preloader'
 import axiosInstance from '@/lib/axiosConfig'
 import usePrivileges from '@/lib/hooks/usePrivileges'
 import { Edit, Plus, ReceiptText, Trash2 } from 'lucide-react'
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
@@ -63,7 +63,17 @@ const PurchaseOrderList = () => {
             .replace('MM', MM)
             .replace('yyyy', yyyy);
     };
-
+    const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
     // Main fetch function
     const fetchAllSales = useCallback(async (params = {}) => {
         setFetchLoading(true);
@@ -89,7 +99,11 @@ const PurchaseOrderList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((currentPage - 1) * currentLimit) + index + 1,
-                date: formatDate(item.date),
+                date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setSalesData(formattedData);
@@ -268,14 +282,28 @@ const PurchaseOrderList = () => {
             }
         };
     }, []);
+const footerData = useMemo(() => {
+        if (!salesData || salesData.length === 0) return null;
 
+        const grandTotal = salesData.reduce((sum, item) => {
+            return sum + (Number(item.totalAmount) || 0);
+        }, 0);
+
+        return {
+            SNo: "",
+            orderNo: "",
+            date: "",
+            partyName: t("Grand Total"),
+            totalAmount: grandTotal.toFixed(generalSettings?.decimalPart || 2),
+        };
+    }, [salesData, generalSettings?.decimalPart, t]);
     const columns = [
-        { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "right" },
-        { key: "orderNo", label: t("purchaseOrder.list.columns.orderNo"), sortable: true, align: "left" ,width:'80px'},
-        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "center",width:'100px' },
-        { key: "partyName", label: t("salesInvoice.list.columns.cashParty"), sortable: true, align: "left",width:'150px' },
-        { key: "ledgerName", label: t("salesInvoice.list.columns.customerName"), sortable: true, align: "left" },
-        { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right",width:'100px' },
+        { key: "SNo", label: t("salesInvoice.list.columns.sno"), sortable: true, align: "center" },
+        { key: "orderNo", label: t("purchaseOrder.list.columns.orderNo"), sortable: true, align: "left", width: '100px' },
+        { key: "date", label: t("salesInvoice.list.columns.date"), sortable: true, align: "left", width: '170px' },
+        { key: "partyName", label: t("salesInvoice.list.columns.cashParty"), sortable: true, align: "left", width: '120px' },
+        { key: "ledgerName", label: t("salesInvoice.list.columns.customerName"), sortable: true, align: "left",width:"120px" },
+        { key: "totalAmount", label: t("salesInvoice.list.columns.totalAmt"), sortable: true, align: "right", width: '100px' },
     ];
 
     const renderCell = (key, row) => {
@@ -386,6 +414,7 @@ const PurchaseOrderList = () => {
                     loading={fetchLoading}
                     serverPagination={true}
                     renderCell={renderCell}
+                    footerData={footerData}
                 />
             </div>
         </div>

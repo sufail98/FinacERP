@@ -117,9 +117,12 @@ const SalesQuotationFooterSection = ({ totals, formData, setFormData, otherCharg
   };
 
   const handleBillDiscountAmountChange = (amountValue) => {
-    const amount = parseFloat(amountValue) || 0;
-    setBillDiscount(amount);
-
+    // allow empty, digits, and at most one decimal point while typing
+    if (amountValue !== "" && !/^\d*\.?\d*$/.test(amountValue)) {
+      return; // reject invalid characters, don't touch state
+    }
+    setBillDiscount(amountValue); // store raw string, preserves "12." ".5" etc.
+    const amount = parseFloat(amountValue) || 0; // only parse for math
     const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
     const perc = grandTotal > 0 ? (amount / grandTotal) * 100 : 0;
     setBillDiscountPerc(parseFloat(perc.toFixed(generalSettings?.decimalPart || 2)));
@@ -127,12 +130,22 @@ const SalesQuotationFooterSection = ({ totals, formData, setFormData, otherCharg
     const taxRate = parseFloat(formData.quotationDetails?.[0]?.taxRate) || 15;
     const withTax = amount * (1 + taxRate / 100);
     setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings?.decimalPart || 2)));
-  };
+};
 
-  const handleBillDiscountPercChange = (percValue) => {
-    const perc = parseFloat(percValue) || 0;
-    setBillDiscountPerc(perc);
-
+ const handleBillDiscountPercChange = (percValue) => {
+   // Allow only numbers and one decimal point
+  if (percValue !== "" && !/^\d*\.?\d{0,2}$/.test(percValue)) {
+    return;
+  }
+  // Don't allow values greater than 100
+  if (percValue !== "" && parseFloat(percValue) > 100) {
+    return;
+  }
+    // if (percValue !== "" && !/^\d*\.?\d*$/.test(percValue)) {
+    //   return; // reject invalid characters, but don't touch state
+    // }
+    setBillDiscountPerc(percValue); // store raw string, preserves "1." "12." etc.
+    const perc = parseFloat(percValue) || 0; // only parse for math
     const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
     const amount = (grandTotal * perc) / 100;
     const calculatedAmount = parseFloat(amount.toFixed(generalSettings?.decimalPart || 2));
@@ -141,7 +154,7 @@ const SalesQuotationFooterSection = ({ totals, formData, setFormData, otherCharg
     const taxRate = parseFloat(formData.quotationDetails?.[0]?.taxRate) || 15;
     const withTax = calculatedAmount * (1 + taxRate / 100);
     setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings?.decimalPart || 2)));
-  };
+};
 
   const handleBillDiscountWithTaxChange = (withTaxValue) => {
     setBillDiscountWithTaxInput(withTaxValue);
@@ -226,63 +239,129 @@ const SalesQuotationFooterSection = ({ totals, formData, setFormData, otherCharg
 
 
   // REPLACE the existing large useEffect that calls distributeBillDiscount and setFormData
-  useEffect(() => {
-    const details = detailesRef.current;
-    const currentLength = details ? details.length : 0;
+  // useEffect(() => {
+  //   const details = detailesRef.current;
+  //   const currentLength = details ? details.length : 0;
 
-    const rowCountChanged = currentLength !== prevDetailsLengthRef.current;
-    prevDetailsLengthRef.current = currentLength;
+  //   const rowCountChanged = currentLength !== prevDetailsLengthRef.current;
+  //   prevDetailsLengthRef.current = currentLength;
 
-    if (details && details.length > 0) {
-      const afterBillDisc = distributeBillDiscount(billDiscount, details);
-      const updatedQuotationDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
+  //   if (details && details.length > 0) {
+  //     const afterBillDisc = distributeBillDiscount(billDiscount, details);
+  //     const updatedQuotationDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
 
-      const detailsString = JSON.stringify(
-        updatedQuotationDetails.map(d => ({
-          b: d.billDiscOnProduct,
-          o: d.otherchargeonproduct
-        }))
-      );
+  //     const detailsString = JSON.stringify(
+  //       updatedQuotationDetails.map(d => ({
+  //         b: d.billDiscOnProduct,
+  //         o: d.otherchargeonproduct
+  //       }))
+  //     );
 
-      if (detailsString !== lastDistributedDetails.current || rowCountChanged) {
-        lastDistributedDetails.current = detailsString;
+  //     if (detailsString !== lastDistributedDetails.current || rowCountChanged) {
+  //       lastDistributedDetails.current = detailsString;
 
-        setFormData(prev => ({
-          ...prev,
-          additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
-          billDiscount,
-          billDiscountWithTax: billDiscountWithTaxInput || prev.billDiscountWithTax,
-          roundOff: roundOffType === "+" ? roundOff : -roundOff,
-          othercharge: otherChargeAmt,
-          OtherChargeRemark: otherChargeRemark,
-          quotationDetails: updatedQuotationDetails,
-          totalAmount: finalGrandTotal,
-        }));
-      }
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
-        billDiscount,
-        billDiscountWithTax: billDiscountWithTaxInput || prev.billDiscountWithTax,
-        roundOff: roundOffType === "+" ? roundOff : -roundOff,
-        othercharge: otherChargeAmt,
-        OtherChargeRemark: otherChargeRemark,
-        totalAmount: finalGrandTotal,
-      }));
-    }
-  }, [
-    additionalCost,
-    additionalCostType,
+  //       setFormData(prev => ({
+  //         ...prev,
+  //         additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
+  //         billDiscount,
+  //         billDiscountWithTax: billDiscountWithTaxInput || prev.billDiscountWithTax,
+  //         roundOff: roundOffType === "+" ? roundOff : -roundOff,
+  //         othercharge: otherChargeAmt,
+  //         OtherChargeRemark: otherChargeRemark,
+  //         quotationDetails: updatedQuotationDetails,
+  //         totalAmount: finalGrandTotal,
+  //       }));
+  //     }
+  //   } else {
+  //     setFormData(prev => ({
+  //       ...prev,
+  //       additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
+  //       billDiscount,
+  //       billDiscountWithTax: billDiscountWithTaxInput || prev.billDiscountWithTax,
+  //       roundOff: roundOffType === "+" ? roundOff : -roundOff,
+  //       othercharge: otherChargeAmt,
+  //       OtherChargeRemark: otherChargeRemark,
+  //       totalAmount: finalGrandTotal,
+  //     }));
+  //   }
+  // }, [
+  //   additionalCost,
+  //   additionalCostType,
+  //   billDiscount,
+  //   billDiscountWithTaxInput,
+  //   roundOff,
+  //   roundOffType,
+  //   otherChargeAmt,
+  //   otherChargeRemark,
+  //   finalGrandTotal,
+  //   formData.quotationDetails,
+  // ]);
+
+  // REPLACE the existing large useEffect that calls distributeBillDiscount and setFormData
+useEffect(() => {
+  const details = detailesRef.current;
+  const currentLength = details ? details.length : 0;
+
+  const rowCountChanged = currentLength !== prevDetailsLengthRef.current;
+  prevDetailsLengthRef.current = currentLength;
+
+  // These scalar footer fields must ALWAYS be pushed to formData on every
+  // relevant change, regardless of whether the per-row distribution changed.
+  const baseUpdate = {
+    additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
     billDiscount,
-    billDiscountWithTaxInput,
-    roundOff,
-    roundOffType,
-    otherChargeAmt,
-    otherChargeRemark,
-    finalGrandTotal,
-    formData.quotationDetails,
-  ]);
+    roundOff: roundOffType === "+" ? roundOff : -roundOff,
+    othercharge: otherChargeAmt,
+    OtherChargeRemark: otherChargeRemark,
+    totalAmount: finalGrandTotal,
+  };
+
+  if (details && details.length > 0) {
+    const afterBillDisc = distributeBillDiscount(billDiscount, details);
+    const updatedQuotationDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
+
+    const detailsString = JSON.stringify(
+      updatedQuotationDetails.map(d => ({
+        b: d.billDiscOnProduct,
+        o: d.otherchargeonproduct
+      }))
+    );
+
+    // This only decides whether the per-row quotationDetails replacement is
+    // needed (to avoid unnecessary re-renders / effect loops). It must NOT
+    // gate the scalar fields above — that was the bug: roundOff, additionalCost,
+    // othercharge etc. were silently dropped whenever billDiscount and
+    // otherChargeAmt were both 0, because detailsString never changed in that case.
+    const distributionChanged = detailsString !== lastDistributedDetails.current || rowCountChanged;
+    if (distributionChanged) {
+      lastDistributedDetails.current = detailsString;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      ...baseUpdate,
+      billDiscountWithTax: billDiscountWithTaxInput || prev.billDiscountWithTax,
+      ...(distributionChanged ? { quotationDetails: updatedQuotationDetails } : {}),
+    }));
+  } else {
+    setFormData(prev => ({
+      ...prev,
+      ...baseUpdate,
+      billDiscountWithTax: billDiscountWithTaxInput || prev.billDiscountWithTax,
+    }));
+  }
+}, [
+  additionalCost,
+  additionalCostType,
+  billDiscount,
+  billDiscountWithTaxInput,
+  roundOff,
+  roundOffType,
+  otherChargeAmt,
+  otherChargeRemark,
+  finalGrandTotal,
+  formData.quotationDetails,
+]);
 
   // ── FIX 2: Re-distribute whenever a row is added or removed.
   //           Uses length comparison to avoid running on every keystroke.
@@ -474,12 +553,13 @@ const SalesQuotationFooterSection = ({ totals, formData, setFormData, otherCharg
                     <td className="px-2 py-1 border-l border-themed dark:border-themed">
                       <div className="flex items-center gap-1">
                         <input
-                          type="number"
+                          type="text"
                           value={billDiscountPerc}
                           onChange={(e) => handleBillDiscountPercChange(e.target.value)}
                           onFocus={handleSelectAll}
                           className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                           placeholder="%"
+                          disabled = {Number(totals?.grandTotal) <=0 }
                         />
                         <span className="text-secondary dark:text-secondary">%</span>
                       </div>
@@ -527,6 +607,7 @@ const SalesQuotationFooterSection = ({ totals, formData, setFormData, otherCharg
                         className="w-full bg-transparent focus:outline-none text-right"
                         placeholder="w/tax"
                         title="Discount amount from total including tax"
+                         disabled = {Number(totals?.grandTotal) <=0 }
                       />
                     </td>
                   )}
@@ -535,10 +616,15 @@ const SalesQuotationFooterSection = ({ totals, formData, setFormData, otherCharg
                   {saleSettings?.showBillDiscountAmount ? (
                     <td className="px-2 py-1 border-l border-themed dark:border-themed">
                       <input
-                        type="number"
+                        type="text"
                         value={billDiscount}
+                        min={0}
                         onChange={(e) => handleBillDiscountAmountChange(e.target.value)}
                         onFocus={handleSelectAll}
+                        onKeyDown={(e) => {
+                          if(e.key === "-" || e.key === "e") e.preventDefault()
+                        }}
+                       disabled = {Number(totals?.grandTotal) <=0 }
                         className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                         placeholder={t("salesInvoice.form.footerSection.paymentSummery.amntPlaceholder")}
                       />
@@ -573,7 +659,11 @@ const SalesQuotationFooterSection = ({ totals, formData, setFormData, otherCharg
                   <input
                     type="number"
                     value={otherChargeAmt}
-                    disabled={!selectedLedger}
+                    min={0}
+                    onKeyDown={(e) => {
+                      if(e.key === "-" || e.key === "+") e.preventDefault()
+                    }}
+                    disabled={!selectedLedger || Number(totals?.grandTotal) <=0 } 
                     className={`w-full bg-transparent text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none text-right ${!selectedLedger ? "opacity-40 cursor-not-allowed" : ""}`}
                     // REPLACE onChange on the Other Charge amount input
                     onChange={(e) => {
@@ -636,6 +726,7 @@ const SalesQuotationFooterSection = ({ totals, formData, setFormData, otherCharg
                         }
                       }}
                       onFocus={handleSelectAll}
+                       disabled = {Number(totals?.grandTotal) <=0 }
                       step={Math.pow(10, -(generalSettings?.RoundOffDigit ?? 2))}
                       className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                     />

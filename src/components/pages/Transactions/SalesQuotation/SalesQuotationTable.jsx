@@ -10,6 +10,7 @@ import PropTypes from 'prop-types';
 import ProductFormModal from '../../Master/multiMasterForms/Product/ProductFormModal';
 import { refreshProductsByType } from '@/redux/slice/productSlice';
 import EditProuctDetailsModal from '../SalesInvoice/EditProuctDetailsModal';
+import ProductQuotationHistoryModal from './ProductQuotationHistoryModal'
 const safeParsePrice = (val) => {
     if (val === null || val === undefined || val === '') return 0;
     if (typeof val === 'string' && val.trim().toLowerCase() === 'nan') return 0;
@@ -20,10 +21,7 @@ const safeDisplayValue = (value, decimalPart) => {
     const parsed = safeParsePrice(value);
     return parsed.toFixed(decimalPart || 2);
 };
-const safeDisplayValueCustom = (value, decimalPart) => {
-    const parsed = customRoundDecimal(value, decimalPart);
-    return parsed.toFixed(decimalPart);
-};
+
 // Add this utility function at the top of your file
 const customRoundDecimal = (value, decimalPart) => {
     if (value === null || value === undefined || value === '') return 0;
@@ -47,7 +45,7 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
     const [inputValues, setInputValues] = useState({});
     const dispatch = useDispatch()
     const [isTableFocused, setIsTableFocused] = useState(false);
-
+    const [showPurchaseRate, setShowPurchaseRate] = useState({});
     const shoBottomDeailsOnRow = saleSettings?.showProductDetails || false;
     const askConfirmationWithSameProduct = saleSettings?.askConfirmationWithSameProduct || false;
     const ledgerPricingAlert = saleSettings?.ledgerPricingAlert || 'cashCustomer';
@@ -69,7 +67,11 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
     const [pendingFocusField, setPendingFocusField] = useState('qty');
     // 🔧 FIX 2: Track first render to prevent pricingLevel useEffect from overwriting saved rates
     const isFirstRender = useRef(true);
-
+    const isTaxTypeFirstRender = useRef(true);
+    const [productModalRowId, setProductModalRowId] = useState(null);
+    const [selectedRowIdForEdit, setSelectedRowIdForEdit] = useState(null);
+    const [historyModalOpen, setHistoryModalOpen] = useState(false); // ← ADD THIS
+    const [historyProductCode, setHistoryProductCode] = useState(null); // ← ADD THIS
     // Helper function to calculate descAmt properly during edit mode initialization
     const calculateInitialDescAmt = (item) => {
         // 🔧 FIX 1: Check the correct API field name "discountAmount" FIRST
@@ -123,13 +125,13 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                 lineDiscountWithTax: item.lineDiscountWithTax || null,
                 taxRate: parseFloat(item.taxRate) || 0,
                 desc: parseFloat(item.discountPercentage) || 0,
-                descAmt: calculateInitialDescAmt(item),
-                grossAmount: parseFloat(item.grossAmount) || 0,  // ← NEW FIELD
-                netValue: parseFloat(item.netAmount) || 0,
+                descAmt: safeParsePrice(item.descAmt) || 0,
+                amount: parseFloat(item.amount) || 0,          // use saved value
+                netValue: parseFloat(item.netAmount) || 0,     // use saved value  
+                grossAmount: parseFloat(item.grossAmount) || 0, // use saved value
+                taxAmt: parseFloat(item.taxAmount) || 0,
                 tax: parseFloat(item.taxId) || 0,
                 taxId: item.taxId || null,
-                taxAmt: parseFloat(item.taxAmount) || 0,
-                amount: parseFloat(item.amount) || 0,
                 salesTaxes: item.salesTaxes || [],
                 taxType: item.taxType || 'Excluded',
                 salesManId: item.salesManId || formData.employeeId || null,
@@ -307,10 +309,12 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
         }
     }, [propRows, editMode]);
 
-    // Update initial focus useEffect
+    const hasDoneInitialFocus = useRef(false);
+
     useEffect(() => {
-        if (!editMode) {
+        if (!editMode && !hasDoneInitialFocus.current) {
             if (!productsLoading && allProducts?.length > 0) {
+                hasDoneInitialFocus.current = true; // mark done, never refocus row 1 again
                 const timer = setTimeout(() => {
                     const focusField = saleSettings?.focusAfterSalesRate === 'barcode' ? 'barcode' : 'productName';
                     focusInput(1, focusField);
@@ -319,6 +323,25 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
             }
         }
     }, [productsLoading, allProducts]);
+
+    const wasLoadingRef = useRef(false);
+
+    useEffect(() => {
+        if (productsLoading) {
+            wasLoadingRef.current = true;
+        }
+    }, [productsLoading]);
+
+    useEffect(() => {
+        if (pendingFocusRowId !== null && !productsLoading && wasLoadingRef.current) {
+            const id = pendingFocusRowId;
+            const field = pendingFocusField;
+            setPendingFocusRowId(null);
+            setPendingFocusField('qty');
+            wasLoadingRef.current = false;
+            requestAnimationFrame(() => focusInput(id, field));
+        }
+    }, [pendingFocusRowId, productsLoading]);
 
     const getEditableColumns = () => {
         const columns = ['barcode', 'productName', 'qty'];
@@ -420,7 +443,41 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
         }));
     };
 
+
+    useEffect(() => {
+        const handleGlobalKeyDown = (e) => {
+            if (e.key === 'F4') {
+                e.preventDefault();
+                if (focusedRowId) setShowPurchaseRate(prev => ({ ...prev, [focusedRowId]: !prev[focusedRowId] }));
+            }
+            // ← ADD THIS BLOCK
+            if (e.altKey && e.key === 'F1') {
+                e.preventDefault();
+                if (focusedRowId) {
+                    const currentRow = rows.find(r => r.id === focusedRowId);
+                    if (currentRow?.productCode) {
+                        setHistoryProductCode(currentRow.productDetails?.productCode || currentRow.productCode);
+                        setHistoryModalOpen(true);
+                    }
+                }
+            }
+            if (e.ctrlKey && e.key === 'F2') {
+                e.preventDefault();
+                if (focusedRowId) {
+                    const currentRow = rows.find(r => r.id === focusedRowId);
+                    if (currentRow?.productCode) {
+                        setSelectedProductCode(currentRow.productDetails?.productCode || currentRow.productCode);
+                        setSelectedRowIdForEdit(currentRow.id);
+                        setEditProductModalOpen(true);
+                    }
+                }
+            }
+        };
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }, [focusedRowId, rows]);
     const handleKeyDown = (e, rowId, currentField) => {
+
         if (currentField === 'barcode' && e.key === 'Enter') {
             e.preventDefault();
             const row = rows.find(r => r.id === rowId);
@@ -459,52 +516,52 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
             return;
         }
 
-      if (currentField === 'salesRate' && e.key === 'Enter') {
-    e.preventDefault();
-    const currentRowIndex = rows.findIndex(row => row.id === rowId);
-    const currentRow = rows[currentRowIndex];
+        if (currentField === 'salesRate' && e.key === 'Enter') {
+            e.preventDefault();
+            const currentRowIndex = rows.findIndex(row => row.id === rowId);
+            const currentRow = rows[currentRowIndex];
 
-    if (!currentRow.salesRate || parseFloat(currentRow.salesRate) <= 0) {
-        Swal.fire({
-            title: t("salesInvoice.alert.invalidSalesRatetitle") || "Invalid Sales Rate",
-            text: t("salesInvoice.alert.invalidSalesRatetext") || "Please enter a valid sales rate greater than 0",
-            icon: "warning",
-            confirmButtonColor: "#3085d6",
-            confirmButtonText: t("okBtn") || "OK",
-        });
-        return;
-    }
+            if (!currentRow.salesRate || parseFloat(currentRow.salesRate) <= 0) {
+                Swal.fire({
+                    title: t("salesInvoice.alert.invalidSalesRatetitle") || "Invalid Sales Rate",
+                    text: t("salesInvoice.alert.invalidSalesRatetext") || "Please enter a valid sales rate greater than 0",
+                    icon: "warning",
+                    confirmButtonColor: "#3085d6",
+                    confirmButtonText: t("okBtn") || "OK",
+                });
+                return;
+            }
 
-    // ✅ Commit salesRate inputValue before moving focus
-    const currentVal = inputValues[`${rowId}-salesRate`];
-    if (currentVal !== undefined) {
-        const committed = customRoundDecimal(currentVal, 2);
-        handleInputChange(rowId, 'salesRate', committed);
-        setInputValues(prev => {
-            const s = { ...prev };
-            delete s[`${rowId}-salesRate`];
-            return s;
-        });
-    }
+            // ✅ Commit salesRate inputValue before moving focus
+            const currentVal = inputValues[`${rowId}-salesRate`];
+            if (currentVal !== undefined) {
+                const committed = customRoundDecimal(currentVal, 2);
+                handleInputChange(rowId, 'salesRate', committed);
+                setInputValues(prev => {
+                    const s = { ...prev };
+                    delete s[`${rowId}-salesRate`];
+                    return s;
+                });
+            }
 
-    if (currentRowIndex < rows.length - 1) {
-        const nextRowId = rows[currentRowIndex + 1].id;
-        if (saleSettings?.focusAfterSalesRate === 'productName') {
-            focusInput(nextRowId, 'productName');
-        } else if (saleSettings?.focusAfterSalesRate === 'barcode') {
-            focusInput(nextRowId, 'barcode');
-        } else {
-            focusInput(nextRowId, 'productName');
+            if (currentRowIndex < rows.length - 1) {
+                const nextRowId = rows[currentRowIndex + 1].id;
+                if (saleSettings?.focusAfterSalesRate === 'productName') {
+                    focusInput(nextRowId, 'productName');
+                } else if (saleSettings?.focusAfterSalesRate === 'barcode') {
+                    focusInput(nextRowId, 'barcode');
+                } else {
+                    focusInput(nextRowId, 'productName');
+                }
+            } else {
+                addRow();
+                setTimeout(() => {
+                    const newRowId = rows.length + 1;
+                    focusInput(newRowId, 'productName');
+                }, 0);
+            }
+            return;
         }
-    } else {
-        addRow();
-        setTimeout(() => {
-            const newRowId = rows.length + 1;
-            focusInput(newRowId, 'productName');
-        }, 0);
-    }
-    return;
-}
         if (currentField === 'productName' && activeSuggestionRow === rowId && suggestions[rowId]?.length > 0) {
             const currentIndex = selectedSuggestionIndex[rowId] ?? -1;
             const maxIndex = suggestions[rowId].length - 1;
@@ -544,7 +601,13 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                     break;
             }
         }
-
+        if (currentField === 'productName' && e.key === 'Enter') {
+            const row = rows.find(r => r.id === rowId);
+            if (!row?.productCode || row.productCode.trim() === '') {
+                e.preventDefault();
+                return; // do nothing — don't create a new row, don't move focus
+            }
+        }
         const editableColumns = getEditableColumns();
         const currentRowIndex = rows.findIndex(row => row.id === rowId);
         const currentFieldIndex = editableColumns.indexOf(currentField);
@@ -650,8 +713,8 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
             productNameArb: row.productNameArb || '',
             qty: row.qty || null,
             freeQty: row.freeQty || null,
-            rate: row.salesRateWithoutTax ? parseFloat(Number(row.salesRateWithoutTax).toFixed(4)) : null,
-            inclusiveRate: row.salesRate ? parseFloat(Number(row.salesRate).toFixed(2)) : null,
+            rate: row.salesRateWithoutTax ? parseFloat(Number(row.salesRateWithoutTax)) : null,
+            inclusiveRate: row.salesRate ? parseFloat(Number(row.salesRate)) : null,
             lineDiscountWithTax: row.lineDiscountWithTax || null,
             unitId: row.unit || null,
             unitName: row.productDetails?.UnitName || '',
@@ -694,6 +757,7 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
             totalDiscount: totalDiscount.toFixed(generalSettings.decimalPart)
         }));
     }, [rows, selectedBranchId]);
+
     useEffect(() => {
         const handleGlobalKeyDown = (e) => {
 
@@ -703,6 +767,7 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                     const currentRow = rows.find(r => r.id === focusedRowId);
                     if (currentRow?.productCode) {
                         setSelectedProductCode(currentRow.productDetails?.productCode || currentRow.productCode);
+                        setSelectedRowIdForEdit(currentRow.id);
                         setEditProductModalOpen(true);
                     }
                 }
@@ -818,8 +883,11 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
             console.error("Error fetching tax:", err);
         }
     };
-
     useEffect(() => {
+        if (isTaxTypeFirstRender.current) {
+            isTaxTypeFirstRender.current = false;
+            return;
+        }
         setRows(prevRows => prevRows.map(row => {
             if (!row.productCode) return row;
 
@@ -881,23 +949,23 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                 return calculateRow({ ...row, salesRate: beforeTaxRate });
             }
 
-            const derivedSalesRate = generalSettings?.taxincluded === true
-                ? beforeTaxRate * taxMultiplier
-                : beforeTaxRate;
+            // beforeTax is always ex-tax, so always multiply up to get inclusive rate
+            const derivedSalesRate = Math.round(beforeTaxRate * taxMultiplier * 1e10) / 1e10;
 
-            return calculateRow({ ...row, salesRate: parseFloat(derivedSalesRate) });
+            return calculateRow({ ...row, salesRate: derivedSalesRate });
         }
-        // REPLACE the rateWithoutTax block in calculateRow
 
-      const rateWithoutTax = (row.salesRateWithoutTax && safeParsePrice(row.salesRateWithoutTax) > 0 && updatedField !== 'salesRate' && updatedField !== 'beforeTax')
-    ? safeParsePrice(row.salesRateWithoutTax)
-    : (!taxApplicable || taxMultiplier === 0)
-        ? salesRate
-        : parseFloat(((salesRate * 100) / (100 + taxPercentage)).toFixed(generalSettings?.decimalPart || 4));
+        const rateWithoutTax = (safeParsePrice(row.salesRateWithoutTax) > 0
+            && updatedField !== 'salesRate'
+            && updatedField !== 'beforeTax'
+            && updatedField !== 'amount')
+            ? safeParsePrice(row.salesRateWithoutTax)
+            : (!taxApplicable || taxMultiplier === 0)
+                ? salesRate
+                : parseFloat(((salesRate * 100) / (100 + taxPercentage)));
 
         salesRateWithoutTax = safeParsePrice(rateWithoutTax);
 
-        salesRateWithoutTax = safeParsePrice(rateWithoutTax);
         if (updatedField === 'amount') {
             const inputAmount = parseFloat(row.amount) || 0;
             if (qty <= 0) return row;
@@ -927,13 +995,15 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
                     salesRate: parseFloat(calculatedSalesRate),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax),
-                    grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),  // ← NEW
+                    // ✅ FIX: use freshly computed rateWithoutTaxCalc, not the stale outer rateWithoutTax
+                    salesRateWithoutTax: Math.round(rateWithoutTaxCalc * 1e10) / 1e10,
+                    grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
-                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2))
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
             } else {
                 const netValueAfterBillDisc = inputAmount / taxMultiplier;
@@ -947,25 +1017,28 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
 
                 netValue = netValueBeforeBillDisc;
                 gross = netValue + existingDescAmt;
-                netValue = netValueBeforeBillDisc;
-                gross = netValue + existingDescAmt;
-                const calculatedSalesRate = qty > 0 ? gross / qty : 0;
-                salesRateWithoutTax = calculatedSalesRate;
                 descPercentage = gross > 0 ? (existingDescAmt / gross) * 100 : 0;
+
+                // ✅ FIX: name honestly as the ex-tax rate, derive the inclusive rate from it
+                const calculatedRateWithoutTax = qty > 0 ? gross / qty : 0;
+                const calculatedSalesRate = calculatedRateWithoutTax * taxMultiplier;
+                salesRateWithoutTax = calculatedRateWithoutTax;
 
                 return {
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
+                    // ✅ FIX: salesRate is now truly the inclusive rate
                     salesRate: parseFloat(calculatedSalesRate),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax),
-                    grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),  // ← NEW
+                    // ✅ FIX: use the freshly computed ex-tax rate, not the stale outer one
+                    salesRateWithoutTax: Math.round(calculatedRateWithoutTax * 1e10) / 1e10,
+                    grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
                     billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
                     otherchargeonproduct: parseFloat(otherChargeOnProduct.toFixed(generalSettings?.decimalPart || 2)),
-
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
             }
         }
@@ -1016,16 +1089,18 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
         return {
             ...row,
             desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
-            grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),  // ← NEW
+            grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
             netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
             taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
             amount: parseFloat(amount.toFixed(generalSettings?.decimalPart || 2)),
             descAmt: parseFloat(descAmt.toFixed(generalSettings?.decimalPart || 2)),
-            salesRateWithoutTax: parseFloat(salesRateWithoutTax),
+            salesRateWithoutTax: Math.round(rateWithoutTax * 1e10) / 1e10,
             billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
             otherchargeonproduct: parseFloat(otherChargeOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+            lineDiscountWithTax: taxApplicable ? parseFloat((descAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
         };
     };
+
 
     const validateSalesPrice = (price, row) => {
         const action = saleSettings?.ledgerPricingAlertAction || 'block'; // default to 'block'
@@ -1214,14 +1289,6 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
         }
     }, [rows, pendingFocusBarcodeRowId]);
 
-    useEffect(() => {
-        if (pendingFocusRowId !== null) {
-            focusInput(pendingFocusRowId, pendingFocusField);
-            setPendingFocusRowId(null);
-            setPendingFocusField('qty');
-        }
-    }, [rows, pendingFocusRowId]);
-
 
     const selectProduct = async (rowId, product, selectedUnitId) => {
         try {
@@ -1301,7 +1368,7 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                 salesRateWithoutTax = taxMultiplier !== 0 ? productPrice / taxMultiplier : productPrice;
             } else {
                 salesRateWithoutTax = productPrice;
-                salesRate = parseFloat((productPrice * (1 + (taxRate / 100))).toFixed(generalSettings?.decimalPart || 2));
+                salesRate = parseFloat((productPrice * (1 + (taxRate / 100))));
             }
 
 
@@ -1510,7 +1577,7 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
             } else {
                 // Product price is tax-excluded
                 salesRateWithoutTax = productPrice;
-                salesRate = parseFloat((productPrice * (1 + (taxRate / 100))).toFixed(generalSettings?.decimalPart || 2));
+                salesRate = parseFloat((productPrice * (1 + (taxRate / 100))));
             }
 
             const updatedRows = rows.map((row) => {
@@ -1625,22 +1692,13 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
         }
     };
 
-    const handleProductUpdate = (productCode, updatedDescription) => {
-        setRows(prevRows =>
-            prevRows.map(row =>
-                row.productDetails.productCode === productCode
-                    ? {
-                        ...row,
-                        productDetails: {
-                            ...row.productDetails,
-                            productDescription: updatedDescription
-                        }
-                    }
-                    : row
-            )
-        );
+    const handleProductUpdate = (rowId, updatedDescription) => {
+        setRows(prevRows => prevRows.map(row =>
+            row.id === rowId
+                ? { ...row, productDetails: { ...row.productDetails, productDescription: updatedDescription } }
+                : row
+        ));
     };
-
     useEffect(() => {
         if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
             const suggestionContainer = suggestionRef.current;
@@ -1709,12 +1767,12 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
 
         setRows(updatedRows);
 
-     if (field !== 'productName' && id === rows[rows.length - 1].id && value !== '' && value !== 0 && !isUpdatingFromDuplicate) {
-    const lastRow = rows[rows.length - 1];
-    if (lastRow.productName && lastRow.productName.trim() !== '') {
-        addRow();
-    }
-}
+        if (field !== 'productName' && id === rows[rows.length - 1].id && value !== '' && value !== 0 && !isUpdatingFromDuplicate) {
+            const lastRow = rows[rows.length - 1];
+            if (lastRow.productName && lastRow.productName.trim() !== '') {
+                addRow();
+            }
+        }
     };
 
 
@@ -2143,7 +2201,11 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                     {saleSettings.showProductDescription && (
                                                         <div className='cursor-pointer'>
                                                             <EllipsisVertical
-                                                                onClick={() => { setSelectedProductCode(row.productDetails.productCode); setEditProductModalOpen(true); }}
+                                                                onClick={() => {
+                                                                    setSelectedProductCode(row.productDetails.productCode);
+                                                                    setSelectedRowIdForEdit(row.id);
+                                                                    setEditProductModalOpen(true);
+                                                                }}
                                                                 className="text-secondary dark:text-secondary"
                                                             />
                                                         </div>
@@ -2228,13 +2290,13 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
 
                                                     // Find the product entry matching BOTH productCode AND the selected unitId
                                                     const productForUnit = allProducts.find(
-                                                        p => p.productCode === row.productCode && p.unitId === selectedUnitId
+                                                        p => p.productCode === row.productCode && (p.unitId || p.unitid) === selectedUnitId
                                                     );
                                                     // Fallback to any entry with matching productCode
                                                     const product = productForUnit || allProducts.find(p => p.productCode === row.productCode);
 
                                                     if (product) {
-                                                        const selectedUnit = row.availableUnits?.find(u => u.unitId === selectedUnitId);
+                                                        const selectedUnit = row.availableUnits?.find(u => (u.unitId || u.unitid) === selectedUnitId);
 
                                                         // conversionRate comes from the matched product entry, not from selectedUnit
                                                         const conversionFactor = safeParsePrice(productForUnit?.conversionRate || product.conversionRate || 1);
@@ -2276,7 +2338,7 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                             productDetails: {
                                                                 ...row.productDetails,
                                                                 barcode: product.barcode || row.productDetails.barcode,
-                                                                UnitName: selectedUnit?.unitName || row.productDetails.UnitName
+                                                                UnitName: selectedUnit?.unitName || selectedUnit?.unitname || selectedUnit?.UnitName || row.productDetails.UnitName
                                                             }
                                                         };
                                                         updatedRow = calculateRow(updatedRow);
@@ -2288,8 +2350,8 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                 className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded  disabled:text-gray-500 disabled:cursor-not-allowed"
                                             >
                                                 {row.availableUnits?.map((unit) => (
-                                                    <option key={unit.unitId} value={unit.unitId}>
-                                                        {unit.unitName || unit.unitname}
+                                                    <option key={unit.unitId || unit.unitid} value={unit.unitId || unit.unitid}>
+                                                        {unit.unitName || unit.unitname || unit.UnitName}
                                                     </option>
                                                 ))}
                                             </select>
@@ -2302,13 +2364,13 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                 value={
                                                     inputValues[`${row.id}-beforeTax`] !== undefined
                                                         ? inputValues[`${row.id}-beforeTax`]
-                                                        : safeDisplayValueCustom(row.salesRateWithoutTax, 4)  // ← instead of Number(...).toFixed(4)
+                                                        : row.salesRateWithoutTax  // ← instead of Number(...).toFixed(4)
                                                 }
                                                 onFocus={(e) => {
                                                     handleInputFocus(row.id);
                                                     setInputValues(prev => ({
                                                         ...prev,
-                                                        [`${row.id}-beforeTax`]: safeDisplayValueCustom(row.salesRateWithoutTax, 4)  // ← fix here too
+                                                        [`${row.id}-beforeTax`]: row.salesRateWithoutTax  // ← fix here too
                                                     }));
                                                     setTimeout(() => e.target.select(), 0);
                                                 }}
@@ -2318,10 +2380,10 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                         ? value.slice(0, value.lastIndexOf('.'))
                                                         : value;
                                                     setInputValues(prev => ({ ...prev, [`${row.id}-beforeTax`]: validValue }));
-                                                    handleInputChange(row.id, 'beforeTax', customRoundDecimal(validValue, 4));  // ← use customRoundDecimal
+                                                    handleInputChange(row.id, 'beforeTax', validValue);  // ← use customRoundDecimal
                                                 }}
                                                 onBlur={(e) => {
-                                                    const value = customRoundDecimal(e.target.value, 4);  // ← use customRoundDecimal
+                                                    const value = e.target.value;  // ← use customRoundDecimal
                                                     handleInputChange(row.id, 'beforeTax', value);
                                                     setInputValues(prev => {
                                                         const s = { ...prev };
@@ -2350,7 +2412,7 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                     }}
                                                     value={inputValues[`${row.id}-salesRate`] !== undefined
                                                         ? inputValues[`${row.id}-salesRate`]
-                                                        : Number(row.salesRate).toFixed(2)}  // ← 2 decimal places
+                                                        : Number(row.salesRate)}  // ← 2 decimal places
                                                     onKeyDown={(e) => {
                                                         if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                                                             handleKeyDown(e, row.id, 'salesRate');
@@ -2366,7 +2428,7 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                         handleInputChange(row.id, 'salesRate', numValue || 0);
                                                     }}
                                                     onBlur={(e) => {
-                                                        const value = customRoundDecimal(e.target.value, 2);
+                                                        const value = e.target.value;
                                                         const validation = validateSalesPrice(value, row);
 
                                                         // Handle based on action type
@@ -2502,8 +2564,16 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                                     const valid = raw.split('.').length > 2
                                                                         ? raw.slice(0, raw.lastIndexOf('.'))
                                                                         : raw;
-                                                                    setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: valid }));
-                                                                    handleLineDiscWithTaxChange(row.id, valid);
+
+                                                                    // ── NEW: cap to gross (with tax) ──
+                                                                    const grossWithTax = safeParsePrice(row.qty) * safeParsePrice(row.salesRate);
+                                                                    let num = safeParsePrice(valid);
+                                                                    if (num > grossWithTax) num = grossWithTax;
+                                                                    const finalValue = num.toString();
+                                                                    // ── END NEW ──
+
+                                                                    setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: finalValue }));
+                                                                    handleLineDiscWithTaxChange(row.id, finalValue);
                                                                 }}
                                                                 onBlur={(e) => {
                                                                     handleLineDiscWithTaxChange(row.id, safeParsePrice(e.target.value));
@@ -2530,6 +2600,9 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                 <span className="text-sm font-medium text-primary">
                                                     {row.netValue.toFixed(generalSettings.decimalPart)}
                                                 </span>
+                                                {showPurchaseRate[row.id] && row.purchaseRate !== undefined && row.purchaseRate !== null && (
+                                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">PRate: {safeDisplayValue(row.purchaseRate, generalSettings.decimalPart)}</span>
+                                                )}
                                             </div>
                                         </td>
 
@@ -2671,7 +2744,7 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                                 <div className="w-px bg-gray-300 dark:bg-gray-600" />
                                 <div className="flex flex-col items-end gap-0.5">
                                     <span className="text-muted dark:text-muted font-medium">
-                                        {isLoss ? 'Loss' : 'Profit'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                        {isLoss ? 'Loss' : 'Pf value'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                                             {profit.toFixed(generalSettings?.decimalPart || 2)}
                                         </span>
                                         <span className={`text-xs ${isLoss ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`}>
@@ -2713,14 +2786,15 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                 open={editProductModalOpen}
                 handleClose={() => {
                     setEditProductModalOpen(false);
+                    setSelectedRowIdForEdit(null);
                     if (focusedRowId) focusInput(focusedRowId, 'productName');
                 }}
                 productCode={selectedProductCode}
                 initialDescription={
-                    rows.find(r => r.productDetails?.productCode === selectedProductCode)
+                    rows.find(r => r.id === selectedRowIdForEdit)
                         ?.productDetails?.productDescription || ''
                 }
-                onSuccess={(updatedDescription) => handleProductUpdate(selectedProductCode, updatedDescription)}
+                onSuccess={(updatedDescription) => handleProductUpdate(selectedRowIdForEdit, updatedDescription)}
             />
             <SalesQuotationFooterSection
                 totals={totals}
@@ -2731,15 +2805,33 @@ const SalesQuotationTable = ({ formData, setFormData, editMode, rows: propRows, 
                 isTableFocused={isTableFocused}
                 onFocus={() => setIsTableFocused(true)}
             />
+            <ProductQuotationHistoryModal
+                open={historyModalOpen}
+                handleClose={() => {
+                    setHistoryModalOpen(false);
+                    setHistoryProductCode(null);
+                    if (focusedRowId) focusInput(focusedRowId, 'productName');
+                }}
+                productCode={historyProductCode}
+                ledgerId={formData.ledgerId}
+            />
             <ProductFormModal
                 open={productModalOpen}
-                onClose={() => setProductModalOpen(false)}
+                onClose={() => {
+                    setProductModalOpen(false);
+                    setProductModalRowId(null); // ✅ clear on cancel too
+                }}
                 productCode={null}
                 viewMode={false}
                 modalMode={true}
                 onSuccess={() => {
                     setProductModalOpen(false);
-                    dispatch(refreshProductsByType('sales'))
+                    dispatch(refreshProductsByType('sales'));
+                    if (productModalRowId !== null) {
+                        setPendingFocusField('productName');
+                        setPendingFocusRowId(productModalRowId);
+                    }
+                    setProductModalRowId(null); // ✅ clear immediately after reading it here too
                 }}
             />
         </div>
@@ -2800,3 +2892,4 @@ SalesQuotationTable.defaultProps = {
     editMode: false,
     rows: [],
 };
+

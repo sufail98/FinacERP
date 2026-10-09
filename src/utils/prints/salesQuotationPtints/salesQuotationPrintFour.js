@@ -200,6 +200,9 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
     
     const state = store.getState().settings;
     const generalSettings = state.generalSettings;
+    const saleSettings = state.saleSettings;
+      const activateRoundoff = Boolean(generalSettings.RoundOff)
+const showLineDiscount = saleSettings?.showLineDiscount || false;  
     
     // ✅ Get letterhead paths
     const LETTERHEAD_IMAGE_PATH = generalSettings?.CompanyLetterPad || '';
@@ -226,7 +229,7 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
         customerName,
         CustomerVATNo,
         salesDetails = [],
-        subTotal = 0,
+        taxableAmt = 0,
         billDiscount = 0,
         totalTax = 0,
         totalAmount = 0,
@@ -246,6 +249,15 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
         IncoTerms = '',
         salesMan = '',
     } = invoiceData;
+
+    const calcLineDiscount = (item) => {
+    const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    const grossAmt = qty * rate;
+    const discPercent = Number(item.discountPercentage || 0);
+    const discAmt = grossAmt * (discPercent / 100);
+    return discAmt;
+};
 
     // ✅ Dynamic padding based on mode
     const HEADER_PAD = useFullLetterhead ? '140px' : (useSeparateHeaderFooter ? '160px' : '20px');
@@ -286,6 +298,18 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
                 ` : ''}
 
                 <div class="content-wrapper" style="padding-top: ${HEADER_PAD}; padding-bottom: ${FOOTER_PAD};">
+                    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', { 
+                day: '2-digit', 
+                month: 'short', 
+                year: 'numeric' 
+            })} ${new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            })}</div>
+        </div>
                     ${isFirstPage ? `
                   
                     <div class="invoice-header-row">
@@ -407,6 +431,10 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
                         <div class="col-unit">وحدة<br>Unit</div>
                         <div class="col-qty">الكمية<br>Qty</div>
                         <div class="col-rate">سعر الوحدة<br>Rate</div>
+                        ${showLineDiscount ? `
+    <div class="col-disc-percent">خصم %<br>Disc %</div>
+    <div class="col-disc-amt">مبلغ الخصم<br>Disc Amt</div>
+    ` : ''}
                         <div class="col-total">المجموع<br>Net Value</div>
                         <div class="col-vat">ضريبة<br>VAT%</div>
                         <div class="col-vat-amt">مبلغ ضريبة<br>VAT Amount</div>
@@ -416,6 +444,19 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
                     <div class="product-rows">
                         ${pageProducts.length > 0 ? pageProducts.map((item, index) => {
                             const globalIndex = pageStartIndex + index;
+
+                             const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    const grossAmt = qty * rate;
+    const discPercent = Number(item.discountPercentage || 0);
+    const discAmt = calcLineDiscount(item);
+    const netAmt = grossAmt - discAmt;
+
+    const taxRate = Number(item.taxRate || 0);
+    const hasDiscount = showLineDiscount && discAmt > 0;
+    const lineTaxAmt = hasDiscount ? (netAmt * taxRate) / 100 : (Number(item.taxAmount) || 0);
+    const lineTotal = hasDiscount ? (netAmt + lineTaxAmt) : (Number(item.amount) || 0);
+
                             return `
                                 <div class="product-row">
                                     <div class="col-no">${globalIndex + 1}</div>
@@ -427,6 +468,10 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
                                     <div class="col-unit">${item.unitName || 'PCS'}</div>
                                     <div class="col-qty">${item.qty || 0}</div>
                                     <div class="col-rate">${Number(item.rate || 0).toFixed(generalSettings.decimalPart)}</div>
+                                     ${showLineDiscount ? `
+            <div class="col-disc-percent">${discPercent.toFixed(2)}%</div>
+            <div class="col-disc-amt">${discAmt.toFixed(generalSettings.decimalPart)}</div>
+            ` : ''}
                                     <div class="col-total">${Number((item.qty || 0) * (item.rate || 0)).toFixed(generalSettings.decimalPart)}</div>
                                     <div class="col-vat">${item.taxRate || 0}%</div>
                                     <div class="col-vat-amt">${Number(item.taxAmount || 0).toFixed(generalSettings.decimalPart)}</div>
@@ -449,36 +494,39 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
                             <table class="summary-table">
                                 <tr>
                                     <td class="summary-label">Total excl. VAT (SAR):</td>
-                                    <td class="summary-value">${fmt(subTotal)}</td>
+                                    <td class="summary-value">${fmt(taxableAmt)}</td>
                                     <td class="summary-label-ar">الإجمالي غير شامل ضريبة القيمة المضافة</td>
                                 </tr>
-                                ${parseFloat(billDiscount) > 0 ? `
-                                <tr>
-                                    <td class="summary-label">Discount (SAR):</td>
-                                    <td class="summary-value">${fmt(billDiscount)}</td>
-                                    <td class="summary-label-ar">الخصم</td>
-                                </tr>
-                                ` : ''}
-                                ${parseFloat(othercharge) > 0 ? `
+                                ${Number(othercharge) !== 0 ? `
                                 <tr>
                                     <td class="summary-label">Other Charges (SAR):</td>
                                     <td class="summary-value">${fmt(othercharge)}</td>
                                     <td class="summary-label-ar">رسوم أخرى</td>
                                 </tr>
                                 ` : ''}
-                                ${parseFloat(additionalCost) > 0 ? `
+                                ${((saleSettings?.showBillDiscountAmount || saleSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0) ? `
                                 <tr>
-                                    <td class="summary-label">Additional Cost (SAR):</td>
-                                    <td class="summary-value">${fmt(additionalCost)}</td>
-                                    <td class="summary-label-ar">تكلفة إضافية</td>
+                                    <td class="summary-label">Discount (SAR):</td>
+                                    <td class="summary-value">${fmt(billDiscount)}</td>
+                                    <td class="summary-label-ar">الخصم</td>
                                 </tr>
                                 ` : ''}
+                                
+                                 <tr>
+                                            <td class="summary-label">Taxable Amount:</td>
+                                            <td class="summary-value" >${fmt(
+                                                Number(taxableAmt || 0) -
+                                                Number(billDiscount || 0) +
+                                                Number(othercharge || 0)
+                                            )}</td>
+                                              <td class="summary-label-ar">للضريبة المبلغ الخاضع </td>
+                                        </tr>
                                 <tr>
                                     <td class="summary-label">VAT Amount (SAR):</td>
                                     <td class="summary-value">${fmt(totalTax)}</td>
                                     <td class="summary-label-ar">ضريبة القيمة المضافة</td>
                                 </tr>
-                                ${parseFloat(roundOff) !== 0 ? `
+                                ${activateRoundoff && Number(roundOff) !== 0 ? `
                                 <tr>
                                     <td class="summary-label">Round Off (SAR):</td>
                                     <td class="summary-value">${fmt(roundOff)}</td>
@@ -621,7 +669,46 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
         page-break-after: always;
     }
     .page:last-child { margin-bottom: 0; }
+.print-timestamp {
+    position: absolute;
+    bottom: 15mm;
+    right: 3mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
 
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
     /* ✅ Full Letterhead background */
     .letterhead-bg {
         position: absolute;
@@ -744,12 +831,14 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
     }
 
     .product-header {
-        display: grid;
-        grid-template-columns: 28px 55px auto 38px 35px 50px 50px 38px 50px 50px;
-        gap: 0;
-        background: #c0c0c0;
-        border-bottom: 1px solid gray;
-        padding: 0;
+          display: grid;
+    grid-template-columns: ${showLineDiscount
+        ? '28px 55px auto 38px 35px 50px 40px 50px 50px 38px 50px 50px'
+        : '28px 55px auto 38px 35px 50px 50px 38px 50px 50px'};
+    gap: 0;
+    background: #c0c0c0;
+    border-bottom: 1px solid gray;
+    padding: 0;
     }
 
     .product-header > div {
@@ -770,11 +859,13 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
     }
 
     .product-row {
-        display: grid;
-        grid-template-columns: 28px 55px auto 38px 35px 50px 50px 38px 50px 50px;
-        gap: 0;
-        padding: 0;
-        border-bottom: none;
+      display: grid;
+    grid-template-columns: ${showLineDiscount
+        ? '28px 55px auto 38px 35px 50px 40px 50px 50px 38px 50px 50px'
+        : '28px 55px auto 38px 35px 50px 50px 38px 50px 50px'};
+    gap: 0;
+    padding: 0;
+    border-bottom: none;
     }
 
     .product-row > div {
@@ -829,14 +920,26 @@ const generateQuotationHTML = async (invoiceData, branchData, time, currentCurre
     }
 
     .col-rate {
-        text-align: right;
-        width: 50px;
-    }
+    text-align: right;
+    width: 50px;
+}
 
-    .col-total {
-        text-align: right;
-        width: 50px;
-    }
+.col-disc-percent { 
+    text-align: center;
+    width: 40px;
+}
+
+.col-disc-amt {       
+    text-align: right;
+    width: 50px;
+}
+
+.col-total {
+    text-align: right;
+    width: 50px;
+}
+
+    
 
     .col-vat {
         text-align: center;

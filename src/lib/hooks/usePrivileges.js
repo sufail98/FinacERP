@@ -14,22 +14,22 @@ const usePrivileges = (pageName) => {
       try {
         setLoading(true);
 
-        if (user?.UserRoleId == 1) {
+        // if (user?.UserRoleId == 1) {
           
-          setPrivileges({
-            can_all: true,
-            can_view: true,
-            can_add: true,
-            can_edit: true,
-            can_delete: true,
-            can_post: true,
-            can_home: true,
-          });
-          setHasAccess(true);
-          setMessage("");
-          setLoading(false);
-          return;
-        }
+        //   setPrivileges({
+        //     can_all: true,
+        //     can_view: true,
+        //     can_add: true,
+        //     can_edit: true,
+        //     can_delete: true,
+        //     can_post: true,
+        //     can_home: true,
+        //   });
+        //   setHasAccess(true);
+        //   setMessage("");
+        //   setLoading(false);
+        //   return;
+        // }
 
         // ✅ Otherwise check privileges normally
         const priv = await checkPageAccess(pageName, user?.UserRoleId);

@@ -39,9 +39,9 @@ const ProformaInvoiceDetailedReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -69,7 +69,7 @@ const ProformaInvoiceDetailedReport = () => {
         try {
             const [customersRes, costCentreRes, usersRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Customer"],
+                    ledgerTypes: ["Customer","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("cost-centres").catch(() => ({ data: { data: [] } })),
@@ -184,7 +184,7 @@ const ProformaInvoiceDetailedReport = () => {
         { key: 'OrderNo', label: t('Proforma No'), align: 'center', width: '120' },
         { key: 'Ledger', label: t('Customer'), align: 'left', width: '180' },
         { key: 'CostCentre', label: t('Cost Centre'), align: 'left', width: '120' },
-        { key: 'TotalAmount', label: t('Total Amount'), align: 'right', width: '120' },
+        // { key: 'TotalAmount', label: t('Net Amount'), align: 'right', width: '120' },
         { key: 'BillDiscount', label: t('Discount'), align: 'right', width: '100' },
         { key: 'TaxableAmt', label: t('Taxable Amount'), align: 'right', width: '120' },
         { key: 'TotalTax', label: t('Tax Amount'), align: 'right', width: '120' },
@@ -204,7 +204,7 @@ const ProformaInvoiceDetailedReport = () => {
         { key: 'qty', label: t('Qty'), align: 'right', width: '80' },
         { key: 'rate', label: t('Rate'), align: 'right', width: '100' },
         { key: 'grossAmount', label: t('Gross Amount'), align: 'right', width: '120' },
-        { key: 'netAmount', label: t('Net Amount'), align: 'right', width: '120' },
+        // { key: 'netAmount', label: t('Net Amount'), align: 'right', width: '120' },
         { key: 'taxAmount', label: t('Tax Amount'), align: 'right', width: '120' },
         { key: 'amount', label: t('Total Amount'), align: 'right', width: '120' },
         { key: 'Status', label: t('Status'), align: 'center', width: '100' }

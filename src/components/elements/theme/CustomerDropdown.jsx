@@ -26,111 +26,103 @@ const CustomerDropdown = ({
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Advanced search matching function
-  const advancedMatch = (text, searchQuery) => {
-    if (!text || !searchQuery) return false;
+  // Returns a match "score" for ranking, or -1 if no match at all.
+  // Lower score = better/more relevant match.
+  const getMatchScore = (text, searchQuery) => {
+    if (!text) return -1;
+    if (!searchQuery) return 0;
 
     const normalizedText = text.toLowerCase().trim();
     const normalizedQuery = searchQuery.toLowerCase().trim();
 
-    // Direct substring match
-    if (normalizedText.includes(normalizedQuery)) return true;
+    if (!normalizedQuery) return 0;
 
-    // Remove spaces and check continuous match (e.g., "mohammedshamil")
+    // 0: exact match
+    if (normalizedText === normalizedQuery) return 0;
+
+    // 1: text starts with query (e.g. "lamar" -> "lamar saudi trading company")
+    if (normalizedText.startsWith(normalizedQuery)) return 1;
+
+    // 2: a word inside the text starts with the query (e.g. "trading lamar" -> "lamar")
+    const words = normalizedText.split(/\s+/);
+    if (words.some(w => w.startsWith(normalizedQuery))) return 2;
+
+    // 3: plain substring match anywhere
+    if (normalizedText.includes(normalizedQuery)) return 3;
+
+    // 4: no-space substring match (e.g. "mohammedshamil")
     const textNoSpaces = normalizedText.replace(/\s+/g, '');
     const queryNoSpaces = normalizedQuery.replace(/\s+/g, '');
-    if (textNoSpaces.includes(queryNoSpaces)) return true;
+    if (queryNoSpaces.length >= 3 && textNoSpaces.includes(queryNoSpaces)) return 4;
 
-    // Split text into words
-    const words = normalizedText.split(/\s+/);
-
-    // Check if query matches initials (e.g., "M S" or "MS" for "Mohammed Shamil")
+    // 5: initials match (e.g. "ms" or "m s" -> "Mohammed Shamil")
     const initials = words.map(w => w[0]).join('');
-    const initialsWithSpaces = words.map(w => w[0]).join(' ');
-    if (initials.includes(queryNoSpaces) || initialsWithSpaces.includes(normalizedQuery)) return true;
+    if (queryNoSpaces.length >= 2 && initials.includes(queryNoSpaces)) return 5;
 
-    // Check partial initials with full words (e.g., "M Shamil" for "Mohammed Shamil")
-    const queryParts = normalizedQuery.split(/\s+/);
+    // 6: multi-word query where each part matches the start of a word in order
+    // (e.g. "m shamil" -> "Mohammed Shamil")
+    const queryParts = normalizedQuery.split(/\s+/).filter(Boolean);
     if (queryParts.length > 1) {
-      // Try to match each part against words or initials
-      let allPartsMatch = true;
       let wordIndex = 0;
-
-      for (let i = 0; i < queryParts.length; i++) {
-        const part = queryParts[i];
+      let allPartsMatch = true;
+      for (const part of queryParts) {
         let partMatched = false;
-
-        // Try to find a word that matches this part
         for (let j = wordIndex; j < words.length; j++) {
-          // Full word match
           if (words[j].startsWith(part)) {
             partMatched = true;
             wordIndex = j + 1;
             break;
           }
-          // Initial match (single character query part)
-          if (part.length === 1 && words[j][0] === part) {
-            partMatched = true;
-            wordIndex = j + 1;
-            break;
-          }
         }
-
         if (!partMatched) {
           allPartsMatch = false;
           break;
         }
       }
-
-      if (allPartsMatch) return true;
+      if (allPartsMatch) return 6;
     }
 
-    // Check if query parts match initials followed by word starts
-    // (e.g., "Mh Sh" for "Mohammed Shamil")
-    if (queryParts.length > 0) {
-      let matchCount = 0;
-      for (let i = 0; i < Math.min(queryParts.length, words.length); i++) {
-        const part = queryParts[i];
-        const word = words[i];
-
-        // Check if part matches the beginning of the word
-        if (word.startsWith(part)) {
-          matchCount++;
-        }
-      }
-
-      if (matchCount === queryParts.length) return true;
-    }
-
-    // Fuzzy match: check if all characters in query appear in order in text
-    let textIndex = 0;
-    for (let char of queryNoSpaces) {
-      textIndex = textNoSpaces.indexOf(char, textIndex);
-      if (textIndex === -1) return false;
-      textIndex++;
-    }
-
-    return true;
+    // No match — do NOT fall back to loose fuzzy matching; it produces
+    // irrelevant results (e.g. "lamar" matching "Afaq Al Naseem...").
+    return -1;
   };
 
-  const filteredOptions = options.filter(option => {
-    if (!searchTerm) return true;
+  const getBestScore = (option, searchQuery) => {
+    const fields = [
+      option.customerName || option.label || '',
+      option.code || '',
+      option.vatNo || '',
+      option.phoneNo || '',
+      option.address || '',
+      option.searchAddress || '',
+    ];
 
-    const searchableFields = {
-      customerName: option.customerName || option.label || "",
-      vatNo: option.vatNo || "",
-      phoneNo: option.phoneNo || "",
-      address: option.address || "",
-      searchAddress: option.searchAddress || "",
-      code: option.code || "",   // ← FIX: `option.code` instead of `options.code`
-    };
+    let best = -1;
+    for (const field of fields) {
+      const safeValue = field != null ? field.toString() : '';
+      const score = getMatchScore(safeValue, searchQuery);
+      if (score !== -1 && (best === -1 || score < best)) {
+        best = score;
+      }
+    }
+    return best;
+  };
 
-    return Object.values(searchableFields).some(fieldValue => {
-      // Safety: ensure fieldValue is never null/undefined before calling toString
-      const safeValue = fieldValue != null ? fieldValue.toString() : "";
-      return advancedMatch(safeValue, searchTerm);
-    });
-  });
+  const filteredOptions = (() => {
+    if (!searchTerm) return options;
+
+    return options
+      .map(option => ({ option, score: getBestScore(option, searchTerm) }))
+      .filter(({ score }) => score !== -1)
+      .sort((a, b) => {
+        if (a.score !== b.score) return a.score - b.score;
+        // tie-break alphabetically for stable, predictable ordering
+        const aLabel = (a.option.customerName || a.option.label || '').toLowerCase();
+        const bLabel = (b.option.customerName || b.option.label || '').toLowerCase();
+        return aLabel.localeCompare(bLabel);
+      })
+      .map(({ option }) => option);
+  })();
 
   const getDisplayValue = () => {
     if (!value) return '';

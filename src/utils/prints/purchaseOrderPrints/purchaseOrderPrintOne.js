@@ -84,6 +84,7 @@ const chunkArray = (array, size) => {
  * Generate QR code data for Saudi Arabia ZATCA compliance
  */
 export const generateQRCodeData = (invoiceData, companyName, vatNo, time) => {
+
     const formatDateForQR = (date, time) => {
         if (!date) return "";
 
@@ -164,8 +165,14 @@ export const generateQRCodeData = (invoiceData, companyName, vatNo, time) => {
  * Generate the invoice HTML
  */
 const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => {
+    console.log(invoiceData);
+    
     const state = store.getState().settings;
     const companyData = state.generalSettings;
+    const saleSettings = state.saleSettings;
+    const activateRoundoff = Boolean(companyData.RoundOff)
+    const showLineDiscount = saleSettings?.showLineDiscount || false;
+
     const headerImage = companyData.branchHeader;
     const footerImage = companyData.branchFooter;
     const companyName = branchData?.branchName || '';
@@ -181,17 +188,30 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
     const {
         invoiceNo,
         vendorInvoiceNo,
-        date,
         partyName,
         partyVatNo,
         partyAddress,
-        invoiceDate,
+        date: invoiceDate,
         purchaseDetails = [],
         subTotal = 0,
         billDiscount = 0,
         totalTax = 0,
         totalAmount = 0,
+        additionalCost = 0,
+        OtherCharge = 0,
+        taxType,
+        roundoff = 0,
     } = invoiceData;
+
+    const calcLineDiscount = (item) => {
+        const qty = Number(item.qty || 0);
+        const rate = Number(item.rate || 0);
+        const grossAmt = qty * rate;
+        const discPercent = Number(item.discountPercentage || 0);
+        return grossAmt * (discPercent / 100);
+    };
+
+    const showTaxColumn = state.generalSettings?.ActivateTax && taxType === 'Applicable to product';
 
     // Generate QR code data
     const qrCodeData = generateQRCodeData(invoiceData, companyName, companyVatNo, time);
@@ -200,6 +220,15 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
     // Calculate totals
     const totalQty = purchaseDetails.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0);
     const totalVAT = purchaseDetails.reduce((sum, item) => sum + (parseFloat(item.taxAmount) || 0), 0);
+
+    const totalDiscount = purchaseDetails.reduce((sum, item) => sum + calcLineDiscount(item), 0);
+    const totalNetValue = purchaseDetails.reduce((sum, item) =>
+        sum + ((Number(item.qty || 0) * Number(item.rate || 0)) - calcLineDiscount(item)), 0);
+
+    const totalLineAmount = purchaseDetails.reduce(
+        (sum, item) => sum + (Number(item.amount) || 0),
+        0
+    );
 
     // Split products into pages (16 rows per page)
     const ROWS_PER_PAGE = 18;
@@ -212,6 +241,7 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
         const isLastPage = pageIndex === totalPages - 1;
 
         const emptyRowsCount = Math.max(0, ROWS_PER_PAGE - pageProducts.length - 3);
+
         const emptyRows = Array(emptyRowsCount).fill(null);
 
         return `
@@ -237,24 +267,23 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                         <tr>
                             <td class="label">Customer Name <br><span class="rtl">اسم العميل</span></td>
                             <td><span class="bold">${partyName || ''}</span></td>
-                            <td class="label rtl">رقم الفاتورة<br>INVOICE NO</td>
+                            <td class="label rtl">رقم الفاتورة<br>ORDER NO</td>
                             <td class="bold">${invoiceNo || ''}</td>
                         </tr>
                         <tr>
                             <td class="label" rowspan="2">Customer VAT <br><span class="rtl">العميل ضريبة</span></td>
                             <td rowspan="2">${partyVatNo || ''}<br>${partyAddress || ''}</td>
-                            <td class="label rtl">رقم فاتورة المورد <br>SUPPLIER INVOICE NO</td>
-                            <td>${vendorInvoiceNo|| 'NA'}</td>
+                           
                         </tr>
                         <tr>
-                            <td class="label rtl">تاريخ فاتورة المورد <br>SUPPLIER INVOICE DATE</td>
+                            <td class="label rtl">تاريخ فاتورة المورد <br>ORDER DATE</td>
                             <td class="bold">${formatDate(invoiceDate)}</td>
                         </tr>
                         <tr>
                             <td class="label rtl"></td>
                             <td class="label rtl"></td>
                             <td class="label rtl">الرقم المرجعي<br>Ref No</td>
-                            <td class="bold">${invoiceData?.RefNo||'NA'}</td>
+                            <td class="bold">${invoiceData?.RefNo || 'NA'}</td>
                         </tr>
                     </table>
                     ` : `
@@ -274,42 +303,52 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                             <div class="col-product"><div>منتج</div><div>PRODUCT</div></div>
                             <div class="col-qty"><div>الكمية</div><div>QTY</div></div>
                             <div class="col-price"><div>سعر الوحدة</div><div>UNIT PRICE</div></div>
-                            <div class="col-vat-percent"><div>ضريبة %</div><div>VAT %</div></div>
-                            <div class="col-vat-amt"><div>مبلغ الضريبة</div><div>VAT AMT</div></div>
+                             ${showLineDiscount ? `<div class="col-disc-amt"><div>مبلغ الخصم</div><div>DISC AMT</div></div>` : ''}
+                            <div class="col-net"><div>صافي القيمة</div><div>NET VALUE</div></div>
+                       ${showTaxColumn ? `<div class="col-vat-percent"><div>ضريبة %</div><div>VAT %</div></div>
+                        <div class="col-vat-amt"><div>مبلغ الضريبة</div><div>VAT AMT</div></div>` : ''}
                             <div class="col-total"><div>المبلغ الإجمالي</div><div>TOTAL AMT</div></div>
                         </div>
 
                         <div class="product-body">
                             ${pageProducts.map((item, index) => {
-                                const globalIndex = pageIndex * ROWS_PER_PAGE + index;
-                                return `
+                const globalIndex = pageIndex * ROWS_PER_PAGE + index;
+                const discAmt = calcLineDiscount(item);
+                const netAmt = (Number(item.qty || 0) * Number(item.rate || 0)) - discAmt;
+                return `
                                     <div class="product-row">
                                         <div class="col-sl">${globalIndex + 1}</div>
                                         <div class="col-code">${item.productCode || ''}</div>
                                         <div class="col-product">
-                                            <div style="font-weight: 600;">${item.productName || ''}</div>
-                                            ${item.productNameArb ? `<div>${item.productNameArb}</div>` : ''}
+                                            <div style="font-weight: 600;font-size: 10px;">${item.productName || ''}</div>
+                                            ${item.productNameArb ? `<div style="font-size: 10px;">${item.productNameArb}</div>` : ''}
+                                            ${item.productDescription ? `<div style="font-size: 10px;">${item.productDescription}</div>` : ''}
                                         </div>
-                                        <div class="col-qty">${item.qty || 0} ${item.productDetails?.UnitName || ''}</div>
-                                        <div class="col-price">${item.rate || 0}</div>
-                                        <div class="col-vat-percent">${item.taxRate || 0}%</div>
-                                        <div class="col-vat-amt">${item.taxAmount || 0}</div>
-                                        <div class="col-total">${item.netAmount || 0}</div>
+                                        <div class="col-qty">${parseFloat(item.qty).toFixed(2) || 0} ${item.unitName || item.UnitName || item.productDetails?.UnitName || ''}</div>
+                                        <div class="col-price">${parseFloat(item.rate).toFixed(2) || 0}</div>
+                                         ${showLineDiscount ? `<div class="col-disc-amt">${discAmt.toFixed(state.generalSettings.decimalPart)}</div>` : ''}
+                                        <div class="col-net">${netAmt.toFixed(state.generalSettings.decimalPart)}</div>
+                                   ${showTaxColumn ? `<div class="col-vat-percent">15%</div>
+                                    <div class="col-vat-amt">${parseFloat(item.taxAmount).toFixed(2) || 0}</div>` : ''}
+                                                                                   <div class="col-total">${Number(item.amount || 0).toFixed(state.generalSettings.decimalPart)}</div>
+
                                     </div>
                                 `;
-                            }).join('')}
+            }).join('')}        
                             
                             ${emptyRows.map(() => `
-                                <div class="product-row empty-row">
-                                    <div class="col-sl"></div>
-                                    <div class="col-code"></div>
-                                    <div class="col-product"></div>
-                                    <div class="col-qty"></div>
-                                    <div class="col-price"></div>
-                                    <div class="col-vat-percent"></div>
-                                    <div class="col-vat-amt"></div>
-                                    <div class="col-total"></div>
-                                </div>
+                               <div class="product-row filler-row">
+    <div class="col-sl"></div>
+    <div class="col-code"></div>
+    <div class="col-product"></div>
+    <div class="col-qty"></div>
+    <div class="col-price"></div>
+    ${showLineDiscount ? `<div class="col-disc-amt"></div>` : ''}
+    <div class="col-net"></div>
+    ${showTaxColumn ? `<div class="col-vat-percent"></div>
+    <div class="col-vat-amt"></div>` : ''}
+    <div class="col-total"></div>
+</div>
                             `).join('')}
 
                             ${!isLastPage ? `
@@ -325,10 +364,12 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                                 TOTAL / <span>المجموع</span>
                             </div>
                             <div class="col-qty">${totalQty.toFixed(0)}</div>
-                            <div class="col-price"></div>
-                            <div class="col-vat-percent"></div>
-                            <div class="col-vat-amt">${fmt(totalVAT)}</div>
-                            <div class="col-total">${fmt(subTotal)}</div>
+                             <div class="col-price"></div>
+                             ${showLineDiscount ? `<div class="col-disc-amt">${fmt(totalDiscount)}</div>` : ''}
+                            <div class="col-net">${fmt(totalNetValue)}</div>
+                       ${showTaxColumn ? `<div class="col-vat-percent"></div>
+                        <div class="col-vat-amt">${fmt(totalVAT)}</div>` : ''}
+                            <div class="col-total">${fmt(totalLineAmount)}</div>
                         </div>
                         ` : ''}
                     </div>
@@ -350,16 +391,44 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                                     <th style="text-align: right;"><span>المجموع الفرعي</span> <span>:</span></th>
                                     <th style="text-align: right;">${fmt(subTotal)}</th>
                                 </tr>
-                                <tr>
+                               
+                                ${Number(OtherCharge) !== 0 ? `
+                                   <tr>
+                                    <th style="text-align: left;">Other Charge </th>
+                                    <th style="text-align: right;"><span>رسوم اخرى</span> <span>:</span></th>
+                                    <th style="text-align: right;">${fmt(OtherCharge)}</th>
+                                </tr> ` : ""}
+                                 
+                                ${((saleSettings?.showBillDiscountAmount || saleSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0) ? `
+                                  <tr>
                                     <th style="text-align: left;">Discount Amount</th>
                                     <th style="text-align: right;"><span>مبلغ الخصم</span> <span>:</span></th>
                                     <th style="text-align: right;">${fmt(billDiscount)}</th>
-                                </tr>
+                                </tr>` : ""}
                                 <tr>
-                                    <th style="text-align: left;">VAT Amount</th>
-                                    <th style="text-align: right;"><span>مبلغ الضريبة</span> <span>:</span></th>
-                                    <th style="text-align: right;">${fmt(totalTax)}</th>
-                                </tr>
+                                    <th style="text-align: left;">Taxable Amount</th>
+                                      <th style="text-align: right;">ا لمبلغ الخاضع للضريبة <span>:</span> </th>
+                                    <th style="text-align: right;">
+                                            ${fmt(
+                Number(subTotal || 0) -
+                Number(invoiceData?.billDiscount || 0) +
+                Number(OtherCharge || 0)
+            )}
+                                    </th>
+                                    
+                                 </tr> 
+                                         ${showTaxColumn ? `<tr>
+                                            <th style="text-align: left;">VAT Amount</th>
+                                            <th style="text-align: right;"><span>مبلغ الضريبة</span> <span>:</span></th>
+                                            <th style="text-align: right;">${fmt(totalTax)}</th>
+                                </tr>` : ''}
+                                        
+                            ${(activateRoundoff && Number(roundoff) !== 0) ? `
+                                 <tr>
+                                    <th style="text-align: left;">Round Off:</th>
+                                    <th style="text-align: right;"><span>مبلغ الضريبة</span>  <span>:</span></th>
+                                    <th style="text-align: right;"">${fmt(roundoff)}</th>
+                                </tr>` : ""}
                                 <tr>
                                     <th style="text-align: left; font-size: 20px; font-weight: 900;">Grand Total</th>
                                     <th style="text-align: right;"><span>المجموع الإجمالي</span> <span>:</span></th>
@@ -378,14 +447,14 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                 </div>
                 ` : ''}
 
-              ${footerImage?(`
+              ${footerImage ? (`
                   <div class="footer-image">
                     <img src="${footerImage}" alt="footer">
-                </div>`):(
-                    `  <div class="footer-image-dummy">
+                </div>`) : (
+                `  <div class="footer-image-dummy">
                     <div>LOGO</div>
                 </div>`
-                )}
+            )}
             </div>
         `;
     }).join('');
@@ -420,13 +489,13 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                     page-break-after: always;
                 }
                 .page:last-child { margin-bottom: 0; }
-                .header-image { width: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
-                .header-image img { width: 100%; display: block; }
+                .header-image { width: 100%; position: absolute; top: 0; left: 0; z-index: 1; height:120px;}
+                .header-image img { width: 100%;height:100%; display: block; }
                 .footer-image { width: 100%; position: absolute; bottom: 10px; left: 0; z-index: 1; }
                 .footer-image img { width: 100%; display: block; }
                 .content-wrapper {
                     flex: 1;
-                    padding: 200px 15px 100px 15px;
+                    padding: 130px 15px 100px 15px;
                     position: relative;
                     z-index: 2;
                     display: flex;
@@ -454,11 +523,22 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                 .label { font-weight: bold; width: 140px; }
                 .rtl { direction: rtl; text-align: right; }
                 .bold { font-weight: bold; }
-                .product-table { border: 1px solid rgb(216, 216, 216); font-size: 14px; }
+                .product-table { border: 1px solid rgb(216, 216, 216); font-size: 14px;   flex: 1;         
+    display: flex;
+    flex-direction: column;
+    min-height: 0;}
+    .product-body {
+    flex: 1;                 
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
                 .product-header, .product-row, .product-footer {
+                 flex-shrink: 0; 
                     display: flex;
                     border-bottom: 1px solid rgb(216, 216, 216);
                 }
+                    .filler-row { flex: 1 1 auto; border-bottom: none; }
                 .product-footer { border-top: 1px solid rgb(216, 216, 216); }
                 .product-header {
                     background-color: rgb(221, 221, 221);
@@ -489,12 +569,21 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                 }
                 .col-sl { width: 5%; text-align: center; justify-content: center; }
                 .col-code { width: 10%; text-align: center; justify-content: center; }
-                .col-product { width: 45%; }
+              .col-product {
+                        flex-direction: column;
+                        align-items: flex-start !important;
+                        justify-content: center;
+                        padding: 4px 6px;
+                        width:45%;
+                    }
                 .col-qty { width: 5%; text-align: center; justify-content: center; }
                 .col-price { width: 9%; text-align: right; justify-content: flex-end; }
                 .col-vat-percent { width: 7%; text-align: center; justify-content: center; }
                 .col-vat-amt { width: 9%; text-align: right; justify-content: flex-end; }
                 .col-total { width: 10%; text-align: right; justify-content: flex-end; }
+                 .col-product { width: ${showLineDiscount ? '30%' : '38%'}; }
+                .col-disc-amt { width: 8%; text-align: right; justify-content: flex-end; }
+                .col-net { width: 9%; text-align: right; justify-content: flex-end; }
                 .product-header > div:last-child,
                 .product-row > div:last-child,
                 .product-footer > div:last-child { border-right: none; }
@@ -582,25 +671,26 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
  * Main print invoice function - SILENT PRINT (No dialog, no preview)
  */
 export const purchaseOrderPrintOne = async (invoiceData, branchData, time, invoiceQr, currentCurrency) => {
-    
+
+
     // Generate HTML
     const invoiceHTML = generateInvoiceHTML(invoiceData, branchData, time, currentCurrency);
 
     // ✅ SILENT PRINT - No dialog, no preview
     if (isElectron()) {
         try {
-            
+
             // Get saved printer preference for A4
             const savedPrinter = await getPrinterPreference('a4');
-            
+
             const result = await printSilent(invoiceHTML, savedPrinter, 'a4');
-            
+
             if (result.success) {
                 // console.log('✅ [SALES INVOICE] Printed successfully!');
             } else {
                 console.error('❌ [SALES INVOICE] Print failed:', result.error);
             }
-            
+
             return result;
         } catch (error) {
             console.error('❌ [SALES INVOICE] Error:', error);

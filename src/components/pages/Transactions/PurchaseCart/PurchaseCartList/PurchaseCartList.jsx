@@ -59,7 +59,17 @@ const PurchaseCartList = () => {
             .replace('MM', MM)
             .replace('yyyy', yyyy);
     };
-
+const formatTime = (dateTimeString) => {
+    if (!dateTimeString) return '';
+    const date = new Date(dateTimeString);
+    if (isNaN(date.getTime())) return '';
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours === 0 ? 12 : hours;
+    return `${hours}:${minutes} ${ampm}`;
+};
     // Use a ref to always have access to latest state without stale closures
     const stateRef = useRef({});
     stateRef.current = { voucherCode, fromDate, toDate, limit, page, selectedBranchId, generalSettings };
@@ -88,7 +98,11 @@ const PurchaseCartList = () => {
             const formattedData = res.data.data.map((item, index) => ({
                 ...item,
                 SNo: ((currentPage - 1) * currentLimit) + index + 1,
-                date: formatDate(item.date),
+                 date: (() => {
+                    const datePart = formatDate(item.date);
+                    const timePart = formatTime(item.CreatedDate);
+                    return timePart ? `${datePart} ${timePart}` : datePart;
+                })(),
             }));
 
             setSalesData(formattedData);

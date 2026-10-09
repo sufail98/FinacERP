@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { MdGTranslate } from "react-icons/md";
 import { AllCountries } from "../../../../public/assets/js/voucherTypes";
+import { sanitize } from "@/lib/inputSanitizer";
 
 /* ─── tiny helpers ─────────────────────────────────────────────────────────── */
 const getFileViewUrl = (filePath) => {
@@ -104,7 +105,7 @@ const AddCustomerModal = ({
   editMode = false,
   customerId = null,
   type = "customer",
-  currency = [],
+  // currency = [],
   accountGroups = [],
   pricingLevel = [],
 }) => {
@@ -122,6 +123,8 @@ const AddCustomerModal = ({
   const isMobile = useMediaQuery("(max-width:600px)");
   const isCustomer = type === "customer";
   const isEditMode = Boolean(customerId) && editMode;
+
+  //  const {generalSettings} = useSelector((state) => state.settings)
 
   /* ── abort refs ── */
   const abortRef = useRef(null);
@@ -228,6 +231,27 @@ const AddCustomerModal = ({
   }), [isCustomer, currentCurrency, financeSettings, currentCurrencyConversion, currentFinancialYear]);
 
   const [formData, setFormData] = useState(buildInitialForm);
+
+  const [currencies, setCurrency] = useState([])
+  
+    const currency = currencies.map((item) => ({
+      currencyId: item.currencyId,
+      label: `${item.currencyName} (${item.currencySymbol})`,
+    }));
+  
+    useEffect(() => {
+      fetchCurrency()
+    }, [])
+  
+    const fetchCurrency = async () => {
+      try {
+        const res = await axiosInstance.get('currencies');
+        setCurrency(res.data.data)
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  
 
   /* ── close outside dropdowns ── */
   useEffect(() => {
@@ -418,12 +442,42 @@ const AddCustomerModal = ({
   /* ── handlers ── */
   const handleChange = (e) => {
     const { name, value, type: t2, checked } = e.target;
+    let updatedValue = value
+    if(["vatNumber"].includes(name)){
+      updatedValue = sanitize.uppercaseAlphaNumeric(value).slice(0,15)
+    }
+     if (name === "crNumber") {
+    if (generalSettings.zatcaType === "Phase 2") {
+      // Phase 2: Numbers only
+      updatedValue = sanitize.numbers(value);
+    } else {
+      // Phase 1: Letters & numbers only (remove special characters)
+      updatedValue = sanitize.alphaNumeric(value);
+    }
+  }
+  if(["postboxNo","accountNo"].includes(name)){
+    updatedValue = sanitize.numbers(value)
+  }
+  if(["phoneNo"].includes(name)){
+    updatedValue = sanitize.numbers(value).slice(0,10)
+  }
+  if(["faxNo"].includes(name)){
+    updatedValue = sanitize.numbers(value).slice(0,15)
+  }
+
+    if(["customerName","StreetName","District","cityName"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+        if (updatedValue.length > 0) {
+      updatedValue =
+        updatedValue.charAt(0).toUpperCase() + updatedValue.slice(1);
+    }
+    }
     setFormData((prev) => {
       if (name in prev.ShippingAddress)
-        return { ...prev, ShippingAddress: { ...prev.ShippingAddress, [name]: t2 === "checkbox" ? checked : value } };
-      if (name === "customerName" && value.length > 0)
-        return { ...prev, [name]: value.charAt(0).toUpperCase() + value.slice(1) };
-      return { ...prev, [name]: value };
+        return { ...prev, ShippingAddress: { ...prev.ShippingAddress, [name]: t2 === "checkbox" ? checked : updatedValue } };
+      // if (name === "customerName" && value.length > 0)
+      //   return { ...prev, [name]: value.charAt(0).toUpperCase() + value.slice(1) };
+      return { ...prev, [name]: updatedValue };
     });
   };
 
@@ -1093,7 +1147,7 @@ const AddCustomerModal = ({
                                           <button key={c.currencyId} type="button"
                                             onClick={() => { handleSelect("currencyId", c.currencyId?.toString()); setShowCurrency(false); }}
                                             className={`w-full text-left px-3 py-2 text-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 text-gray-900 dark:text-gray-100 ${formData.currencyId?.toString() === c.currencyId?.toString() ? "bg-teal-50 font-medium" : ""}`}>
-                                            {c.currencyName}
+                                            {c.label}
                                           </button>
                                         ))}
                                       </div>

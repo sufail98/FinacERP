@@ -13,60 +13,79 @@ import useAuth from '@/redux/hook/auth/useAuth';
 import { useSelector } from 'react-redux';
 import DateFilterSection from '../Components/DateFilterSection';
 
+const STORAGE_KEY = 'paymentVoucherListFilters';
 
 const PaymentVoucherList = () => {
     const { t } = useTranslation()
     const navigate = useNavigate();
     const [paymentVouchers, setPaymentVouchers] = useState([]);
-    const [searchTerm, setSearchTerm] = useState('') // Search state
+    const [searchTerm, setSearchTerm] = useState('')
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState(null);
     const { generalSettings } = useSelector((state) => state.settings)
     const { selectedBranchId } = useAuth()
 
-    // Get today's date in YYYY-MM-DD format
     const getTodayDate = () => {
         const today = new Date();
         return today.toISOString().split('T')[0];
     };
 
-    // Date filter states - default to today's date
-    const [fromDate, setFromDate] = useState(getTodayDate());
-    const [toDate, setToDate] = useState(getTodayDate());
+    // Load persisted filters (if any) synchronously on first render
+    const getPersistedState = () => {
+        try {
+            const saved = sessionStorage.getItem(STORAGE_KEY);
+            if (saved) return JSON.parse(saved);
+        } catch (e) {
+            console.error('Failed to parse persisted filters', e);
+        }
+        return null;
+    };
 
-    // Server-side pagination states
-    const [limit, setLimit] = useState(10);
-    const [page, setPage] = useState(1);
+    const persisted = getPersistedState();
+
+    const [fromDate, setFromDate] = useState(persisted?.fromDate || getTodayDate());
+    const [toDate, setToDate] = useState(persisted?.toDate || getTodayDate());
+    const [limit, setLimit] = useState(persisted?.limit || 80);
+    const [page, setPage] = useState(persisted?.page || 1);
+
     const [meta, setMeta] = useState({
         total: 0,
-        page: 1,
-        limit: 10,
+        page: persisted?.page || 1,
+        limit: persisted?.limit || 80,
         total_pages: 1
     });
 
     const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Payment Voucher");
-const formatDate = (dateString) => {
-        if (!dateString) return '';
 
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
         const date = new Date(dateString);
         const dd = String(date.getDate()).padStart(2, '0');
         const MM = String(date.getMonth() + 1).padStart(2, '0');
         const yyyy = date.getFullYear();
-
         const format = generalSettings?.dateformat || 'dd-MM-yyyy';
-
-        return format
-            .replace('dd', dd)
-            .replace('MM', MM)
-            .replace('yyyy', yyyy);
+        return format.replace('dd', dd).replace('MM', MM).replace('yyyy', yyyy);
     };
+
+    const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
+
     const columns = [
-        { key: "SNo", label: "#", sortable: true, align: "right" },
-        { key: "paymentNo", label: t("paymentVoucher.list.columns.paymentNo"), sortable: true, align: "left" , width: "120px"},
-        { key: "date", label: t("paymentVoucher.list.columns.date"), sortable: true, align: "center", width: "80px"},
-        { key: "ledgerName", label: t("paymentVoucher.list.columns.ledgerName"), sortable: true, align: "left", width: "200px" },
-        { key: "narration", label: t("paymentVoucher.list.columns.narration"), sortable: true, align: "left", width: "250px" },
-        { key: "totalAmount", label: t("paymentVoucher.list.columns.totalAmt"), sortable: true, align: "right" , width: "150px"},
+        { key: "SNo", label: "#", sortable: true, align: "center" },
+        { key: "paymentNo", label: t("paymentVoucher.list.columns.paymentNo"), sortable: true, align: "left", width: "90px" },
+        { key: "date", label: t("paymentVoucher.list.columns.date"), sortable: true, align: "center", width: "80px" },
+        { key: "ledgerName", label: t("paymentVoucher.list.columns.ledgerName"), sortable: true, align: "left", width: "230px" },
+        { key: "narration", label: t("paymentVoucher.list.columns.narration"), sortable: true, align: "left", width: "200px" },
+        { key: "totalAmount", label: t("paymentVoucher.list.columns.totalAmt"), sortable: true, align: "right", width: "150px" },
     ];
 
     const renderCell = (key, row) => {
@@ -79,23 +98,34 @@ const formatDate = (dateString) => {
                 </div>
             );
         }
-
         return row[key] ?? "-";
     };
+
+    // Persist filters whenever they change
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+                fromDate,
+                toDate,
+                limit,
+                page,
+            }));
+        } catch (e) {
+            console.error('Failed to persist filters', e);
+        }
+    }, [fromDate, toDate, limit, page]);
 
     // Fetch data when page or limit changes
     useEffect(() => {
         fetchPaymentVouchers();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, limit]);
 
-    // Filter data based on search term (client-side)
     const filteredData = useMemo(() => {
         if (!searchTerm.trim()) {
             return paymentVouchers;
         }
-
         const lowerSearchTerm = searchTerm.toLowerCase().trim();
-
         return paymentVouchers.filter(item =>
             item.paymentNo?.toLowerCase().includes(lowerSearchTerm) ||
             item.ledgerName?.toLowerCase().includes(lowerSearchTerm) ||
@@ -103,23 +133,32 @@ const formatDate = (dateString) => {
         );
     }, [paymentVouchers, searchTerm]);
 
-    // Update SNo for filtered data
     const displayData = useMemo(() => {
         return filteredData.map((item, index) => ({
             ...item,
             SNo: index + 1,
-            date: formatDate(item.date),
+            date: (() => {
+                const datePart = formatDate(item.date);
+                const timePart = formatTime(item.CreatedDate);
+                return timePart ? `${datePart} ${timePart}` : datePart;
+            })(),
         }));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filteredData]);
 
-    const fetchPaymentVouchers = async () => {
+    const fetchPaymentVouchers = async (overrides = {}) => {
         setLoading(true)
         try {
+            const currentFromDate = overrides.fromDate ?? fromDate;
+            const currentToDate = overrides.toDate ?? toDate;
+            const currentLimit = overrides.limit ?? limit;
+            const currentPage = overrides.page ?? page;
+
             const payload = {
-                fromDate: fromDate,
-                toDate: toDate,
-                limits: limit,
-                page: page,
+                fromDate: currentFromDate,
+                toDate: currentToDate,
+                limits: currentLimit,
+                page: currentPage,
                 branchId: selectedBranchId
             };
 
@@ -127,7 +166,7 @@ const formatDate = (dateString) => {
 
             const formattedData = response.data.data.map((item, index) => ({
                 ...item,
-                SNo: ((page - 1) * limit) + index + 1,
+                SNo: ((currentPage - 1) * currentLimit) + index + 1,
             }));
 
             setPaymentVouchers(formattedData);
@@ -135,8 +174,8 @@ const formatDate = (dateString) => {
             if (response.data.meta) {
                 setMeta({
                     total: response.data.meta.total || 0,
-                    page: response.data.meta.page || page,
-                    limit: response.data.meta.limit || limit,
+                    page: response.data.meta.page || currentPage,
+                    limit: response.data.meta.limit || currentLimit,
                     total_pages: response.data.meta.total_pages || 1
                 });
             }
@@ -163,8 +202,8 @@ const formatDate = (dateString) => {
             return;
         }
         setPage(1);
-        setSearchTerm(''); // Clear search when filtering
-        fetchPaymentVouchers();
+        setSearchTerm('');
+        fetchPaymentVouchers({ page: 1 });
     };
 
     const handleReset = async () => {
@@ -172,15 +211,21 @@ const formatDate = (dateString) => {
         setFromDate(today);
         setToDate(today);
         setPage(1);
-        setLimit(10);
-        setSearchTerm(''); // Clear search on reset
+        setLimit(80);
+        setSearchTerm('');
+
+        try {
+            sessionStorage.removeItem(STORAGE_KEY);
+        } catch (e) {
+            console.error('Failed to clear persisted filters', e);
+        }
 
         setLoading(true)
         try {
             const payload = {
                 fromDate: today,
                 toDate: today,
-                limits: 10,
+                limits: 80,
                 page: 1,
                 branchId: selectedBranchId
             };
@@ -198,7 +243,7 @@ const formatDate = (dateString) => {
                 setMeta({
                     total: response.data.meta.total || 0,
                     page: response.data.meta.page || 1,
-                    limit: response.data.meta.limit || 10,
+                    limit: response.data.meta.limit || 80,
                     total_pages: response.data.meta.total_pages || 1
                 });
             }
@@ -215,25 +260,23 @@ const formatDate = (dateString) => {
         }
     };
 
-    // Handle search input change
     const handleSearchChange = (e) => {
         setSearchTerm(e.target.value);
     };
 
-    // Clear search
     const clearSearch = () => {
         setSearchTerm('');
     };
 
     const handlePageChange = (newPage) => {
         setPage(newPage);
-        setSearchTerm(''); // Clear search when changing page
+        setSearchTerm('');
     };
 
     const handleItemsPerPageChange = (newLimit) => {
         setLimit(newLimit);
         setPage(1);
-        setSearchTerm(''); // Clear search when changing items per page
+        setSearchTerm('');
     };
 
     const handleDelete = async (id) => {
@@ -334,7 +377,6 @@ const formatDate = (dateString) => {
                 }
             />
             <div className='p-2'>
-                {/* Date Filter Section with integrated Search */}
                 <DateFilterSection
                     fromDate={fromDate}
                     toDate={toDate}
@@ -346,7 +388,6 @@ const formatDate = (dateString) => {
                     totalRecords={meta.total}
                     showTotalRecords={true}
                     searchable={true}
-                    // Search props
                     searchTerm={searchTerm}
                     onSearchChange={handleSearchChange}
                     onClearSearch={clearSearch}
@@ -355,7 +396,6 @@ const formatDate = (dateString) => {
                     originalCount={paymentVouchers.length}
                 />
 
-                {/* Server Paginated Table */}
                 <ContentTable
                     columns={columns}
                     data={displayData}

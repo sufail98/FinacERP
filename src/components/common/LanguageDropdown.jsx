@@ -426,11 +426,11 @@ const LanguageDropdown = ({ isOpen, onToggle, isMobile = false }) => {
 
           {/* Dropdown panel */}
           <div
-            className={`absolute top-full right-0 mt-2 shadow-2xl w-80 bg-white border border-gray-200 rounded-xl ${
-              isOpen
-                ? "desktop-lang-dropdown-enter"
-                : "desktop-lang-dropdown-exit pointer-events-none"
-            }`}
+            className={`absolute top-full left-0 right-auto md:left-auto md:right-0 mt-2 shadow-2xl w-[280px] sm:w-80 bg-white border border-gray-200 rounded-xl ${
+      isOpen
+        ? "desktop-lang-dropdown-enter"
+        : "desktop-lang-dropdown-exit pointer-events-none"
+    }`}
           >
             <div className="p-4 border-b border-gray-100">
               <h3 className="font-semibold text-gray-800 mb-1 transition-colors duration-200">

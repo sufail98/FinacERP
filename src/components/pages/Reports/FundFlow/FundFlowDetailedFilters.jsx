@@ -3,6 +3,9 @@ import SearchableDropdown from '@/components/elements/theme/SearchableDropdown';
 import { RefreshCw } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import toast from 'react-hot-toast';
+import { showToast } from '@/utils/toast';
+import DateInput from '@/components/elements/theme/DateInput';
 
 const FundFlowDetailedFilters = ({
     filters,
@@ -15,6 +18,14 @@ const FundFlowDetailedFilters = ({
 }) => {
     const { t } = useTranslation();
 
+    //    const handleGenerateClick = () => {
+    //     if (groupOptions.length > 1 && !filters.groupId) {
+    //         showToast.error(t("Please select an Account Group"));
+    //         return;
+    //     }
+    //     onGenerateReport();
+    // };
+
     return (
         <div className="bg-white dark:bg-[#1e1e1e] rounded-lg p-3 mb-3 border border-gray-200 dark:border-gray-700">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 items-end">
@@ -24,10 +35,11 @@ const FundFlowDetailedFilters = ({
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                         {t("From Date")}
                     </label>
-                    <input
+                    <DateInput
                         type="date"
                         value={filters.fromDate}
                         onChange={(e) => onFilterChange('fromDate', e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
                         className="w-full h-[38px] px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                     />
                 </div>
@@ -37,9 +49,10 @@ const FundFlowDetailedFilters = ({
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                         {t("To Date")}
                     </label>
-                    <input
+                    <DateInput
                         type="date"
                         value={filters.toDate}
+                        min={filters.fromDate}
                         onChange={(e) => onFilterChange('toDate', e.target.value)}
                         className="w-full h-[38px] px-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                     />
@@ -48,7 +61,7 @@ const FundFlowDetailedFilters = ({
            
 
                 {/* Account Group - Only show if groups are available */}
-                {groupOptions.length > 1 && (
+                {/* {groupOptions.length > 1 && (
                     <div>
                         <SearchableDropdown
                             label={t("Account Group")}
@@ -56,13 +69,14 @@ const FundFlowDetailedFilters = ({
                             value={filters.groupId || ''}
                             onChange={(value) => onFilterChange('groupId', value || null)}
                             options={groupOptions}
-                            placeholder={t("All")}
+                            placeholder={t("Select Account Group")}
+                            required
                         />
                     </div>
-                )}
+                )} */}
 
                 {/* Is Asset Checkbox */}
-                <div className="flex items-center h-[38px] pt-5">
+                {/* <div className="flex items-center h-[38px] pt-5">
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input
                             type="checkbox"
@@ -74,7 +88,7 @@ const FundFlowDetailedFilters = ({
                             {t("Is Asset")}
                         </span>
                     </label>
-                </div>
+                </div> */}
 
                 {/* Buttons */}
                 <div className="flex items-center gap-2">

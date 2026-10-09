@@ -3,6 +3,7 @@ import BreadCrumb from '@/components/common/BreadCrumb';
 import NoAcessComponent from '@/components/common/NoAcessComponent';
 import Preloader from '@/components/common/Preloader';
 import AlertBox from '@/components/common/AlertBox';
+import ContentTable from '@/components/common/ContentTable';
 import axiosInstance from '@/lib/axiosConfig';
 import usePrivileges from '@/lib/hooks/usePrivileges';
 import useAuth from '@/redux/hook/auth/useAuth';
@@ -11,7 +12,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import PurchaseDayReportFilter from './PurchaseDayReportFilter';
-import PurchaseDayReportGrid from './PurchaseDayReportGrid';
 import useReportExport from '@/hooks/useReportExport';
 
 const PurchaseDayReport = () => {
@@ -24,22 +24,22 @@ const PurchaseDayReport = () => {
     // Dropdown data states
     const [usersData, setUsersData] = useState([]);
 
-    const { selectedBranchId, userId } = useAuth();
+    const { selectedBranchId, selectedBranchDetails } = useAuth();
     const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Purchase Day Report");
     const { generalSettings } = useSelector((state) => state.settings);
 
-    const { 
-        exportGenericToExcel, 
-        exportGenericToPdf, 
-        exportGenericToCsv 
+    const {
+        exportGenericToExcel,
+        exportGenericToPdf,
+        exportGenericToCsv
     } = useReportExport();
 
     // Get default dates (first day of current month to today)
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -95,19 +95,17 @@ const PurchaseDayReport = () => {
             const payload = {
                 fromDate: formatDateTimeForAPI(filters.fromDate, false),
                 toDate: formatDateTimeForAPI(filters.toDate, true),
-                branchId: Number(selectedBranchId),
-                createdUser: filters.createdUser,
+                branchId: selectedBranchDetails?.mainBranch ? null : Number(selectedBranchId),
+                createdUser: filters.createdUser || 'all',
                 isAccountsPosting: filters.isAccountsPosting
             };
-
 
             const response = await axiosInstance.post("purchase/day-report", payload);
             const data = response.data.data || response.data;
 
-
             const dataWithSNo = (Array.isArray(data) ? data : []).map((item, index) => ({
                 ...item,
-                SNo: index + 1
+                SNo: item.SLNo || index + 1
             }));
 
             if (!dataWithSNo || dataWithSNo.length === 0) {
@@ -148,26 +146,23 @@ const PurchaseDayReport = () => {
             }, 0);
         };
 
-        // Common fields that might be in purchase day report response
-        const totalAmount = calculateSum('TotalAmount') || calculateSum('totalAmount') || calculateSum('Amount');
-        const taxAmount = calculateSum('TaxAmount') || calculateSum('taxAmount') || calculateSum('TotalTax');
-        const netAmount = calculateSum('NetAmount') || calculateSum('netAmount') || calculateSum('BillAmount');
-        const grandTotal = calculateSum('GrandTotal') || calculateSum('grandTotal') || calculateSum('billAmount');
-        const cashAmount = calculateSum('CashAmount') || calculateSum('cashAmount');
-        const bankAmount = calculateSum('BankAmount') || calculateSum('bankAmount');
-        const creditAmount = calculateSum('CreditAmount') || calculateSum('creditAmount');
+        const totalAmount = calculateSum('TotalAmount');
 
         return {
             totalAmount: totalAmount.toFixed(decimalPart),
-            taxAmount: taxAmount.toFixed(decimalPart),
-            netAmount: netAmount.toFixed(decimalPart),
-            grandTotal: grandTotal.toFixed(decimalPart),
-            cashAmount: cashAmount.toFixed(decimalPart),
-            bankAmount: bankAmount.toFixed(decimalPart),
-            creditAmount: creditAmount.toFixed(decimalPart),
             count: reportData.length
         };
     }, [reportData, generalSettings?.decimalPart]);
+
+    // Footer row for ContentTable (matches column keys)
+    const footerData = useMemo(() => {
+        if (!totals) return null;
+        return {
+            label: t('purchaseDayReport.grid.total'),
+            Date: t('purchaseDayReport.grid.total'),
+            TotalAmount: totals.totalAmount
+        };
+    }, [totals, t]);
 
     const handleFilterChange = (field, value) => {
         setFilters(prev => ({ ...prev, [field]: value }));
@@ -185,6 +180,21 @@ const PurchaseDayReport = () => {
         setAlert(null);
     };
 
+    // ── ContentTable column config ──────────────────────────────────────────
+    const columns = [
+        { key: 'SNo', label: '#', align: 'center', width: 60 },
+        { key: 'Date', label: t('purchaseDayReport.grid.columns.date'), align: 'center' },
+        { key: 'TotalAmount', label: t('purchaseDayReport.grid.columns.totalAmount'), align: 'right' }
+    ];
+
+    const renderCell = (key, row) => {
+        if (key === 'TotalAmount') {
+            const decimalPart = generalSettings?.decimalPart || 2;
+            return Number(row.TotalAmount || 0).toFixed(decimalPart);
+        }
+        return row[key] ?? '-';
+    };
+
     /* ------------------------------ Export Configuration ------------------------------ */
     const getExportOptions = () => {
         if (!reportData || reportData.length === 0) return null;
@@ -193,17 +203,8 @@ const PurchaseDayReport = () => {
 
         const exportData = reportData.map((row, index) => ({
             SNo: row.SNo || index + 1,
-            Date: row.Date || row.date || row.PurchaseDate || '',
-            InvoiceNo: row.InvoiceNo || row.invoiceNo || row.VoucherNo || row.voucherNo || '',
-            VendorInvoiceNo: row.VendorInvoiceNo || row.vendorInvoiceNo || '',
-            Supplier: row.Supplier || row.supplier || row.Party || row.party || row.SupplierName || '',
-            TotalAmount: Number(row.TotalAmount || row.totalAmount || row.Amount || 0).toFixed(decimalPart),
-            TaxAmount: Number(row.TaxAmount || row.taxAmount || row.TotalTax || 0).toFixed(decimalPart),
-            NetAmount: Number(row.NetAmount || row.netAmount || row.BillAmount || 0).toFixed(decimalPart),
-            CashAmount: Number(row.CashAmount || row.cashAmount || 0).toFixed(decimalPart),
-            BankAmount: Number(row.BankAmount || row.bankAmount || 0).toFixed(decimalPart),
-            CreditAmount: Number(row.CreditAmount || row.creditAmount || 0).toFixed(decimalPart),
-            CreatedBy: row.CreatedBy || row.createdBy || row.DoneBy || row.doneBy || ''
+            Date: row.Date || '',
+            TotalAmount: Number(row.TotalAmount || 0).toFixed(decimalPart)
         }));
 
         return {
@@ -218,28 +219,14 @@ const PurchaseDayReport = () => {
             data: exportData,
             footer: totals ? {
                 label: t('purchaseDayReport.grid.total'),
-                TotalAmount: totals.totalAmount,
-                TaxAmount: totals.taxAmount,
-                NetAmount: totals.netAmount,
-                CashAmount: totals.cashAmount,
-                BankAmount: totals.bankAmount,
-                CreditAmount: totals.creditAmount
+                TotalAmount: totals.totalAmount
             } : null,
             theme: 'professional',
             decimalPlaces: decimalPart,
             columns: [
                 { key: 'SNo', label: '#', align: 'center', width: 6 },
-                { key: 'Date', label: t('purchaseDayReport.grid.columns.date'), align: 'center', width: 12 },
-                { key: 'InvoiceNo', label: t('purchaseDayReport.grid.columns.invoiceNo'), align: 'center', width: 14 },
-                { key: 'VendorInvoiceNo', label: t('purchaseDayReport.grid.columns.vendorInvoiceNo'), align: 'center', width: 14 },
-                { key: 'Supplier', label: t('purchaseDayReport.grid.columns.supplier'), align: 'left', width: 20 },
-                { key: 'TotalAmount', label: t('purchaseDayReport.grid.columns.totalAmount'), align: 'right', width: 12, type: 'currency' },
-                { key: 'TaxAmount', label: t('purchaseDayReport.grid.columns.taxAmount'), align: 'right', width: 12, type: 'currency' },
-                { key: 'NetAmount', label: t('purchaseDayReport.grid.columns.netAmount'), align: 'right', width: 12, type: 'currency' },
-                { key: 'CashAmount', label: t('purchaseDayReport.grid.columns.cashAmount'), align: 'right', width: 10, type: 'currency' },
-                { key: 'BankAmount', label: t('purchaseDayReport.grid.columns.bankAmount'), align: 'right', width: 10, type: 'currency' },
-                { key: 'CreditAmount', label: t('purchaseDayReport.grid.columns.creditAmount'), align: 'right', width: 10, type: 'currency' },
-                { key: 'CreatedBy', label: t('purchaseDayReport.grid.columns.createdBy'), align: 'center', width: 12 }
+                { key: 'Date', label: t('purchaseDayReport.grid.columns.date'), align: 'center', width: 14 },
+                { key: 'TotalAmount', label: t('purchaseDayReport.grid.columns.totalAmount'), align: 'right', width: 14, type: 'currency' }
             ]
         };
     };
@@ -335,12 +322,20 @@ const PurchaseDayReport = () => {
                     resetFilters={resetFilters}
                 />
 
-                <PurchaseDayReportGrid
-                    data={reportData}
-                    loading={loading}
-                    totals={totals}
-                    decimalPart={generalSettings?.decimalPart || 2}
-                />
+                <div className="mt-4">
+                    <ContentTable
+                        columns={columns}
+                        data={reportData || []}
+                        loading={loading}
+                        renderCell={renderCell}
+                        footerData={footerData}
+                        serverPagination={false}
+                        staticSearchable={true}
+                        sortable={true}
+                        tableId="purchase-day-report"
+                        pageSize={4000}
+                    />
+                </div>
             </div>
         </div>
     );

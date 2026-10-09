@@ -8,7 +8,7 @@ import axiosInstance from '@/lib/axiosConfig';
 import usePrivileges from '@/lib/hooks/usePrivileges';
 import useAuth from '@/redux/hook/auth/useAuth';
 import { Clock } from 'lucide-react';
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import SalesmanWiseBillsPendingFilter from './SalesmanWiseBillsPendingFilter';
@@ -26,7 +26,7 @@ const SalesmanWiseBillsPending = () => {
     const [currencyData, setCurrencyData] = useState([]);
 
     const { selectedBranchId, currentCurrency } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Salesman Wise Bills Pending");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Salesman Wise Bill Pending");
     const { generalSettings } = useSelector((state) => state.settings);
 
     const { exportGenericToExcel, exportGenericToPdf, exportGenericToCsv } = useReportExport();
@@ -35,9 +35,9 @@ const SalesmanWiseBillsPending = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -116,7 +116,7 @@ const SalesmanWiseBillsPending = () => {
             const [employeeRes, customerRes, currencyRes] = await Promise.all([
                 axiosInstance.get("employees").catch(() => ({ data: { data: [] } })),
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Customer"],
+                    ledgerTypes: ["Customer","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("currencies").catch(() => ({ data: { data: [] } }))

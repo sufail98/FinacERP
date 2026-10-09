@@ -38,7 +38,7 @@ const PayableVoucherReport = () => {
         ledgerName: '',
         costCentreId: null,
         userId: null,
-        postedStatus: true,
+        postedStatus: null,
         mode: "Summary"
     });
 
@@ -63,8 +63,8 @@ const PayableVoucherReport = () => {
 
     const fetchLedgerData = async () => {
         try {
-            const response = await axiosInstance.post("account-ledgers", {
-                group_ids: [5, 6, 28, 29],
+            const response = await axiosInstance.post("customer-supplier-account-ledgers", {
+                ledgerTypes: ["Supplier","Customer&Supplier"],
                 branchId: selectedBranchId
             });
             setLedgerData(response.data.data || []);
@@ -262,7 +262,7 @@ const PayableVoucherReport = () => {
             ledgerName: '',
             costCentreId: null,
             userId: null,
-            postedStatus: true,
+            postedStatus: null,
             mode: 'Summary'
         });
         setReportData(null);
@@ -277,6 +277,14 @@ const PayableVoucherReport = () => {
         label: ledger.ledgerName,
         value: ledger.ledgerId
     }));
+
+    const accountPostingOptions = [
+       { label: "Yes",
+        value:"Yes"},
+        {label:"No",
+            value:"No"
+        }
+    ]
 
     const userOptions = userData.map(u => ({
         label: u.userName || u.name,
@@ -327,7 +335,7 @@ const PayableVoucherReport = () => {
         return row[key] ?? "-";
     };
 
-    if (loading || privilegeLoading) {
+    if ( privilegeLoading ) {
         return (
             <div>
                 <BreadCrumb
@@ -381,6 +389,7 @@ const PayableVoucherReport = () => {
                     costCenterOptions={costCenterOptions}
                     ledgerOptions={ledgerOptions}
                     userOptions={userOptions}
+                    accountPostingOptions={accountPostingOptions}
                     loading={loading}
                     hasReportData={!!reportData && reportData.length > 0}
                     resetFilters={resetFilters}

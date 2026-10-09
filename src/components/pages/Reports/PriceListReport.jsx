@@ -19,7 +19,7 @@ const PriceListReport = () => {
     const [reportData, setReportData] = useState(null);
     const [groupData, setGroupData] = useState([]);
     const { selectedBranchId, currentCurrency } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Price List Report");
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Price List");
     const { generalSettings } = useSelector((state) => state.settings);
 
     // Use the unified export hook

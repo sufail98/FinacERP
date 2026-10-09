@@ -10,11 +10,11 @@ import axiosInstance from "@/lib/axiosConfig";
 import useAuth from "@/redux/hook/auth/useAuth";
 import OtherChargeLedgerModal from "./FooterTabData/Otherchargeledgermodal";
 
-const SalesInvoiceFooterSection = ({ totals, formData, setFormData, getCurrentProductCode, bank: banks, cash, otherChargeLedgers }) => {
+const SalesInvoiceFooterSection = ({ totals, formData, setFormData, getCurrentProductCode, bank: banks, cash, otherChargeLedgers, editMode = false }) => {
   const { salesMasterId } = useParams();
   const [isBillDiscWithTaxFocused, setIsBillDiscWithTaxFocused] = useState(false);
 
-  const isEditMode = Boolean(salesMasterId);
+  const isEditMode = editMode || Boolean(salesMasterId);
   const { saleSettings, generalSettings } = useSelector((state) => state.settings);
 
   const activateRoundOff = Boolean(generalSettings?.RoundOff);
@@ -45,10 +45,7 @@ const SalesInvoiceFooterSection = ({ totals, formData, setFormData, getCurrentPr
   // ✅ NEW: Track to detect discount distribution changes
   const lastDistributedDetails = useRef(null);
 
-  // ✅ NEW: Track previous row count to detect additions/removals
-  const prevDetailsLengthRef = useRef(
-    formData.salesDetails ? formData.salesDetails.length : 0
-  );
+ 
 
   // Other Charge Ledger Modal
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
@@ -114,42 +111,41 @@ const SalesInvoiceFooterSection = ({ totals, formData, setFormData, getCurrentPr
       setOtherChargAmt(formData.othercharge || '');
 
       // Load selected ledger if exists
-   // Load selected ledger if exists
-if (formData.otherChargeLedgerId) {
-  // Try to find the ledger name from the passed otherChargeLedgers prop
-  const matchedLedger = otherChargeLedgers?.find(
-    (l) => Number(l.ledgerId) === Number(formData.otherChargeLedgerId)
-  );
+      if (formData.otherChargeLedgerId) {
+        // Try to find the ledger name from the passed otherChargeLedgers prop
+        const matchedLedger = otherChargeLedgers?.find(
+          (l) => Number(l.ledgerId) === Number(formData.otherChargeLedgerId)
+        );
 
-  setSelectedLedger({
-    ledgerId: formData.otherChargeLedgerId,
-    ledgerName:
-      matchedLedger?.ledgerName ||
-      formData.otherChargeLedgerName ||
-      'Other Charge',
-  });
-}
+        setSelectedLedger({
+          ledgerId: formData.otherChargeLedgerId,
+          ledgerName:
+            matchedLedger?.ledgerName ||
+            formData.otherChargeLedgerName ||
+            'Other Charge',
+        });
+      }
     }
 
     // ✅ Mark initialization as complete - prevents auto-updates after loading API data
     initializationCompleteRef.current = true;
     setIsInitialized(true);
   }, [formData.billDiscountWithTax, formData.billDiscount, formData.additionalCost, formData.roundOff, formData.othercharge, totals, generalSettings.decimalPart]);
-// Re-resolve ledger name once otherChargeLedgers list is available
-useEffect(() => {
-  if (!formData.otherChargeLedgerId || !otherChargeLedgers?.length) return;
+  // Re-resolve ledger name once otherChargeLedgers list is available
+  useEffect(() => {
+    if (!formData.otherChargeLedgerId || !otherChargeLedgers?.length) return;
 
-  const matchedLedger = otherChargeLedgers.find(
-    (l) => Number(l.ledgerId) === Number(formData.otherChargeLedgerId)
-  );
+    const matchedLedger = otherChargeLedgers.find(
+      (l) => Number(l.ledgerId) === Number(formData.otherChargeLedgerId)
+    );
 
-  if (matchedLedger) {
-    setSelectedLedger({
-      ledgerId: matchedLedger.ledgerId,
-      ledgerName: matchedLedger.ledgerName,
-    });
-  }
-}, [otherChargeLedgers, formData.otherChargeLedgerId]);
+    if (matchedLedger) {
+      setSelectedLedger({
+        ledgerId: matchedLedger.ledgerId,
+        ledgerName: matchedLedger.ledgerName,
+      });
+    }
+  }, [otherChargeLedgers, formData.otherChargeLedgerId]);
   // ✅ Detect when new quotation/proforma data is loaded and reinitialize
   useEffect(() => {
     // Check if data has changed (e.g., new quotation/proforma loaded)
@@ -190,23 +186,23 @@ useEffect(() => {
     otherChargeAmt,
   ]);
   // Add this NEW useEffect right after the finalGrandTotal useMemo
-useEffect(() => {
-  if (!initializationCompleteRef.current) return;
-  
-  setFormData(prev => ({
-    ...prev,
-    totalAmount: finalGrandTotal,
-    roundOff: roundOffType === "+" ? roundOff : -roundOff,
-    additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
-    billDiscount,
-    billDiscountWithTax: billDiscountWithTaxInput || prev.billDiscountWithTax,
-    othercharge: otherChargeAmt,
-    OtherChargeRemark: otherChargeRemark,
-    CashAmount: prev.paymentMode === 'cash' ? finalGrandTotal : prev.CashAmount,
-    BankAmount: prev.paymentMode === 'card' ? finalGrandTotal : prev.BankAmount,
-    BillBalanceAmount: prev.paymentMode === 'credit' ? finalGrandTotal : prev.BillBalanceAmount,
-  }));
-}, [finalGrandTotal]);
+  useEffect(() => {
+    if (!initializationCompleteRef.current) return;
+
+    setFormData(prev => ({
+      ...prev,
+      totalAmount: finalGrandTotal,
+      roundOff: roundOffType === "+" ? roundOff : -roundOff,
+      additionalCost: additionalCostType === "Cr" ? additionalCost : -additionalCost,
+      billDiscount,
+      billDiscountWithTax: billDiscountWithTaxInput || prev.billDiscountWithTax,
+      othercharge: otherChargeAmt,
+      OtherChargeRemark: otherChargeRemark,
+      CashAmount: prev.paymentMode === 'cash' ? finalGrandTotal : prev.CashAmount,
+      BankAmount: prev.paymentMode === 'card' ? finalGrandTotal : prev.BankAmount,
+      BillBalanceAmount: prev.paymentMode === 'credit' ? finalGrandTotal : prev.BillBalanceAmount,
+    }));
+  }, [finalGrandTotal]);
 
   // Internal setter — called by handleBillDiscountWithTaxChange, does NOT reset the w/tax input
   const applyBillDiscountAmount = (amountValue) => {
@@ -234,19 +230,53 @@ useEffect(() => {
   };
 
   // Called when user directly types in the % field — auto-calculates w/tax
+  // const handleBillDiscountPercChange = (percValue) => {
+  //   const perc = parseFloat(percValue) || 0;
+  //   setBillDiscountPerc(perc);
+
+  //   const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
+  //   const amount = (grandTotal * perc) / 100;
+  //   const calculatedAmount = parseFloat(amount.toFixed(generalSettings.decimalPart || 2));
+  //   setBillDiscount(calculatedAmount);
+
+  //   // ✅ NEW: Auto-calculate billDiscountWithTax from percentage
+  //   const taxRate = parseFloat(formData.salesDetails?.[0]?.taxRate) || 15;
+  //   const withTax = calculatedAmount * (1 + taxRate / 100);
+  //   setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings.decimalPart || 2)));
+  // };
   const handleBillDiscountPercChange = (percValue) => {
-    const perc = parseFloat(percValue) || 0;
+    const decimalPart = generalSettings?.decimalPart || 2;
+
+    // Allow only up to the configured decimal places
+    const regex = new RegExp(`^\\d*(\\.\\d{0,${decimalPart}})?$`);
+
+    if (percValue !== "" && !regex.test(percValue)) {
+      return;
+    }
+
+    const perc = Math.min(Math.max(parseFloat(percValue) || 0, 0), 100);
+
     setBillDiscountPerc(perc);
 
-    const grandTotal = parseFloat(totals?.grandTotal || 0) + parseFloat(totals?.totalTax || 0);
+    const grandTotal =
+      parseFloat(totals?.grandTotal || 0) +
+      parseFloat(totals?.totalTax || 0);
+
     const amount = (grandTotal * perc) / 100;
-    const calculatedAmount = parseFloat(amount.toFixed(generalSettings.decimalPart || 2));
+    const calculatedAmount = parseFloat(
+      amount.toFixed(decimalPart)
+    );
+
     setBillDiscount(calculatedAmount);
 
-    // ✅ NEW: Auto-calculate billDiscountWithTax from percentage
-    const taxRate = parseFloat(formData.salesDetails?.[0]?.taxRate) || 15;
+    const taxRate =
+      parseFloat(formData.salesDetails?.[0]?.taxRate) || 15;
+
     const withTax = calculatedAmount * (1 + taxRate / 100);
-    setBillDiscountWithTaxInput(parseFloat(withTax.toFixed(generalSettings.decimalPart || 2)));
+
+    setBillDiscountWithTaxInput(
+      parseFloat(withTax.toFixed(decimalPart))
+    );
   };
 
   // Called when user types in the w/tax field — uses applyBillDiscountAmount (no reset loop)
@@ -364,38 +394,38 @@ useEffect(() => {
     }));
   };
 
- useEffect(() => {
-  if (!initializationCompleteRef.current) return;
+  //  useEffect(() => {
+  //   if (!initializationCompleteRef.current) return;
 
-  const details = formData.salesDetails;
-  if (!details || details.length === 0) return;
+  //   const details = formData.salesDetails;
+  //   if (!details || details.length === 0) return;
 
-  const afterBillDisc = distributeBillDiscount(billDiscount, details);
-  const updatedSalesDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
+  //   const afterBillDisc = distributeBillDiscount(billDiscount, details);
+  //   const updatedSalesDetails = distributeOtherCharge(otherChargeAmt, afterBillDisc);
 
-  const detailsString = JSON.stringify(
-    updatedSalesDetails.map(d => ({
-      b: d.billDiscOnProduct,
-      o: d.otherchargeonproduct
-    }))
-  );
+  //   const detailsString = JSON.stringify(
+  //     updatedSalesDetails.map(d => ({
+  //       b: d.billDiscOnProduct,
+  //       o: d.otherchargeonproduct
+  //     }))
+  //   );
 
-  const currentLength = details.length;
-  const rowCountChanged = currentLength !== prevDetailsLengthRef.current;
-  prevDetailsLengthRef.current = currentLength;
+  //   const currentLength = details.length;
+  //   const rowCountChanged = currentLength !== prevDetailsLengthRef.current;
+  //   prevDetailsLengthRef.current = currentLength;
 
-  if (detailsString !== lastDistributedDetails.current || rowCountChanged) {
-    lastDistributedDetails.current = detailsString;
-    setFormData(prev => ({
-      ...prev,
-      salesDetails: updatedSalesDetails,
-    }));
-  }
-}, [
-  billDiscount,
-  otherChargeAmt,
-  formData.salesDetails,
-]);
+  //   if (detailsString !== lastDistributedDetails.current || rowCountChanged) {
+  //     lastDistributedDetails.current = detailsString;
+  //     setFormData(prev => ({
+  //       ...prev,
+  //       salesDetails: updatedSalesDetails,
+  //     }));
+  //   }
+  // }, [
+  //   billDiscount,
+  //   otherChargeAmt,
+  //   formData.salesDetails,
+  // ]);
   const tabs = [
     { id: "payment", label: t("salesInvoice.form.footerSection.tabs.paymentMode") },
     ...(saleSettings?.ActivateSalesRetention
@@ -429,13 +459,13 @@ useEffect(() => {
     }
 
     // Create cache key
-    const cacheKey = `${productCode}_${formData.ledgerId}`;
+    // const cacheKey = `${productCode}_${formData.ledgerId}`;
 
-    // Check if history exists in cache
-    if (historyCache[cacheKey]) {
-      setProductHistory(historyCache[cacheKey]);
-      return;
-    }
+    // // Check if history exists in cache
+    // if (historyCache[cacheKey]) {
+    //   setProductHistory(historyCache[cacheKey]);
+    //   return;
+    // }
 
     try {
       setHistoryLoading(true);
@@ -452,11 +482,11 @@ useEffect(() => {
       if (res.data?.status && res.data?.data) {
         const historyData = res.data.data.slice(0, 10);
 
-        // Store in cache
-        setHistoryCache(prev => ({
-          ...prev,
-          [cacheKey]: historyData
-        }));
+        // // Store in cache
+        // setHistoryCache(prev => ({
+        //   ...prev,
+        //   [cacheKey]: historyData
+        // }));
 
         setProductHistory(historyData);
       } else {
@@ -475,19 +505,19 @@ useEffect(() => {
     switch (activeTab) {
       case "payment":
         return (
-          <PaymentMode finalGrandTotal={finalGrandTotal} totals={totals} formData={formData} setFormData={setFormData} cash={cash} banks={banks} />
+          <PaymentMode finalGrandTotal={finalGrandTotal} totals={totals} formData={formData} setFormData={setFormData} cash={cash} banks={banks} editMode={isEditMode} />
         );
       case "retention":
         return (
-          <RetentionData totals={totals} formData={formData} setFormData={setFormData} />
+          <RetentionData totals={totals} formData={formData} setFormData={setFormData} editMode={isEditMode} />
         );
       case "addCost":
         return (
-          <AdditionalCost totals={totals} formData={formData} setFormData={setFormData} />
+          <AdditionalCost totals={totals} formData={formData} setFormData={setFormData} editMode={isEditMode} />
         );
       case "other":
         return (
-          <OtherDetails totals={totals} formData={formData} setFormData={setFormData} />
+          <OtherDetails totals={totals} formData={formData} setFormData={setFormData} editMode={isEditMode} />
         );
       default:
         return null;
@@ -641,11 +671,22 @@ useEffect(() => {
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
+                            min="0"
+                            max="100"
+                            step={generalSettings?.decimalPart
+                              ? `0.${"0".repeat(generalSettings.decimalPart - 1)}1`
+                              : "0.01"}
                             value={billDiscountPerc}
                             onChange={(e) => handleBillDiscountPercChange(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (["-", "+", "e", "E"].includes(e.key)) {
+                                e.preventDefault();
+                              }
+                            }}
                             onFocus={handleSelectAll}
                             className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                             placeholder="%"
+                            disabled={Number(totals?.grandTotal) <= 0}
                           />
                           <span className="text-secondary dark:text-secondary">%</span>
                         </div>
@@ -692,6 +733,7 @@ useEffect(() => {
                           }}
                           className="w-full bg-transparent focus:outline-none text-right"
                           placeholder="w/tax"
+                          disabled={Number(totals?.grandTotal) <= 0}
                           title="Discount amount from total including tax"
                         />
                       </td>
@@ -705,6 +747,7 @@ useEffect(() => {
                           value={billDiscount}
                           onChange={(e) => handleBillDiscountAmountChange(e.target.value)}
                           onFocus={handleSelectAll}
+                          disabled={Number(totals?.grandTotal) <= 0}
                           className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                           placeholder={t("salesInvoice.form.footerSection.paymentSummery.amntPlaceholder")}
                         />
@@ -738,7 +781,8 @@ useEffect(() => {
                     <button
                       type="button"
                       onClick={() => setIsLedgerModalOpen(true)}
-                      className="px-2 py-1 font-medium text-left text-blue-800 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline transition-colors w-full"
+                      disabled={isEditMode}
+                      className="px-2 py-1 font-medium text-left text-blue-800 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline transition-colors w-full disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {selectedLedger?.ledgerName || t("salesInvoice.form.footerSection.paymentSummery.otherCharge")}
                     </button>
@@ -749,26 +793,42 @@ useEffect(() => {
                       value={otherChargeRemark}
                       className="w-full bg-transparent text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none"
                       placeholder={t("salesInvoice.form.footerSection.paymentSummery.remarkPlaceHolder")}
-                      onChange={(e) => setOtherChargRemark(e.target.value)}
-                      onFocus={handleSelectAll}
+                      onChange={(e) => {
+                        if (isEditMode) return;
+                        setOtherChargRemark(e.target.value);
+                      }}
+                      onFocus={(e) => {
+                        if (isEditMode) return;
+                        handleSelectAll(e);
+                      }}
+                      readOnly={isEditMode}
+                       disabled={isEditMode || !selectedLedger || Number(totals?.grandTotal) <= 0}
                     />
                   </td>
                   <td className="px-2 py-1 border-l border-themed dark:border-themed">
                     <input
-                      type="number"
+                      type="text"
+                      onKeyDown={(e) => {
+                        if (isEditMode) return;
+                        if (e.key === "-" || e.key === "+") e.preventDefault()
+                      }}
                       value={otherChargeAmt}
                       className="w-full bg-transparent text-primary dark:text-primary placeholder:text-muted dark:placeholder:text-muted focus:outline-none text-right"
-                      // In the Other Charge amount <input>:
                       onChange={(e) => {
+                        if (isEditMode) return;
                         const val = e.target.value;
                         setOtherChargAmt(val);
                         if (!val || val === '' || parseFloat(val) === 0) {
-                          lastDistributedDetails.current = null; // force redistribution
+                          lastDistributedDetails.current = null;
                         }
                       }}
-                      onFocus={handleSelectAll}
+                      onFocus={(e) => {
+                        if (isEditMode) return;
+                        handleSelectAll(e);
+                      }}
                       placeholder={t("salesInvoice.form.footerSection.paymentSummery.amntPlaceholder")}
-                      disabled={!selectedLedger}
+                      disabled={isEditMode || !selectedLedger || Number(totals?.grandTotal) <= 0}
+                      readOnly={isEditMode}
                     />
                   </td>
                 </tr>
@@ -782,8 +842,12 @@ useEffect(() => {
                     <td className="px-2 py-1 border-l border-themed dark:border-themed">
                       <select
                         value={roundOffType}
-                        onChange={(e) => setRoundOffType(e.target.value)}
+                        onChange={(e) => {
+                          if (isEditMode) return;
+                          setRoundOffType(e.target.value);
+                        }}
                         className="w-full bg-primary dark:bg-secondary text-primary dark:text-primary focus:outline-none"
+                        disabled={isEditMode}
                       >
                         <option value="+">+</option>
                         <option value="-">-</option>
@@ -794,6 +858,7 @@ useEffect(() => {
                         type="number"
                         value={roundOff}
                         onChange={(e) => {
+                          if (isEditMode) return;
                           const val = e.target.value;
                           const roundOffDigits = generalSettings?.RoundOffDigit ?? 2;
                           const regex = new RegExp(`^\\d*(\\.\\d{0,${roundOffDigits}})?$`);
@@ -801,7 +866,12 @@ useEffect(() => {
                             setRoundOff(parseFloat(val) || 0);
                           }
                         }}
-                        onFocus={handleSelectAll}
+                        onFocus={(e) => {
+                          if (isEditMode) return;
+                          handleSelectAll(e);
+                        }}
+                        disabled={isEditMode || Number(totals?.grandTotal) <= 0}
+                        readOnly={isEditMode}
                         step={Math.pow(10, -(generalSettings?.RoundOffDigit ?? 2))}
                         className="w-full bg-transparent text-primary dark:text-primary focus:outline-none text-right"
                       />

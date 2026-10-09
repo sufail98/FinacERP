@@ -21,6 +21,7 @@ const safeDisplayValue = (value, decimalPart) => {
     return parsed.toFixed(decimalPart || 2);
 };
 const SalesReturnTable = ({ isAgainst, formData, setFormData, editMode, rows: propRows, setRows: propSetRows, bank, cash, otherChargeLedgers }) => {
+
     const { t } = useTranslation();
     const [rowErrors, setRowErrors] = useState({});
     const [taxData, setTaxData] = useState([])
@@ -28,8 +29,8 @@ const SalesReturnTable = ({ isAgainst, formData, setFormData, editMode, rows: pr
     const [selectedProductCode, setSelectedProductCode] = useState(null);
     const { selectedBranchId, } = useAuth();
     const { generalSettings, saleSettings } = useSelector((state) => state.settings);
-const [pendingFocusRowId, setPendingFocusRowId] = useState(null);
-const [pendingFocusField, setPendingFocusField] = useState('qty');
+    const [pendingFocusRowId, setPendingFocusRowId] = useState(null);
+    const [pendingFocusField, setPendingFocusField] = useState('qty');
     const filterDebounceRef = useRef(null);
 
     const ledgerPricingAlert = saleSettings.ledgerPricingAlert || 'cashCustomer';
@@ -42,14 +43,13 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
     const inputRefs = useRef({});
     const [isInitialized, setIsInitialized] = useState(false);
     const { salesProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products);
-
+    const [selectedRowIdForEdit, setSelectedRowIdForEdit] = useState(null);
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState({});
     const [productModalOpen, setProductModalOpen] = useState(false)
     const [inputValues, setInputValues] = useState({});
     const [scrollPosition, setScrollPosition] = useState(0);
     const [isUpdatingFromDuplicate, setIsUpdatingFromDuplicate] = useState(false);
     const dispatch = useDispatch();
-
     const [focusedRowId, setFocusedRowId] = useState(null);
     const [isTableFocused, setIsTableFocused] = useState(false);
 
@@ -104,29 +104,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
     }, [activeSuggestionRow]);
 
     const rowRef = useRef()
-    const calculateInitialDescAmt = (item) => {
-        if (parseFloat(item.descAmt)) {
-            return parseFloat(item.descAmt);
-        }
 
-        const qty = parseFloat(item.qty) || 0;
-        const salesRate = parseFloat(item.rate) || 0;
-        const taxPercentage = parseFloat(item.taxRate) || 0;
-        const discPerc = parseFloat(item.discountPercentage) || 0;
-
-        let gross;
-
-        if (generalSettings?.taxincluded === true) {
-            const taxMultiplier = 1 + (taxPercentage / 100);
-            const rateWithoutTax = salesRate / taxMultiplier;
-            gross = rateWithoutTax * qty;
-        } else {
-            gross = qty * salesRate;
-        }
-
-        const descAmt = (gross * discPerc) / 100;
-        return parseFloat(descAmt.toFixed(generalSettings?.decimalPart || 2)) || 0;
-    };
 
     const [rows, setRows] = useState(() => {
         if (editMode || propRows && propRows.length > 0) {
@@ -148,13 +126,13 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                 salesRateWithoutTax: safeParsePrice(item.rate),
                 lineDiscountWithTax: item.lineDiscountWithTax || null,
                 desc: parseFloat(item.discountPercentage) || 0,
-                descAmt: calculateInitialDescAmt(item),
+                descAmt: parseFloat(item.descAmt) || 0, // from DB, no calc
                 netValue: parseFloat(item.netAmount) || 0,
                 billDiscOnProduct: parseFloat(item.billDiscOnProduct) || 0,
                 tax: parseFloat(item.taxId) || 0,
                 taxId: item.taxId || null,
                 taxRate: parseFloat(item.taxRate) || 0,
-                taxAmt: parseFloat(item.taxAmount) || 0,
+                taxAmt: parseFloat(item.taxAmount) || 0, // ← direct from DB
                 amount: parseFloat(item.amount) || 0,
                 taxType: item.taxType || 'Excluded',
                 salesManId: item.salesManId || formData.employeeId || null,
@@ -231,7 +209,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                 lineDiscountWithTax: item.lineDiscountWithTax || null,
                 ConversionFactor: item.ConversionFactor || 0,
                 desc: parseFloat(item.discountPercentage) || 0,
-                descAmt: 0,
+                descAmt: parseFloat(item.descAmt) || 0,
                 netValue: parseFloat(item.netAmount) || 0,
                 tax: parseFloat(item.taxAmount) || 0,
                 taxId: item.taxId || null,
@@ -275,50 +253,50 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
 
 
     // Listen for bill discount changes from footer
-   useEffect(() => {
-  if (!formData.salesDetails || formData.salesDetails.length === 0) return;
+    useEffect(() => {
+        if (!formData.salesDetails || formData.salesDetails.length === 0) return;
 
-  const hasBillDisc = formData.billDiscount && parseFloat(formData.billDiscount) !== 0;
-  const hasOtherCharge = formData.othercharge && parseFloat(formData.othercharge) !== 0;
+        const hasBillDisc = formData.billDiscount && parseFloat(formData.billDiscount) !== 0;
+        const hasOtherCharge = formData.othercharge && parseFloat(formData.othercharge) !== 0;
 
-  const rowsHaveDistributedValues = rows.some(
-    r =>
-      safeParsePrice(r.billDiscOnProduct) !== 0 ||
-      safeParsePrice(r.otherchargeonproduct) !== 0
-  );
+        const rowsHaveDistributedValues = rows.some(
+            r =>
+                safeParsePrice(r.billDiscOnProduct) !== 0 ||
+                safeParsePrice(r.otherchargeonproduct) !== 0
+        );
 
-  if (!hasBillDisc && !hasOtherCharge && !rowsHaveDistributedValues) return;
+        if (!hasBillDisc && !hasOtherCharge && !rowsHaveDistributedValues) return;
 
-  let hasChanges = false;
-  const updatedRows = rows.map((row) => {
-    if (!row.productCode) return row;
+        let hasChanges = false;
+        const updatedRows = rows.map((row) => {
+            if (!row.productCode) return row;
 
-    const detail = formData.salesDetails.find(
-      d => d.productCode === row.productCode && d.SlNo === row.sn
-    );
-    if (!detail) return row;
+            const detail = formData.salesDetails.find(
+                d => d.productCode === row.productCode && d.SlNo === row.sn
+            );
+            if (!detail) return row;
 
-    const billDiscChanged =
-      detail.billDiscOnProduct !== undefined &&
-      safeParsePrice(detail.billDiscOnProduct) !== safeParsePrice(row.billDiscOnProduct || 0);
+            const billDiscChanged =
+                detail.billDiscOnProduct !== undefined &&
+                safeParsePrice(detail.billDiscOnProduct) !== safeParsePrice(row.billDiscOnProduct || 0);
 
-    const otherChargeChanged =
-      detail.otherchargeonproduct !== undefined &&
-      safeParsePrice(detail.otherchargeonproduct) !== safeParsePrice(row.otherchargeonproduct || 0);
+            const otherChargeChanged =
+                detail.otherchargeonproduct !== undefined &&
+                safeParsePrice(detail.otherchargeonproduct) !== safeParsePrice(row.otherchargeonproduct || 0);
 
-    if (billDiscChanged || otherChargeChanged) {
-      hasChanges = true;
-      return calculateRow({
-        ...row,
-        billDiscOnProduct: safeParsePrice(detail.billDiscOnProduct),
-        otherchargeonproduct: safeParsePrice(detail.otherchargeonproduct)
-      });
-    }
-    return row;
-  });
+            if (billDiscChanged || otherChargeChanged) {
+                hasChanges = true;
+                return calculateRow({
+                    ...row,
+                    billDiscOnProduct: safeParsePrice(detail.billDiscOnProduct),
+                    otherchargeonproduct: safeParsePrice(detail.otherchargeonproduct)
+                });
+            }
+            return row;
+        });
 
-  if (hasChanges) setRows(updatedRows);
-}, [formData.salesDetails]);
+        if (hasChanges) setRows(updatedRows);
+    }, [formData.salesDetails]);
 
     useEffect(() => {
         const handleGlobalKeyDown = (e) => {
@@ -329,6 +307,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                     const currentRow = rows.find(r => r.id === focusedRowId);
                     if (currentRow?.productCode) {
                         setSelectedProductCode(currentRow.productDetails?.productCode || currentRow.productCode);
+                        setSelectedRowIdForEdit(currentRow.id);
                         setEditProductModalOpen(true);
                     }
                 }
@@ -343,15 +322,15 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
 
     // Update initial focus useEffect
     useEffect(() => {
-      if(!editMode) {
-          if (!productsLoading && allProducts?.length > 0) {
-            const timer = setTimeout(() => {
-                const focusField = saleSettings?.focusAfterSalesRate === 'barcode' ? 'barcode' : 'productName';
-                focusInput(1, focusField);
-            }, 100);
-            return () => clearTimeout(timer);
+        if (!editMode) {
+            if (!productsLoading && allProducts?.length > 0) {
+                const timer = setTimeout(() => {
+                    const focusField = saleSettings?.focusAfterSalesRate === 'barcode' ? 'barcode' : 'productName';
+                    focusInput(1, focusField);
+                }, 100);
+                return () => clearTimeout(timer);
+            }
         }
-      }
     }, [productsLoading, allProducts]);
 
     const getEditableColumns = () => {
@@ -639,8 +618,9 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
             proformaDetails1Id: "",
             SlNo: index + 1,
             productCode: row.productCode,
+            baseUnitid:row.baseunitId || null,
             qty: row.qty || null,
-            freeQty: null,
+            freeQty: row.freeQty != null ? parseFloat(row.freeQty) : null,
             rate: row.salesRateWithoutTax ? parseFloat(Number(row.salesRateWithoutTax).toFixed(4)) : null,
             inclusiveRate: row.salesRate ? parseFloat(Number(row.salesRate).toFixed(2)) : null,
             lineDiscountWithTax: row.lineDiscountWithTax || null,
@@ -756,7 +736,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
         }
     };
 
-   const calculateRow = (row, updatedField = null) => {
+    const calculateRow = (row, updatedField = null) => {
         let gross, descAmt, netValue, taxAmt = 0, amount, descPercentage, salesRateWithoutTax = 0;
         const otherChargeOnProduct = parseFloat(row.otherchargeonproduct || 0);
         const qty = parseFloat(row.qty) || 0;
@@ -767,18 +747,30 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
         const taxMultiplier = 1 + (taxPercentage / 100);
         const taxApplicable = generalSettings?.ActivateTax && formData.taxType === 'Applicable to product';
 
+        // FIND and REPLACE the entire beforeTax block:
+        // FIND and REPLACE the entire beforeTax block in calculateRow:
         if (updatedField === 'beforeTax') {
             const beforeTaxRate = parseFloat(row.salesRateWithoutTax) || 0;
 
             if (!taxApplicable) {
-                return calculateRow({ ...row, salesRate: beforeTaxRate });
+                const result = calculateRow({
+                    ...row,
+                    salesRate: beforeTaxRate,
+                    salesRateWithoutTax: 0,  // ✅ force recalc, don't use cached value
+                });
+                return { ...result, salesRateWithoutTax: beforeTaxRate };  // ✅ restore exact typed value
             }
 
             const derivedSalesRate = generalSettings?.taxincluded === true
                 ? beforeTaxRate * taxMultiplier
                 : beforeTaxRate;
 
-            return calculateRow({ ...row, salesRate: parseFloat(derivedSalesRate) });
+            const result = calculateRow({
+                ...row,
+                salesRate: parseFloat(derivedSalesRate),
+                salesRateWithoutTax: 0,  // ✅ force recalc, don't use cached value
+            });
+            return { ...result, salesRateWithoutTax: beforeTaxRate };  // ✅ restore exact typed value
         }
         // ← FIX: use stored salesRateWithoutTax when available,
         //         back-calculate only when user is editing salesRate directly
@@ -821,14 +813,15 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                 return {
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRate: parseFloat(calculatedSalesRate.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                    salesRate: parseFloat(calculatedSalesRate),
+                    salesRateWithoutTax: Math.round(rateWithoutTax * 1e10) / 1e10,
                     grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings?.decimalPart || 2)),
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
-                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2))
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
 
             } else {
@@ -853,8 +846,8 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                 return {
                     ...row,
                     amount: parseFloat(inputAmount.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRate: parseFloat(calculatedSalesRate.toFixed(generalSettings?.decimalPart || 2)),
-                    salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+                    salesRate: parseFloat(calculatedSalesRate),
+                    salesRateWithoutTax: Math.round(rateWithoutTax * 1e10) / 1e10,
                     grossAmount: parseFloat(gross.toFixed(generalSettings?.decimalPart || 2)),
                     netValue: parseFloat(netValue.toFixed(generalSettings?.decimalPart || 2)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
@@ -862,6 +855,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                     descAmt: parseFloat(existingDescAmt.toFixed(generalSettings?.decimalPart || 2)),
                     billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
                     otherchargeonproduct: parseFloat((parseFloat(row.otherchargeonproduct || 0)).toFixed(generalSettings?.decimalPart || 2)),
+                    lineDiscountWithTax: taxApplicable ? parseFloat((existingDescAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
                 };
             }
         }
@@ -919,9 +913,10 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
             taxAmt: parseFloat(taxAmt.toFixed(generalSettings?.decimalPart || 2)),
             amount: parseFloat(amount.toFixed(generalSettings?.decimalPart || 2)),
             descAmt: parseFloat(descAmt.toFixed(generalSettings?.decimalPart || 2)),
-            salesRateWithoutTax: parseFloat(salesRateWithoutTax.toFixed(generalSettings?.decimalPart || 2)),
+            salesRateWithoutTax: Math.round(rateWithoutTax * 1e10) / 1e10,
             billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings?.decimalPart || 2)),
             otherchargeonproduct: parseFloat((parseFloat(row.otherchargeonproduct || 0)).toFixed(generalSettings?.decimalPart || 2)),
+            lineDiscountWithTax: taxApplicable ? parseFloat((descAmt * taxMultiplier).toFixed(generalSettings?.decimalPart || 2)) : null,
         };
     };
 
@@ -1080,12 +1075,12 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
     }, [rows, pendingFocusBarcodeRowId]);
 
     useEffect(() => {
-    if (pendingFocusRowId !== null) {
-        focusInput(pendingFocusRowId, pendingFocusField);
-        setPendingFocusRowId(null);
-        setPendingFocusField('qty');
-    }
-}, [rows, pendingFocusRowId]);
+        if (pendingFocusRowId !== null) {
+            focusInput(pendingFocusRowId, pendingFocusField);
+            setPendingFocusRowId(null);
+            setPendingFocusField('qty');
+        }
+    }, [rows, pendingFocusRowId]);
 
 
     const selectProduct = async (rowId, product, selectedUnitId) => {
@@ -1211,80 +1206,80 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
             setRows(updatedRows);
             setSuggestions((prev) => ({ ...prev, [rowId]: [] }));
             setActiveSuggestionRow(null);
-         setTimeout(() => {
-    const focusSetting = saleSettings?.GridFocusingProductNameToNext;
-    const currentRowIndex = updatedRows.findIndex(r => r.id === rowId);
-    const isLastRow = currentRowIndex === updatedRows.length - 1;
+            setTimeout(() => {
+                const focusSetting = saleSettings?.GridFocusingProductNameToNext;
+                const currentRowIndex = updatedRows.findIndex(r => r.id === rowId);
+                const isLastRow = currentRowIndex === updatedRows.length - 1;
 
-    if (focusSetting === 'BarcodeInNextRow' || focusSetting === 'productNameInNextRow') {
-        const focusField = focusSetting === 'BarcodeInNextRow' ? 'barcode' : 'productName';
+                if (focusSetting === 'BarcodeInNextRow' || focusSetting === 'productNameInNextRow') {
+                    const focusField = focusSetting === 'BarcodeInNextRow' ? 'barcode' : 'productName';
 
-        if (!isLastRow) {
-            const nextRowId = updatedRows[currentRowIndex + 1].id;
-            focusInput(nextRowId, focusField);
-        } else {
-            const newRowId = updatedRows.length + 1;
-            setRows(prev => [
-                ...prev,
-                {
-                    id: newRowId,
-                    sn: newRowId,
-                    barcodeInput: '',
-                    productName: '',
-                    productNameArb: '',
-                    deliveryNoteDetails1Id: '',
-                    orderDetails1Id: '',
-                    quotationDetailsId: '',
-                    proformaDetails1Id: '',
-                    productCode: '',
-                    ConversionFactor: 0,
-                    purchaseRate: 0,
-                    qty: 1,
-                    freeQty: 0,
-                    unit: 2,
-                    salesRate: 0,
-                    salesRateWithoutTax: 0,
-                    desc: 0,
-                    descAmt: 0,
-                    netValue: 0,
-                    tax: 0,
-                    taxRate: 0,
-                    taxId: null,
-                    taxAmt: 0,
-                    amount: 0,
-                    taxType: 'Excluded',
-                    salesManId: formData.employeeId || null,
-                    GodownId: formData.GodownId || null,
-                    baseunitId: null,
-                    maximumSellingPrice: 0,
-                    lowestSellingPrice: 0,
-                    lineDiscountWithTax: null,
-                    salesTaxes: [],
-                    billDiscOnProduct: 0,
-                    otherchargeonproduct: 0,
-                    productDetails: {
-                        barcode: '',
-                        partNo: '',
-                        brand: '',
-                        mrp: '',
-                        purchase: '',
-                        description: '',
-                        productCode: ''
+                    if (!isLastRow) {
+                        const nextRowId = updatedRows[currentRowIndex + 1].id;
+                        focusInput(nextRowId, focusField);
+                    } else {
+                        const newRowId = updatedRows.length + 1;
+                        setRows(prev => [
+                            ...prev,
+                            {
+                                id: newRowId,
+                                sn: newRowId,
+                                barcodeInput: '',
+                                productName: '',
+                                productNameArb: '',
+                                deliveryNoteDetails1Id: '',
+                                orderDetails1Id: '',
+                                quotationDetailsId: '',
+                                proformaDetails1Id: '',
+                                productCode: '',
+                                ConversionFactor: 0,
+                                purchaseRate: 0,
+                                qty: 1,
+                                freeQty: 0,
+                                unit: 2,
+                                salesRate: 0,
+                                salesRateWithoutTax: 0,
+                                desc: 0,
+                                descAmt: 0,
+                                netValue: 0,
+                                tax: 0,
+                                taxRate: 0,
+                                taxId: null,
+                                taxAmt: 0,
+                                amount: 0,
+                                taxType: 'Excluded',
+                                salesManId: formData.employeeId || null,
+                                GodownId: formData.GodownId || null,
+                                baseunitId: null,
+                                maximumSellingPrice: 0,
+                                lowestSellingPrice: 0,
+                                lineDiscountWithTax: null,
+                                salesTaxes: [],
+                                billDiscOnProduct: 0,
+                                otherchargeonproduct: 0,
+                                productDetails: {
+                                    barcode: '',
+                                    partNo: '',
+                                    brand: '',
+                                    mrp: '',
+                                    purchase: '',
+                                    description: '',
+                                    productCode: ''
+                                }
+                            }
+                        ]);
+                        if (focusField === 'barcode') {
+                            setPendingFocusBarcodeRowId(newRowId);
+                        } else {
+                            setPendingFocusField('productName');
+                            setPendingFocusRowId(newRowId);
+                        }
                     }
+                } else {
+                    // Default: qty on same row
+                    focusInput(rowId, 'qty');
                 }
-            ]);
-            if (focusField === 'barcode') {
-                setPendingFocusBarcodeRowId(newRowId);
-            } else {
-                setPendingFocusField('productName');
-                setPendingFocusRowId(newRowId);
-            }
-        }
-    } else {
-        // Default: qty on same row
-        focusInput(rowId, 'qty');
-    }
-}, 100);
+            }, 100);
         } catch (err) {
             console.error("Error selecting product:", err);
         }
@@ -1420,93 +1415,85 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
 
             setRows(updatedRows);
 
-          setTimeout(() => {
-    const focusSetting = saleSettings?.GridFocusingBarcodeToNext;
+            setTimeout(() => {
+                const focusSetting = saleSettings?.GridFocusingBarcodeToNext;
 
-    if (focusSetting === 'ProductNameOnSameRow') {
-        focusInput(rowId, 'productName');
-    } else {
-        // Default: BarcodeInNextRow
-        const currentRowIndex = rows.findIndex(r => r.id === rowId);
+                if (focusSetting === 'ProductNameOnSameRow') {
+                    focusInput(rowId, 'productName');
+                } else {
+                    // Default: BarcodeInNextRow
+                    const currentRowIndex = rows.findIndex(r => r.id === rowId);
 
-        if (currentRowIndex < rows.length - 1) {
-            const nextRowId = rows[currentRowIndex + 1].id;
-            focusInput(nextRowId, 'barcode');
-        } else {
-            const newRowId = rows.length + 1;
-            setRows(prev => [
-                ...prev,
-                {
-                    id: newRowId,
-                    sn: newRowId,
-                    barcodeInput: '',
-                    productName: '',
-                    productNameArb: '',
-                    deliveryNoteDetails1Id: '',
-                    orderDetails1Id: '',
-                    quotationDetailsId: '',
-                    proformaDetails1Id: '',
-                    productCode: '',
-                    ConversionFactor: 0,
-                    purchaseRate: 0,
-                    qty: 1,
-                    freeQty: 0,
-                    unit: 2,
-                    salesRate: 0,
-                    salesRateWithoutTax: 0,
-                    desc: 0,
-                    descAmt: 0,
-                    netValue: 0,
-                    tax: 0,
-                    taxRate: 0,
-                    taxId: null,
-                    taxAmt: 0,
-                    amount: 0,
-                    taxType: 'Excluded',
-                    salesManId: formData.employeeId || null,
-                    GodownId: formData.GodownId || null,
-                    baseunitId: null,
-                    maximumSellingPrice: 0,
-                    lowestSellingPrice: 0,
-                    lineDiscountWithTax: null,
-                    salesTaxes: [],
-                    billDiscOnProduct: 0,
-                    otherchargeonproduct: 0,
-                    productDetails: {
-                        barcode: '',
-                        partNo: '',
-                        brand: '',
-                        mrp: '',
-                        purchase: '',
-                        description: '',
-                        productCode: ''
+                    if (currentRowIndex < rows.length - 1) {
+                        const nextRowId = rows[currentRowIndex + 1].id;
+                        focusInput(nextRowId, 'barcode');
+                    } else {
+                        const newRowId = rows.length + 1;
+                        setRows(prev => [
+                            ...prev,
+                            {
+                                id: newRowId,
+                                sn: newRowId,
+                                barcodeInput: '',
+                                productName: '',
+                                productNameArb: '',
+                                deliveryNoteDetails1Id: '',
+                                orderDetails1Id: '',
+                                quotationDetailsId: '',
+                                proformaDetails1Id: '',
+                                productCode: '',
+                                ConversionFactor: 0,
+                                purchaseRate: 0,
+                                qty: 1,
+                                freeQty: 0,
+                                unit: 2,
+                                salesRate: 0,
+                                salesRateWithoutTax: 0,
+                                desc: 0,
+                                descAmt: 0,
+                                netValue: 0,
+                                tax: 0,
+                                taxRate: 0,
+                                taxId: null,
+                                taxAmt: 0,
+                                amount: 0,
+                                taxType: 'Excluded',
+                                salesManId: formData.employeeId || null,
+                                GodownId: formData.GodownId || null,
+                                baseunitId: null,
+                                maximumSellingPrice: 0,
+                                lowestSellingPrice: 0,
+                                lineDiscountWithTax: null,
+                                salesTaxes: [],
+                                billDiscOnProduct: 0,
+                                otherchargeonproduct: 0,
+                                productDetails: {
+                                    barcode: '',
+                                    partNo: '',
+                                    brand: '',
+                                    mrp: '',
+                                    purchase: '',
+                                    description: '',
+                                    productCode: ''
+                                }
+                            }
+                        ]);
+                        setPendingFocusBarcodeRowId(newRowId);
                     }
                 }
-            ]);
-            setPendingFocusBarcodeRowId(newRowId);
-        }
-    }
-}, 100);
+            }, 100);
 
         } catch (err) {
             console.error("Error fetching product by barcode/product code:", err);
         }
     };
 
-    const handleProductUpdate = (productCode, updatedDescription) => {
-        setRows(prevRows =>
-            prevRows.map(row =>
-                row.productDetails.productCode === productCode
-                    ? {
-                        ...row,
-                        productDetails: {
-                            ...row.productDetails,
-                            productDescription: updatedDescription
-                        }
-                    }
-                    : row
-            )
-        );
+    const handleProductUpdate = (rowId, updatedDescription) => {
+        setRows(prevRows => prevRows.map(row =>
+            row.id === rowId
+                ? { ...row, productDetails: { ...row.productDetails, productDescription: updatedDescription } }
+                : row
+        ));
     };
 
     // 🔧 FIX: Skip on first render to preserve saved prices in edit mode
@@ -1538,7 +1525,13 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
         );
     }, [formData.pricingLevelId, selectedBranchId]);
 
+    const isFirstTaxTypeRender = useRef(true);
+
     useEffect(() => {
+        if (isFirstTaxTypeRender.current) {
+            isFirstTaxTypeRender.current = false;
+            return; // don't recalc on mount — preserve DB values in edit mode
+        }
         setRows(prevRows => prevRows.map(row => {
             if (!row.productCode) return row;
 
@@ -1604,6 +1597,8 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
             }
         }));
     }, [formData.taxType]);
+
+
     const handleInputChange = (id, field, value, updatedField = null) => {
         const updatedRows = rows.map(row => {
             if (row.id === id) {
@@ -1678,7 +1673,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
 
             const hasAnyData =
                 row.productName.trim() !== '' ||
-                row.barcodeInput.trim() !== '' ||
+                // row.barcodeInput.trim() !== '' ||
                 row.qty > 0 ||
                 row.salesRate > 0;
 
@@ -1690,9 +1685,9 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                 if (!row.productName || row.productName.trim() === '') {
                     missingFields.push('Product Name');
                 }
-                if (!row.barcodeInput || row.barcodeInput.trim() === '') {
-                    missingFields.push('Barcode');
-                }
+                // if (!row.barcodeInput || row.barcodeInput.trim() === '') {
+                //     missingFields.push('Barcode');
+                // }
                 if (!row.qty || row.qty <= 0) {
                     missingFields.push('Quantity');
                 }
@@ -2175,7 +2170,11 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                                                     {saleSettings.showProductDescription && (
                                                         <div className='cursor-pointer'>
                                                             <EllipsisVertical
-                                                                onClick={() => { setSelectedProductCode(row.productDetails.productCode); setEditProductModalOpen(true); }}
+                                                                onClick={() => {
+                                                                    setSelectedProductCode(row.productDetails.productCode);
+                                                                    setSelectedRowIdForEdit(row.id);
+                                                                    setEditProductModalOpen(true);
+                                                                }}
                                                                 className="text-secondary dark:text-secondary"
                                                             />
                                                         </div>
@@ -2257,13 +2256,13 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
 
                                                 // Find the product entry matching BOTH productCode AND the selected unitId
                                                 const productForUnit = allProducts.find(
-                                                    p => p.productCode === row.productCode && p.unitId === selectedUnitId
+                                                    p => p.productCode === row.productCode && (p.unitId || p.unitid) === selectedUnitId
                                                 );
                                                 // Fallback to any entry with matching productCode
                                                 const product = productForUnit || allProducts.find(p => p.productCode === row.productCode);
 
                                                 if (product) {
-                                                    const selectedUnit = row.availableUnits?.find(u => u.unitId === selectedUnitId);
+                                                    const selectedUnit = row.availableUnits?.find(u => (u.unitId || u.unitid) === selectedUnitId);
 
                                                     // conversionRate comes from the matched product entry, not from selectedUnit
                                                     const conversionFactor = safeParsePrice(productForUnit?.conversionRate || product.conversionRate || 1);
@@ -2305,7 +2304,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                                                         productDetails: {
                                                             ...row.productDetails,
                                                             barcode: product.barcode || row.productDetails.barcode,
-                                                            UnitName: selectedUnit?.unitName || row.productDetails.UnitName
+                                                            UnitName: selectedUnit?.unitName || selectedUnit?.unitname || selectedUnit?.UnitName || row.productDetails.UnitName
                                                         }
                                                     };
                                                     updatedRow = calculateRow(updatedRow);
@@ -2316,8 +2315,8 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                                             className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded"
                                         >
                                             {row.availableUnits?.map((unit) => (
-                                                <option key={unit.unitId} value={unit.unitId}>
-                                                    {unit.unitName || unit.unitname}
+                                                <option key={unit.unitId || unit.unitid} value={unit.unitId || unit.unitid}>
+                                                    {unit.unitName || unit.unitname || unit.UnitName}
                                                 </option>
                                             ))}
                                         </select>
@@ -2329,7 +2328,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                                                 value={
                                                     inputValues[`${row.id}-beforeTax`] !== undefined
                                                         ? inputValues[`${row.id}-beforeTax`]
-                                                        : Number(row.salesRateWithoutTax).toFixed(4)  // ← 4 decimal places
+                                                        : Number(row.salesRateWithoutTax) // ← 4 decimal places
                                                 }
                                                 onFocus={(e) => {
                                                     // handleInputFocus(row.id);
@@ -2373,7 +2372,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                                                     }}
                                                     value={inputValues[`${row.id}-salesRate`] !== undefined
                                                         ? inputValues[`${row.id}-salesRate`]
-                                                        : Number(row.salesRate).toFixed(2)}  // ← 2 decimal places
+                                                        : Number(row.salesRate)}  // ← 2 decimal places
                                                     onKeyDown={(e) => {
                                                         if (['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                                                             handleKeyDown(e, row.id, 'salesRate');
@@ -2520,8 +2519,14 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                                                                 const valid = raw.split('.').length > 2
                                                                     ? raw.slice(0, raw.lastIndexOf('.'))
                                                                     : raw;
-                                                                setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: valid }));
-                                                                handleLineDiscWithTaxChange(row.id, valid);
+
+                                                                const grossWithTax = safeParsePrice(row.qty) * safeParsePrice(row.salesRate);
+                                                                let num = safeParsePrice(valid);
+                                                                if (num > grossWithTax) num = grossWithTax;
+                                                                const finalValue = num.toString();
+
+                                                                setInputValues(prev => ({ ...prev, [`${row.id}-lineDiscWithTax`]: finalValue }));
+                                                                handleLineDiscWithTaxChange(row.id, finalValue);
                                                             }}
                                                             onBlur={(e) => {
                                                                 handleLineDiscWithTaxChange(row.id, safeParsePrice(e.target.value));
@@ -2691,7 +2696,7 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                                     <div className="w-px bg-gray-300 dark:bg-gray-600" />
                                     <div className="flex flex-col items-end gap-0.5">
                                         <span className="text-muted dark:text-muted font-medium">
-                                            {isLoss ? 'Loss' : 'Profit'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                            {isLoss ? 'Loss' : 'Pf value'}  :  <span className={`font-bold ${isLoss ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                                                 {profit.toFixed(generalSettings?.decimalPart || 2)}
                                             </span>
                                             <span className={`text-xs ${isLoss ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`}>
@@ -2706,13 +2711,15 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                             </div>
                         );
                     })()}
-                    <button
-                        onClick={addRow}
-                        className="flex items-center gap-2 main-bg text-white text-sm px-4 py-1 rounded-sm hover:bg-blue-700 dark:hover:main-bg transition"
-                    >
-                        <Plus size={15} />
-                        {t("salesInvoice.form.gridSection.buttons.addRow")}
-                    </button>
+                    {!editMode && (
+                        <button
+                            onClick={addRow}
+                            className="flex items-center gap-2 main-bg text-white text-sm px-4 py-1 rounded-sm hover:bg-blue-700 dark:hover:main-bg transition"
+                        >
+                            <Plus size={15} />
+                            {t("salesInvoice.form.gridSection.buttons.addRow")}
+                        </button>
+                    )}
                 </div>
             )}
             {Object.keys(rowErrors).length > 0 && (
@@ -2747,14 +2754,15 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
                 open={editProductModalOpen}
                 handleClose={() => {
                     setEditProductModalOpen(false);
+                    setSelectedRowIdForEdit(null);
                     if (focusedRowId) focusInput(focusedRowId, 'productName');
                 }}
                 productCode={selectedProductCode}
                 initialDescription={
-                    rows.find(r => r.productDetails?.productCode === selectedProductCode)
+                    rows.find(r => r.id === selectedRowIdForEdit)
                         ?.productDetails?.productDescription || ''
                 }
-                onSuccess={(updatedDescription) => handleProductUpdate(selectedProductCode, updatedDescription)}
+                onSuccess={(updatedDescription) => handleProductUpdate(selectedRowIdForEdit, updatedDescription)}
             />
             <SalesInvoiceFooterSection
                 totals={totals}
@@ -2773,3 +2781,16 @@ const [pendingFocusField, setPendingFocusField] = useState('qty');
 };
 
 export default SalesReturnTable;
+
+
+
+
+
+
+
+
+
+
+
+
+

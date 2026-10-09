@@ -29,8 +29,8 @@ const AreaWiseSalesReport = () => {
     const [areaData, setAreaData] = useState([]);
     const [brandData, setBrandData] = useState([]);
 
-    const { selectedBranchId } = useAuth();
-    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Areawise Sales Report");
+    const { selectedBranchId,currentCurrency } = useAuth();
+    const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Area Wise Sales");
     const { generalSettings } = useSelector((state) => state.settings);
 
     const { exportGenericToExcel, exportGenericToPdf, exportGenericToCsv } = useReportExport();
@@ -47,9 +47,8 @@ const AreaWiseSalesReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -59,13 +58,13 @@ const AreaWiseSalesReport = () => {
         toDate: getDefaultDates().toDate,
         employeeId: 0,
         mode: 'Voucher Wise',
-        currencyId: 0,
+        currencyId: currentCurrency?.currencyId,
         routeId: 0,
         marketId: 0,
         areaId: 0,
         brandId: 0,
         optional: false,
-        isAccountsPosting: false
+        isAccountsPosting:  generalSettings?.AccountPosting? "Yes" : "No"
     });
 
     // ── Columns (same schema for both modes — API returns same fields) ─────
@@ -194,7 +193,7 @@ const AreaWiseSalesReport = () => {
                 mode:              filters.mode       || null,
                 branchId:          Number(selectedBranchId),
                 optional:          filters.optional,
-                currencyId:        filters.currencyId || null,
+                currencyId:        filters.currencyId || currentCurrency?.currencyId,
                 routeId:           filters.routeId    || null,
                 marketId:          filters.marketId   || null,
                 areaId:            filters.areaId     || null,
@@ -227,7 +226,7 @@ const AreaWiseSalesReport = () => {
 
     const resetFilters = () => {
         const dates = getDefaultDates();
-        setFilters({ fromDate: dates.fromDate, toDate: dates.toDate, employeeId: 0, mode: 'Voucher Wise', currencyId: 0, routeId: 0, marketId: 0, areaId: 0, brandId: 0, optional: false, isAccountsPosting: false });
+        setFilters({ fromDate: dates.fromDate, toDate: dates.toDate, employeeId: 0, mode: 'Voucher Wise', currencyId: 0, routeId: 0, marketId: 0, areaId: 0, brandId: 0, optional: false, isAccountsPosting:  generalSettings?.AccountPosting? "Yes" : "No" });
         setReportData(null);
         setAlert(null);
     };

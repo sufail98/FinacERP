@@ -41,7 +41,7 @@ const RecieptVoucherList = () => {
         limit: 80,
         total_pages: 1
     });
-const formatDate = (dateString) => {
+    const formatDate = (dateString) => {
         if (!dateString) return '';
 
         const date = new Date(dateString);
@@ -56,37 +56,48 @@ const formatDate = (dateString) => {
             .replace('MM', MM)
             .replace('yyyy', yyyy);
     };
+    const formatTime = (dateTimeString) => {
+        if (!dateTimeString) return '';
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return '';
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours === 0 ? 12 : hours;
+        return `${hours}:${minutes} ${ampm}`;
+    };
     const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Receipt Voucher");
     const { selectedBranchId } = useAuth()
 
     const columns = [
         { key: "SNo", label: "#", sortable: true, align: "right" },
-        { key: "receiptno", label: t("recieptVoucher.list.columns.receiptNo"), sortable: true, align: "left" ,width: "120px"},
-        { key: "date", label: t("recieptVoucher.list.columns.date"), sortable: true, align: "center" ,width: "120px"},
+        { key: "receiptno", label: t("recieptVoucher.list.columns.receiptNo"), sortable: true, align: "left", width: "120px" },
+        { key: "date", label: t("recieptVoucher.list.columns.date"), sortable: true, align: "left", width: "120px" },
         { key: "LedgerName", label: t("recieptVoucher.list.columns.ledgerName"), sortable: true, align: "left", width: "200px" },
         { key: "narration", label: t("recieptVoucher.list.columns.narration"), sortable: true, align: "left", width: "250px" },
-        { key: "totalamount", label: t("recieptVoucher.list.columns.totalAmt"), sortable: true, align: "right" , width: "150px" },
+        { key: "totalamount", label: t("recieptVoucher.list.columns.totalAmt"), sortable: true, align: "right", width: "150px" },
     ];
 
- const renderCell = (key, row) => {
-    if (key === "totalamount") {
-        return (
-            <div className="text-sm">
-                <div className="flex items-center justify-end gap-1">
-                    <span>{Number(row.totalamount).toFixed(generalSettings.decimalPart)}</span>
+    const renderCell = (key, row) => {
+        if (key === "totalamount") {
+            return (
+                <div className="text-sm">
+                    <div className="flex items-center justify-end gap-1">
+                        <span>{Number(row.totalamount).toFixed(generalSettings.decimalPart)}</span>
+                    </div>
                 </div>
-            </div>
-        );
-    }
+            );
+        }
 
-    // 👇 Add this block to format the date
-    if (key === "date") {
-        if (!row.date) return "-";
-        return row.date.split(" ")[0]; // "2026-03-17 00:00:00" → "2026-03-17"
-    }
+        // // 👇 Add this block to format the date
+        // if (key === "date") {
+        //     if (!row.date) return "-";
+        //     return row.date.split(" ")[0]; // "2026-03-17 00:00:00" → "2026-03-17"
+        // }
 
-    return row[key] ?? "-";
-};
+        return row[key] ?? "-";
+    };
 
     // Fetch data when page or limit changes
     useEffect(() => {
@@ -113,7 +124,11 @@ const formatDate = (dateString) => {
         return filteredData.map((item, index) => ({
             ...item,
             SNo: index + 1,
-            date: formatDate(item.date),
+            date: (() => {
+                const datePart = formatDate(item.date);
+                const timePart = formatTime(item.createddate);
+                return timePart ? `${datePart} ${timePart}` : datePart;
+            })(),
         }));
     }, [filteredData]);
 
@@ -127,7 +142,7 @@ const formatDate = (dateString) => {
                 page: page,
                 branchId: selectedBranchId
             };
-            
+
             const response = await axiosInstance.post('sales-receipts', payload);
 
             const formattedData = response.data.data.map((item, index) => ({
@@ -177,7 +192,7 @@ const formatDate = (dateString) => {
         setFromDate(today);
         setToDate(today);
         setPage(1);
-        setLimit(10);
+        setLimit(80);
         setSearchTerm(''); // Clear search on reset
 
         setLoading(true)
@@ -185,7 +200,7 @@ const formatDate = (dateString) => {
             const payload = {
                 fromDate: today,
                 toDate: today,
-                limits: 10,
+                limits: 80,
                 page: 1,
                 branchId: selectedBranchId
             };

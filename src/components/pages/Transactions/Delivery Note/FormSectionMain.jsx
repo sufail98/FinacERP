@@ -19,6 +19,7 @@ import PropTypes from 'prop-types';
 import DateInput from '@/components/elements/theme/DateInput'
 import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal'
 import NormalSelectInput from '@/components/elements/theme/NormalSelectInput'
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
 
 const FormSectionMain = ({
@@ -62,8 +63,14 @@ const FormSectionMain = ({
   setProformaData,
   salesOrderData,
   setSalesOrderData,
-  resetTableKey
+  resetTableKey,
+  updateCustomerId,
+  setUpdateCustomerId
 }) => {
+  const { hasAccess: salesOrderHasAccess, } = usePrivileges("Sales Order");
+  const { hasAccess: hasTransactionBatchAccess } = usePrivileges("Transaction Batch");
+  const { hasAccess: hasEmployeeAccess, } = usePrivileges("Employee");
+
 
   const { t } = useTranslation();
   const [loadingCustomer, setLoadingCustomer] = useState(false);
@@ -75,17 +82,12 @@ const FormSectionMain = ({
   const [shippingAddresOpen, setShippingAddressOpen] = useState(false);
   const [billingAddressOpen, setBilligAddressOpen] = useState(false);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
-
-
-  const [updateCustomerId, setUpdateCustomerId] = useState(null);
-
-
-
   const [fetchSalesAccountLoading, setSalesAcLoading] = useState(false)
 
+  const [currencyConvertionData, setCurrencyConvertionData] = useState([]);
 
 
-  const { selectedBranchId, currentCurrency, currentFinancialYear } = useAuth();
+  const { selectedBranchId, currentCurrency:currentCurrencyFromStore, currentFinancialYear } = useAuth();
   const [showTaxType, setShowTaxType] = useState(false);
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -101,11 +103,49 @@ const FormSectionMain = ({
     { value: 'NA', label: 'NA' },
     { value: 'Quotation', label: 'Against Quotation' },
     { value: 'Peroforma', label: 'Against Proforma' },
-    { value: 'Order', label: 'Against Order' },
+    salesOrderHasAccess && { value: 'Order', label: 'Against Order' },
   ];
 
 
+  useEffect(() => {
+    fetchCurrencyConvertion()
+  }, [selectedBranchId])
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
 
+    const date = new Date(dateString);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const MM = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+
+    const format = generalSettings?.dateformat || 'dd-MM-yyyy';
+
+    return format
+      .replace('dd', dd)
+      .replace('MM', MM)
+      .replace('yyyy', yyyy);
+  };
+  const formatDecimal = (value) =>
+    Number(value || 0).toFixed(generalSettings.decimalPart);
+  const fetchCurrencyConvertion = async () => {
+    try {
+      const response = await axiosInstance.get(`currency-conversions/${selectedBranchId}`);
+
+      const formattedData = response.data.data.map((item, index) => ({
+        ...item,
+        SNo: index + 1,
+        date: formatDate(item.date),
+        rate: item.rate !== null && item.rate !== undefined
+          ? formatDecimal(item.rate)
+          : formatDecimal(0),
+      }));
+
+      setCurrencyConvertionData(formattedData);
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const fetchLedgerBalance = async (ledgerId) => {
     try {
@@ -196,15 +236,8 @@ const FormSectionMain = ({
       fetchSalesOrderData(value);
       fetchCustomerData(value)
     }
-    if (name === 'quotationMasterId') {
-      loadQuotationDetailsByQtnId(value)
-    }
-    if (name === 'proformaMasterId') {
-      loadProformaDetailsByProformaId(value)
-    }
-    if (name === 'orderMasterId') {
-      loadOrderDetailsByOrderMasterIdId(value)
-    }
+
+
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -252,34 +285,33 @@ const FormSectionMain = ({
 
 
   return (
-    <div className='p-2 space-y-0.5 bg-primary dark:bg-primary'>
+    <div className="p-2 space-y-0.5 bg-primary dark:bg-primary">
       {/* Main Grid - Responsive Layout */}
       <div className="grid grid-cols-1 xl:grid-cols-[65%_35%] gap-1 lg:gap-2 w-full border-b border-themed dark:border-themed pb-1">
-
         {/* LEFT SECTION */}
         <div className="flex flex-col lg:flex-row gap-1">
-          <div className='w-full lg:w-[78%] space-y-0.5'>
-
+          <div className="w-full lg:w-[78%] space-y-0.5">
             {/* Invoice Header Row */}
-            <div className='flex flex-col sm:flex-row gap-0.5 lg:gap-1'>
+            <div className="flex flex-col sm:flex-row gap-0.5 lg:gap-1">
               <TextInput
-                label={t('salesInvoice.form.label.formHeaderSection.deliveryNotNo')}
+                label={t(
+                  "salesInvoice.form.label.formHeaderSection.deliveryNotNo",
+                )}
                 value={editMode ? existingInvoiceNo : invoiceId}
                 onChange={handleInputChange}
                 required
-                className='w-full sm:w-[100px] text-red-600 dark:text-red-400 font-bold'
+                className="w-full sm:w-[100px] text-red-600 dark:text-red-400 font-bold"
                 readOnly={true}
                 labelBold
               />
 
-              <div className='w-full sm:w-[150px] lg:w-[160px]'>
-
+              <div className="w-full sm:w-[150px] lg:w-[160px]">
                 <DateInput
-                  label={t('salesInvoice.form.label.formHeaderSection.date')}
+                  label={t("salesInvoice.form.label.formHeaderSection.date")}
                   format={generalSettings.dateformat}
                   timeText={time}
                   value={formData.date}
-                  name='date'
+                  name="date"
                   onChange={handleInputChange}
                   required
                   className="w-full"
@@ -287,86 +319,103 @@ const FormSectionMain = ({
                   min={currentFinancialYear?.fromDate}
                   max={currentFinancialYear?.toDate}
                 />
-
               </div>
-
             </div>
 
             {/* Dynamic Grid Section */}
-            <div className={`grid gap-1 lg:gap-1.5 ${generalSettings?.costCentre
-              ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-              : 'grid-cols-1 sm:grid-cols-2'
-              }`}>
+            <div
+              className={`grid gap-1 lg:gap-1.5 ${generalSettings?.costCentre
+                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                  : "grid-cols-1 sm:grid-cols-2"
+                }`}
+            >
               {generalSettings?.costCentre && (
                 <SearchableDropdown
                   name="costCentreId"
-                  label={t('salesInvoice.form.label.formHeaderSection.costCentreId')}
+                  label={t(
+                    "salesInvoice.form.label.formHeaderSection.costCentreId",
+                  )}
                   options={costCenters?.map((data) => ({
                     value: data.costCentreId,
                     label: data.CostCentre,
                   }))}
                   value={formData.costCentreId}
-                  onChange={(value) => handleDropdownChange('costCentreId', value)}
-                  placeholder={t('salesInvoice.form.placeholders.formHeaderSection.costCentreId')}
-                  searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.costCentreId')}
+                  onChange={(value) =>
+                    handleDropdownChange("costCentreId", value)
+                  }
+                  placeholder={t(
+                    "salesInvoice.form.placeholders.formHeaderSection.costCentreId",
+                  )}
+                  searchPlaceholder={t(
+                    "salesInvoice.form.placeholders.formHeaderSection.costCentreId",
+                  )}
                   clearable={true}
                   className="w-full"
                   loading={loading.costCenters}
-
                 />
               )}
 
               <TextInput
                 name="RefNo"
-                label={t('salesInvoice.form.label.formHeaderSection.RefNo')}
-                type="number"
+                label={t("salesInvoice.form.label.formHeaderSection.RefNo")}
+                type="text"
                 value={formData.RefNo}
                 onChange={handleInputChange}
                 className="w-full"
-                placeholder={t('salesInvoice.form.placeholders.formHeaderSection.RefNo')}
+                placeholder={t(
+                  "salesInvoice.form.placeholders.formHeaderSection.RefNo",
+                )}
               />
 
-
-
-
               <DateInput
-                label={t('salesInvoice.form.label.formHeaderSection.refDate')}
+                label={t("salesInvoice.form.label.formHeaderSection.refDate")}
                 value={formData.RefDate}
-                name='RefDate'
+                name="RefDate"
                 onChange={handleInputChange}
                 className="w-full"
                 format={generalSettings.dateformat}
               />
 
 
-              <SearchableDropdown
-                name="BatchId"
-                label={t('salesInvoice.form.label.formHeaderSection.BatchId')}
-                options={batches.map(batch => ({
-                  value: batch.transactionbatchid,
-                  label: batch.batchname
-                }))}
-                value={formData.BatchId}
-                onChange={(value) => handleDropdownChange('BatchId', value)}
-                placeholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
-                searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.BatchId')}
-                clearable={true}
-                className="w-full"
-
-              />
+              {hasTransactionBatchAccess && (
+                <SearchableDropdown
+                  name="BatchId"
+                  label={t("salesInvoice.form.label.formHeaderSection.BatchId")}
+                  options={batches?.map((batch) => ({
+                    value: batch.transactionbatchid,
+                    label: batch.batchname,
+                  }))}
+                  value={formData.BatchId}
+                  onChange={(value) => handleDropdownChange("BatchId", value)}
+                  placeholder={t(
+                    "salesInvoice.form.placeholders.formHeaderSection.BatchId",
+                  )}
+                  searchPlaceholder={t(
+                    "salesInvoice.form.placeholders.formHeaderSection.BatchId",
+                  )}
+                  clearable={true}
+                  className="w-full"
+                />
+              )}
 
               <TextInput
                 name="LPONo"
-                label={t('salesInvoice.form.label.formHeaderSection.orderRefNo')}
+                label={t(
+                  "salesInvoice.form.label.formHeaderSection.orderRefNo",
+                )}
                 value={formData.LPONo}
                 onChange={handleInputChange}
-                placeholder={t('salesInvoice.form.placeholders.formHeaderSection.orderRefNo')}
+                placeholder={t(
+                  "salesInvoice.form.placeholders.formHeaderSection.orderRefNo",
+                )}
                 className="w-full"
               />
               <DateInput
-                label={t('salesInvoice.form.label.formHeaderSection.orderRefDate')}
+                label={t(
+                  "salesInvoice.form.label.formHeaderSection.orderRefDate",
+                )}
                 value={formData.LPODate}
-                name='LPODate'
+                name="LPODate"
                 onChange={handleInputChange}
                 className="w-full"
                 format={generalSettings.dateformat}
@@ -377,137 +426,200 @@ const FormSectionMain = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 lg:gap-1.5">
               <SearchableDropdown
                 name="pricingLevelId"
-                label={t('salesInvoice.form.label.formHeaderSection.pricingLevelId')}
+                label={t(
+                  "salesInvoice.form.label.formHeaderSection.pricingLevelId",
+                )}
                 options={pricingLevel?.map((data) => ({
                   value: data.PricingLevelId,
                   label: data.PricingLevelName,
                 }))}
                 value={formData.pricingLevelId}
-                onChange={(value) => handleDropdownChange("pricingLevelId", value)}
-                placeholder={t('salesInvoice.form.placeholders.formHeaderSection.pricingLevelId')}
-                searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.pricingLevelId')}
+                onChange={(value) =>
+                  handleDropdownChange("pricingLevelId", value)
+                }
+                placeholder={t(
+                  "salesInvoice.form.placeholders.formHeaderSection.pricingLevelId",
+                )}
+                searchPlaceholder={t(
+                  "salesInvoice.form.placeholders.formHeaderSection.pricingLevelId",
+                )}
                 clearable
                 className="w-full"
                 loading={loading.pricingLevel}
-
               />
 
-              <div className='flex gap-0.5 lg:gap-1 items-end flex-1'>
-                <div className='flex-1 min-w-0'>
-                  <SearchableDropdown
-                    name="employeeId"
-                    label={t('salesInvoice.form.label.formHeaderSection.salesMan')}
-                    options={employees?.map((data) => ({
-                      value: data.employeeId,
-                      label: data.employeeName,
-                    }))}
-                    value={formData.employeeId}
-                    onChange={(value) => handleDropdownChange('employeeId', value)}
-                    placeholder={t('salesInvoice.form.placeholders.formHeaderSection.salesMan')}
-                    searchPlaceholder="Sales man..."
-                    clearable={true}
-                    className='w-full mb-0.5'
-                    loading={loading.employees}
-                  />
+              {hasEmployeeAccess && (
+                <div className="flex gap-0.5 lg:gap-1 items-end flex-1">
+                  <div className="flex-1 min-w-0">
+                    <SearchableDropdown
+                      name="employeeId"
+                      label={t(
+                        "salesInvoice.form.label.formHeaderSection.salesMan",
+                      )}
+                      options={employees?.map((data) => ({
+                        value: data.employeeId,
+                        label: data.employeeName,
+                      }))}
+                      value={formData.employeeId}
+                      onChange={(value) =>
+                        handleDropdownChange("employeeId", value)
+                      }
+                      placeholder={t(
+                        "salesInvoice.form.placeholders.formHeaderSection.salesMan",
+                      )}
+                      searchPlaceholder="Sales man..."
+                      clearable={true}
+                      className="w-full mb-0.5"
+                      loading={loading.employees}
+                    />
+                  </div>
+                  <div className="mb-0.5 flex-shrink-0">
+                    <AddNewBtn
+                      icon={Plus}
+                      onClick={() => setEmployeeModalOpen(true)}
+                    />
+                  </div>
                 </div>
-                <div className='mb-0.5 flex-shrink-0'>
-                  <AddNewBtn
-                    icon={Plus}
-                    onClick={() => setEmployeeModalOpen(true)}
-                  />
-                </div>
-              </div>
+              )}
 
               {showTaxType && (
                 <NormalSelectInput
-                  name='taxType'
-                  label={t('salesInvoice.form.label.formHeaderSection.taxtype')}
+                  name="taxType"
+                  label={t("salesInvoice.form.label.formHeaderSection.taxtype")}
                   value={formData.taxType}
                   options={[
-                    { value: "Applicable to product", label: "Applicable to product" },
+                    {
+                      value: "Applicable to product",
+                      label: "Applicable to product",
+                    },
                     { value: "NA", label: "NA" },
                   ]}
-                  onChange={(e) => handleDropdownChange(e.target.name, e.target.value)}
-                  placeholder={t('salesInvoice.form.placeholders.formHeaderSection.status')}
-                  searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.status')}
+                  onChange={(e) =>
+                    handleDropdownChange(e.target.name, e.target.value)
+                  }
+                  placeholder={t(
+                    "salesInvoice.form.placeholders.formHeaderSection.status",
+                  )}
+                  searchPlaceholder={t(
+                    "salesInvoice.form.placeholders.formHeaderSection.status",
+                  )}
                 />
               )}
             </div>
           </div>
 
-          <div className='w-full lg:w-[22%] space-y-1 lg:space-y-1.5'>
+          <div className="w-full lg:w-[22%] space-y-1 lg:space-y-1.5">
             <SearchableDropdown
               name="AgainstNo"
-              label={t('deliveryNote.form.label.deliveryMode')}
+              label={t("deliveryNote.form.label.deliveryMode")}
               options={salesModeOptions}
               value={formData.AgainstNo}
-              onChange={(value) => handleDropdownChange('AgainstNo', value)}
-              placeholder={t('deliveryNote.form.label.deliveryMode')}
-              searchPlaceholder={t('deliveryNote.form.label.deliveryMode')}
+              onChange={(value) => handleDropdownChange("AgainstNo", value)}
+              placeholder={t("deliveryNote.form.label.deliveryMode")}
+              searchPlaceholder={t("deliveryNote.form.label.deliveryMode")}
               clearable={true}
               className='w-full'
+              readOnly={editMode}
+
             />
 
             {formData.ledgerId && (
               <>
-                {formData.AgainstNo === 'Quotation' && (
+                {formData.AgainstNo === "Quotation" && (
                   <SearchableDropdown
-                    label={t("salesInvoice.form.label.formHeaderSection.selecteQuotation")}
-                    options={quotationData.map((data) => ({
+                    label={t(
+                      "salesInvoice.form.label.formHeaderSection.selecteQuotation",
+                    )}
+                    options={quotationData?.map((data) => ({
                       value: data.quotationmasterid,
-                      label: `${data.quotationno} | ${data.quotationdate} | ${data.ledgername} | ${data.tinNumber} | ${data.customerphone} | ${data.totalamount}`
+                      label: `${data.quotationno} | ${data.quotationdate} | ${data.ledgername} | ${data.tinNumber} | ${data.customerphone} | ${data.totalamount}`,
                     }))}
                     value={formData.quotationMasterId} // optional
-                    onChange={(value) => handleDropdownChange('quotationMasterId', value)}
-                    placeholder={t('salesInvoice.form.label.formHeaderSection.selecteQuotation')}
-                    searchPlaceholder={t('salesInvoice.form.label.formHeaderSection.selecteQuotation')}
+                    onChange={(value) =>
+                      handleDropdownChange("quotationMasterId", value)
+                    }
+                    placeholder={t(
+                      "salesInvoice.form.label.formHeaderSection.selecteQuotation",
+                    )}
+                    searchPlaceholder={t(
+                      "salesInvoice.form.label.formHeaderSection.selecteQuotation",
+                    )}
                     clearable={true}
                     className="w-full"
+                    onEnter={(selectedValues) => {
+                      loadQuotationDetailsByQtnId(selectedValues); // passes array of IDs
+                    }}
+                    multiple
+                    readOnly={editMode}
                   />
                 )}
-                {formData.AgainstNo === 'Peroforma' && (
+                {formData.AgainstNo === "Peroforma" && (
                   <SearchableDropdown
-                    label={t("salesInvoice.form.label.formHeaderSection.selecteProforma")}
-                    options={proformaData.map((data) => ({
+                    label={t(
+                      "salesInvoice.form.label.formHeaderSection.selecteProforma",
+                    )}
+                    options={proformaData?.map((data) => ({
                       value: data.proformaMasterId,
-                      label: `${data.proformaNo} | ${data.ProformaDate} | ${data.customerName} | ${data.tinNumber} | ${data.CustomerPhone} | ${data.totalAmount}`
+                      label: `${data.proformaNo} | ${data.ProformaDate} | ${data.customerName} | ${data.tinNumber} | ${data.CustomerPhone} | ${data.totalAmount}`,
                     }))}
                     value={formData.proformaMasterId} // optional
-                    onChange={(value) => handleDropdownChange('proformaMasterId', value)}
-                    placeholder={t('salesInvoice.form.label.formHeaderSection.selecteProforma')}
-                    searchPlaceholder={t('salesInvoice.form.label.formHeaderSection.selecteProforma')}
+                    onChange={(value) =>
+                      handleDropdownChange("proformaMasterId", value)
+                    }
+                    placeholder={t(
+                      "salesInvoice.form.label.formHeaderSection.selecteProforma",
+                    )}
+                    searchPlaceholder={t(
+                      "salesInvoice.form.label.formHeaderSection.selecteProforma",
+                    )}
                     clearable={true}
                     className="w-full"
+                    onEnter={(selectedValues) => {
+                      loadProformaDetailsByProformaId(selectedValues); // passes array of IDs
+                    }}
+                    multiple
+                    readOnly={editMode}
                   />
                 )}
-                {formData.AgainstNo === 'Order' && (
+                {formData.AgainstNo === "Order" && (
                   <SearchableDropdown
-                    label={t("salesInvoice.form.label.formHeaderSection.selecteOrder")}
-                    options={salesOrderData.map((data) => ({
+                    label={t(
+                      "salesInvoice.form.label.formHeaderSection.selecteOrder",
+                    )}
+                    options={salesOrderData?.map((data) => ({
                       value: data.orderMasterId,
-                      label: `${data.orderNo} | ${data.OrderDate} | ${data.customerName} | ${data.tinNumber} | ${data.CustomerPhone} | ${data.totalAmount}`
+                      label: `${data.orderNo} | ${data.OrderDate} | ${data.customerName} | ${data.tinNumber} | ${data.CustomerPhone} | ${data.totalAmount}`,
                     }))}
                     value={formData.orderMasterId}
-                    onChange={(value) => handleDropdownChange('orderMasterId', value)}
-                    placeholder={t('salesInvoice.form.label.formHeaderSection.selecteOrder')}
-                    searchPlaceholder={t('salesInvoice.form.label.formHeaderSection.selecteOrder')}
+                    onChange={(value) =>
+                      handleDropdownChange("orderMasterId", value)
+                    }
+                    placeholder={t(
+                      "salesInvoice.form.label.formHeaderSection.selecteOrder",
+                    )}
+                    searchPlaceholder={t(
+                      "salesInvoice.form.label.formHeaderSection.selecteOrder",
+                    )}
                     clearable={true}
                     className="w-full"
+                    onEnter={(selectedValues) => {
+                      loadOrderDetailsByOrderMasterIdId(selectedValues); // passes array of IDs
+                    }}
+                    multiple
+                    readOnly={editMode}
                   />
                 )}
               </>
             )}
-
-
           </div>
         </div>
 
         {/* RIGHT SECTION - Address & Dates */}
         <div className="space-y-1.5 lg:space-y-2 pr-1">
-          <div className='flex gap-1 lg:gap-1.5 items-end w-full sm:col-span-2'>
-            <div className='flex-1 min-w-0'>
+          <div className="flex gap-1 lg:gap-1.5 items-end w-full sm:col-span-2">
+            <div className="flex-1 min-w-0">
               <CustomerDropdown
-                label={t('salesInvoice.form.label.formHeaderSection.ledgerId')}
+                label={t("salesInvoice.form.label.formHeaderSection.ledgerId")}
                 name="ledgerId"
                 value={formData.ledgerId}
                 onChange={(value) => handleDropdownChange("ledgerId", value)}
@@ -517,19 +629,22 @@ const FormSectionMain = ({
                   balance: data.openingBalance,
                   address: `${data.StreetName || ""} ${data.CityName || ""} ${data.Country || ""}`,
                   vatNo: data.tinNumber,
-                  phoneNo: data.phoneNo
+                  phoneNo: data.phoneNo,
                 }))}
-                placeholder={t('salesInvoice.form.placeholders.formHeaderSection.ledgerId')}
-                searchPlaceholder={t('salesInvoice.form.placeholders.formHeaderSection.ledgerId')}
+                placeholder={t(
+                  "salesInvoice.form.placeholders.formHeaderSection.ledgerId",
+                )}
+                searchPlaceholder={t(
+                  "salesInvoice.form.placeholders.formHeaderSection.ledgerId",
+                )}
                 clearable
                 required
                 loading={loading.customers}
                 error={errors.ledgerId}
                 onBlur={(e) => handleBlur(e, validationRules)}
-
               />
             </div>
-            <div className='flex-shrink-0'>
+            <div className="flex-shrink-0">
               <AddNewBtn
                 icon={Plus}
                 onClick={() => setCustomerModalOpen(true)}
@@ -538,7 +653,7 @@ const FormSectionMain = ({
           </div>
           {formData?.ledgerId ? (
             loadingCustomer ? (
-              <div className='w-full h-24 lg:h-28 flex justify-center items-center border border-themed dark:border-themed rounded-xl text-muted dark:text-muted font-bold text-xs lg:text-sm'>
+              <div className="w-full h-24 lg:h-28 flex justify-center items-center border border-themed dark:border-themed rounded-xl text-muted dark:text-muted font-bold text-xs lg:text-sm">
                 <svg
                   className="animate-spin h-5 w-5 mb-1 text-blue-600 dark:text-blue-400"
                   xmlns="http://www.w3.org/2000/svg"
@@ -561,79 +676,109 @@ const FormSectionMain = ({
                 </svg>
               </div>
             ) : (
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-2 lg:gap-3'>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 lg:gap-3">
                 {/* Billing Address */}
                 <div>
-                  <h1 className='text-red-600 dark:text-red-400 text-sm lg:text-base flex gap-1 lg:gap-2 items-center mb-1'>
-                    {t('salesInvoice.form.label.formHeaderSection.billingAddressHeading')}
+                  <h1 className="text-red-600 dark:text-red-400 text-sm lg:text-base flex gap-1 lg:gap-2 items-center mb-1">
+                    {t(
+                      "salesInvoice.form.label.formHeaderSection.billingAddressHeading",
+                    )}
                     <PencilIcon
                       className="w-4 h-4 cursor-pointer hover:text-red-700 dark:hover:text-red-300"
                       onClick={() => setBilligAddressOpen(true)}
                     />
                   </h1>
-                  <h2 className='font-bold text-xs lg:text-sm text-primary dark:text-primary'>{billingAddress?.name}</h2>
-                  <p className='text-[11px] lg:text-xs text-secondary dark:text-secondary'>{billingAddress?.phoneNo}</p>
-                  <p className='text-[11px] lg:text-xs break-words text-secondary dark:text-secondary'>{billingAddress?.address}</p>
-                  <p className='text-[11px] lg:text-xs text-secondary dark:text-secondary'>
-                    {t('salesInvoice.form.label.formHeaderSection.vatLabel')}: {billingAddress?.vatNo || 'N/A'}
+                  <h2 className="font-bold text-xs lg:text-sm text-primary dark:text-primary">
+                    {billingAddress?.name}
+                  </h2>
+                  <p className="text-[11px] lg:text-xs text-secondary dark:text-secondary">
+                    {billingAddress?.phoneNo}
                   </p>
-                  <p className={`text-xs lg:text-sm font-semibold ${currentledgerBalance < 0
-                    ? "text-red-600 dark:text-red-400"
-                    : "text-green-600 dark:text-green-400"
-                    }`}>
-                    {t('salesInvoice.form.label.formHeaderSection.balanceLabel')}: {Number(currentledgerBalance).toFixed(generalSettings.decimalPart)}
+                  <p className="text-[11px] lg:text-xs break-words text-secondary dark:text-secondary">
+                    {billingAddress?.address}
+                  </p>
+                  <p className="text-[11px] lg:text-xs text-secondary dark:text-secondary">
+                    {t("salesInvoice.form.label.formHeaderSection.vatLabel")}:{" "}
+                    {billingAddress?.vatNo || "N/A"}
+                  </p>
+                  <p
+                    className={`text-xs lg:text-sm font-semibold ${currentledgerBalance < 0
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-green-600 dark:text-green-400"
+                      }`}
+                  >
+                    {t(
+                      "salesInvoice.form.label.formHeaderSection.balanceLabel",
+                    )}
+                    :{" "}
+                    {Number(currentledgerBalance).toFixed(
+                      generalSettings.decimalPart,
+                    )}
                   </p>
                 </div>
 
                 {/* Shipping Address */}
                 <div>
-                  <h1 className='text-green-600 dark:text-green-400 text-sm lg:text-base flex gap-1 lg:gap-2 items-center mb-1'>
-                    {t('salesInvoice.form.label.formHeaderSection.shippingAddressHeading')}
+                  <h1 className="text-green-600 dark:text-green-400 text-sm lg:text-base flex gap-1 lg:gap-2 items-center mb-1">
+                    {t(
+                      "salesInvoice.form.label.formHeaderSection.shippingAddressHeading",
+                    )}
                     <PencilIcon
                       className="w-4 h-4 cursor-pointer hover:text-green-700 dark:hover:text-green-300"
                       onClick={() => setShippingAddressOpen(true)}
                     />
                   </h1>
-                  <h2 className='font-bold text-xs lg:text-sm text-primary dark:text-primary'>{shippingAdderess?.name}</h2>
-                  <p className='text-[11px] lg:text-xs text-secondary dark:text-secondary'>{shippingAdderess?.phoneNo}</p>
-                  <p className='text-[11px] lg:text-xs break-words text-secondary dark:text-secondary'>
-                    {shippingAdderess?.shippingAddress?.address1 && `${shippingAdderess?.shippingAddress?.address1}, `}
-                    {shippingAdderess?.shippingAddress?.address2 && `${shippingAdderess?.shippingAddress?.address2}, `}
-                    {shippingAdderess?.shippingAddress?.address3 && `${shippingAdderess?.shippingAddress?.address3}, `}
+                  <h2 className="font-bold text-xs lg:text-sm text-primary dark:text-primary">
+                    {shippingAdderess?.name}
+                  </h2>
+                  <p className="text-[11px] lg:text-xs text-secondary dark:text-secondary">
+                    {shippingAdderess?.phoneNo}
+                  </p>
+                  <p className="text-[11px] lg:text-xs break-words text-secondary dark:text-secondary">
+                    {shippingAdderess?.shippingAddress?.address1 &&
+                      `${shippingAdderess?.shippingAddress?.address1}, `}
+                    {shippingAdderess?.shippingAddress?.address2 &&
+                      `${shippingAdderess?.shippingAddress?.address2}, `}
+                    {shippingAdderess?.shippingAddress?.address3 &&
+                      `${shippingAdderess?.shippingAddress?.address3}, `}
                     {shippingAdderess?.shippingAddress?.address4}
                   </p>
-                  <p className='text-[11px] lg:text-xs text-secondary dark:text-secondary'>
-                    {t('salesInvoice.form.label.formHeaderSection.vatLabel')}: {shippingAdderess?.vatNo || 'N/A'}
+                  <p className="text-[11px] lg:text-xs text-secondary dark:text-secondary">
+                    {t("salesInvoice.form.label.formHeaderSection.vatLabel")}:{" "}
+                    {shippingAdderess?.vatNo || "N/A"}
                   </p>
                 </div>
               </div>
             )
           ) : (
-            <div className='w-full h-24 lg:h-28 flex justify-center items-center border border-themed dark:border-themed rounded-xl text-muted dark:text-muted font-bold text-xs lg:text-sm'>
-              {t('salesInvoice.form.label.formHeaderSection.selectCustomerMsg')}
+            <div className="w-full h-24 lg:h-28 flex justify-center items-center border border-themed dark:border-themed rounded-xl text-muted dark:text-muted font-bold text-xs lg:text-sm">
+              {t("salesInvoice.form.label.formHeaderSection.selectCustomerMsg")}
             </div>
           )}
         </div>
       </div>
 
       {/* Sales Account & Currency Links */}
-      <div className='flex flex-wrap gap-2 lg:gap-3 text-xs'>
+      <div className="flex flex-wrap gap-2 lg:gap-3 text-xs">
         <p
-          className='text-blue-600 dark:text-blue-400 border-b border-blue-600 dark:border-blue-400 w-fit cursor-pointer hover:text-blue-700 dark:hover:text-blue-300'
+          className="text-blue-600 dark:text-blue-400 border-b border-blue-600 dark:border-blue-400 w-fit cursor-pointer hover:text-blue-700 dark:hover:text-blue-300"
           onClick={() => setSalesAcModalOpen(true)}
         >
-          {t('salesInvoice.form.label.formHeaderSection.salesAcLabel')}: {formData.salesAccountName}
+          {t("salesInvoice.form.label.formHeaderSection.salesAcLabel")}:{" "}
+          {formData.salesAccountName}
         </p>
-        <p
-          className='text-blue-600 dark:text-blue-400 border-b border-blue-600 dark:border-blue-400 w-fit cursor-pointer hover:text-blue-700 dark:hover:text-blue-300'
-          onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
-        >
-          {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {currentCurrency?.currencyName || "Select Currency"}
-        </p>
+        {financeSettings?.multiCurrency && (
+          <p
+            className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+            onClick={() => financeSettings?.multiCurrency && setCurrencyModalOpen(true)}
+          >
+            {t('salesInvoice.form.label.formHeaderSection.currencyLabel')}: {formData?.currencyName || currentCurrencyFromStore?.currencyName || "Select Currency"}
+          </p>
+        )}
       </div>
 
       {/* Sales Invoice Table */}
-      <div className='mt-1.5 lg:mt-2 overflow-x-auto'>
+      <div className="mt-1.5 lg:mt-2 overflow-x-auto">
         <DeliveryNoteTable
           formData={formData}
           setFormData={setFormData}
@@ -654,13 +799,14 @@ const FormSectionMain = ({
         handleChange={handleDropdownChange}
         salesAccounts={salesAccount}
         fetchSalesAccountLoading={fetchSalesAccountLoading}
-
       />
       <SelecteCurrecyModal
         open={currencyModalOpen}
         handleClose={() => setCurrencyModalOpen(false)}
         formData={formData}
         currency={currency}
+        currencyConvertionData={currencyConvertionData}
+
         handleChange={(field, value) => {
           handleDropdownChange(field, value);
           // if (field === "currency") {
@@ -690,8 +836,8 @@ const FormSectionMain = ({
         handleClose={() => setShippingAddressOpen(false)}
         editId={updateCustomerId}
         onSuccess={() => {
-          fetchCustomerData()
-          fetchCustomer()
+          fetchCustomerData();
+          fetchCustomer();
         }}
       />
       <BillingAddressModal
@@ -710,7 +856,7 @@ const FormSectionMain = ({
         }}
       />
     </div>
-  )
+  );
 }
 
 export default FormSectionMain;

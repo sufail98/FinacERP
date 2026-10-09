@@ -101,7 +101,11 @@ const AddTaxMaster = ({ open, handleClose, onSuccess, editId }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let updatedValue = value
+    if (["taxName"].includes(name)) {
+      updatedValue = value.replace(/[^A-Za-z0-9@%\- ]/g, "");
+    }
+    setFormData((prev) => ({ ...prev, [name]: updatedValue }));
 
     // ✅ Clear the specific field error when user starts typing
     if (errors[name]) {
@@ -151,7 +155,7 @@ const AddTaxMaster = ({ open, handleClose, onSuccess, editId }) => {
     if (!validateForm(formData, validationRules)) return;
 
     if (editId && generalSettings?.askConfirmationEdit) {
-    const result = await Swal.fire({
+      const result = await Swal.fire({
         title: t('ConfirmUpdateTitle'),
         text: t('ConfirmUpdateText'),
         icon: 'question',
@@ -161,15 +165,15 @@ const AddTaxMaster = ({ open, handleClose, onSuccess, editId }) => {
         confirmButtonText: t('YesUpdate'),
         cancelButtonText: t('Cancel'),
         didOpen: () => {
-            const container = document.querySelector('.swal2-container');
-            if (container) {
-                container.style.cssText += '; z-index: 2147483647 !important;';
-            }
+          const container = document.querySelector('.swal2-container');
+          if (container) {
+            container.style.cssText += '; z-index: 2147483647 !important;';
+          }
         }
-    });
-    if (!result.isConfirmed) return;
-} else if (!editId && generalSettings?.askConfirmationSave) {
-    const result = await Swal.fire({
+      });
+      if (!result.isConfirmed) return;
+    } else if (!editId && generalSettings?.askConfirmationSave) {
+      const result = await Swal.fire({
         title: t('ConfirmSaveTitle'),
         text: t('ConfirmSaveText'),
         icon: 'question',
@@ -179,14 +183,14 @@ const AddTaxMaster = ({ open, handleClose, onSuccess, editId }) => {
         confirmButtonText: t('YesSave'),
         cancelButtonText: t('Cancel'),
         didOpen: () => {
-            const container = document.querySelector('.swal2-container');
-            if (container) {
-                container.style.cssText += '; z-index: 2147483647 !important;';
-            }
+          const container = document.querySelector('.swal2-container');
+          if (container) {
+            container.style.cssText += '; z-index: 2147483647 !important;';
+          }
         }
-    });
-    if (!result.isConfirmed) return;
-}
+      });
+      if (!result.isConfirmed) return;
+    }
 
     try {
       if (editId) {
@@ -199,7 +203,10 @@ const AddTaxMaster = ({ open, handleClose, onSuccess, editId }) => {
           message: t("taxMaster.alerts.updateSuccess"),
         });
       } else {
-        await axiosInstance.post("save-tax-master", formData);
+        await axiosInstance.post("save-tax-master", {
+          CreatedUser: user.userId,
+          ...formData,
+        });
         setAlert({
           type: "success",
           message: t("taxMaster.alerts.createSuccess"),
@@ -217,7 +224,7 @@ const AddTaxMaster = ({ open, handleClose, onSuccess, editId }) => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        const fakeEvent = { preventDefault: () => {} };
+        const fakeEvent = { preventDefault: () => { } };
         handleSubmit(fakeEvent);
       }
     };
@@ -355,10 +362,10 @@ const AddTaxMaster = ({ open, handleClose, onSuccess, editId }) => {
             {loading
               ? t("taxMaster.form.buttons.saving")
               : t(
-                  editId
-                    ? "taxMaster.form.buttons.update"
-                    : "taxMaster.form.buttons.save"
-                )}
+                editId
+                  ? "taxMaster.form.buttons.update"
+                  : "taxMaster.form.buttons.save"
+              )}
           </Button>
         </div>
       </form>

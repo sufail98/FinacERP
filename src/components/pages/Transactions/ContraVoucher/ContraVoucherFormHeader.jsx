@@ -69,6 +69,20 @@ const ContraVoucherFormHeader = ({
         }
     };
 
+       const shouldRestrictDates = financeSettings?.ShowAllTransactions === false;
+    const today = new Date().toISOString().split("T")[0];
+
+    const minDateFromFinance = shouldRestrictDates && currentFinancialYear?.fromDate
+        ? currentFinancialYear.fromDate.split(' ')[0]
+        : null;
+    const maxDateFromFinance = shouldRestrictDates && currentFinancialYear?.toDate
+        ? currentFinancialYear.toDate.split(' ')[0]
+        : null;
+    const maxDate =
+        maxDateFromFinance && maxDateFromFinance < today
+            ? maxDateFromFinance
+            : today;
+
     return (
         <div>
             <div className='grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'>
@@ -96,8 +110,8 @@ const ContraVoucherFormHeader = ({
                         format={generalSettings.dateformat}
                         required
                         error={errors.date}
-                        min={currentFinancialYear?.fromDate}
-                        max={currentFinancialYear?.toDate}
+                        min={minDateFromFinance}
+                        max={maxDate}
                     />
                 </div>
 

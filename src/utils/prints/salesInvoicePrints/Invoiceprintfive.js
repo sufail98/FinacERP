@@ -239,8 +239,11 @@ export const generateQRCodeData = (invoiceData, companyName, vatNo, time) => {
  * Generate the invoice HTML for dot matrix printer
  */
 const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => {
+    console.log(invoiceData);
+    
     const state = store.getState().settings;
     const generalSettings = state.generalSettings;
+        const activateRoundoff = Boolean(generalSettings.RoundOff)
     const showCurrencyPrefix = generalSettings.showCurrencyprefix;
     const currencySymbol = currentCurrency ? currentCurrency.currencySymbol : '';
     const fmt = (num) =>
@@ -258,6 +261,7 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
         invoiceNo,
         date,
         customerName,
+        
         customerVATNo,
         salesDetails = [],
         subTotal = 0,
@@ -265,6 +269,8 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
         totalTax = 0,
         totalAmount = 0,
         paymentMode,
+        othercharge = 0,
+         roundOff = 0,
     } = invoiceData;
 
     // Generate QR code data
@@ -296,7 +302,18 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                         </div>
                     </div>
                 </div>
-
+    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', { 
+                day: '2-digit', 
+                month: 'short', 
+                year: 'numeric' 
+            })} ${new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            })}</div>
+        </div>
                 <div class="company-invoice-section">
                     <div class="company-details">
                         <div class="company-name-ar">شركة فيصل فهد حسين الكاري للتقليات</div>
@@ -411,10 +428,32 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                             <div class="total-line">
                                 <span class="total-value">${fmt(subTotal)}</span>
                             </div>
+                            ${Number(othercharge) !== 0 ? `<div class="total-line">
+                                <span class="total-value">${fmt(othercharge)}</span>
+                            </div>` : ""}
+                             
+                            ${((salesSettings?.showBillDiscountAmount || salesSettings?.showBillDiscountPerc) && Number(billDiscount) !==0)?`
+                                <div class="total-line">
+                                <span class="total-value">${fmt(billDiscount)}</span>
+                            </div> ` : ""}
+
+                              <div class="total-line">
+                                        <span class="total-value"> ${fmt(
+                                                Number(subTotal || 0) -
+                                                Number(invoiceData?.billDiscount || 0) +
+                                                Number(othercharge || 0)
+                                        )}</span>
+                            </div>
+
                             <div class="total-line vat-line">
                                 <span class="total-label">15%</span>
                                 <span class="total-value">${fmt(totalTax)}</span>
                             </div>
+                            ${(activateRoundoff && Number(roundOff) !== 0) ? `
+                               <div class="total-line">
+                                <span class="total-value">${fmt(roundOff)}</span>
+                            </div> ` : ""}
+                            
                             <div class="total-line grand-total">
                                 <span class="total-value">${fmt(totalAmount)}</span>
                             </div>
@@ -460,6 +499,47 @@ const generateInvoiceHTML = (invoiceData, branchData, time, currentCurrency) => 
                     page-break-after: always;
                     padding: 0;
                 }
+                    /* ✅ Vertical Print Timestamp in Right Corner */
+.print-timestamp {
+    position: absolute;
+    bottom: 15mm;
+    right: 3mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
+
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
                 .page:last-child { 
                     margin-bottom: 0; 
                 }

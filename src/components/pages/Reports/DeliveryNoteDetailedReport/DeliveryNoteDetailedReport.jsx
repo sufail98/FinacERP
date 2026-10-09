@@ -37,9 +37,9 @@ const DeliveryNoteDetailedReport = () => {
 
     const getDefaultDates = () => {
         const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        
         return {
-            fromDate: firstDay.toISOString().split('T')[0],
+            fromDate: today.toISOString().split('T')[0],
             toDate: today.toISOString().split('T')[0]
         };
     };
@@ -64,7 +64,7 @@ const DeliveryNoteDetailedReport = () => {
         try {
             const [customersRes, salesmanRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Customer"],
+                    ledgerTypes: ["Customer","Customer&Supplier"],
                     branchId: selectedBranchId
                 }).catch(() => ({ data: { data: [] } })),
                 axiosInstance.get("employees").catch(() => ({ data: { data: [] } }))
@@ -149,18 +149,66 @@ const DeliveryNoteDetailedReport = () => {
     };
 
     // ─── Define columns for both modes ───────────────────────────────────────────
-    const summaryColumns = useMemo(() => [
-        { key: 'date', label: t('Date'), align: 'center', width: '100' },
-        { key: 'deliveryNoteNo', label: t('Delivery No'), align: 'center', width: '120' },
-        { key: 'customerName', label: t('Customer'), align: 'left', width: '180' },
-        { key: 'CostCentre', label: t('Cost Centre'), align: 'left', width: '120' },
-        { key: 'totalAmount', label: t('Total Amount'), align: 'right', width: '120' },
-        { key: 'billDiscount', label: t('Discount'), align: 'right', width: '100' },
-        { key: 'taxableAmt', label: t('Taxable Amount'), align: 'right', width: '120' },
-        { key: 'totalTax', label: t('Tax Amount'), align: 'right', width: '120' },
-        { key: 'grandAmount', label: t('Grand Total'), align: 'right', width: '120' },
-        { key: 'BillPending', label: t('Status'), align: 'center', width: '100' }
-    ], [t]);
+    const summaryColumns = useMemo(
+      () => [
+        { key: "date", label: t("Date"), align: "center", width: "100" },
+        {
+          key: "deliveryNoteNo",
+          label: t("Delivery No"),
+          align: "center",
+          width: "120",
+        },
+        {
+          key: "customerName",
+          label: t("Customer"),
+          align: "left",
+          width: "180",
+        },
+        {
+          key: "CostCentre",
+          label: t("Cost Centre"),
+          align: "left",
+          width: "120",
+        },
+        // {
+        //   key: "totalAmount",
+        //   label: t("Total Amount"),
+        //   align: "right",
+        //   width: "120",
+        // },
+        {
+          key: "billDiscount",
+          label: t("Discount"),
+          align: "right",
+          width: "100",
+        },
+        {
+          key: "taxableAmt",
+          label: t("Taxable Amount"),
+          align: "right",
+          width: "120",
+        },
+        {
+          key: "totalTax",
+          label: t("Tax Amount"),
+          align: "right",
+          width: "120",
+        },
+        {
+          key: "grandTotal",
+          label: t("Grand Total"),
+          align: "right",
+          width: "120",
+        },
+        // {
+        //   key: "BillPending",
+        //   label: t("Status"),
+        //   align: "center",
+        //   width: "100",
+        // },
+      ],
+      [t],
+    );
 
     const detailedColumns = useMemo(() => [
         { key: 'date', label: t('Date'), align: 'center', width: '100' },
@@ -173,10 +221,10 @@ const DeliveryNoteDetailedReport = () => {
         { key: 'qty', label: t('Qty'), align: 'right', width: '80' },
         { key: 'rate', label: t('Rate'), align: 'right', width: '100' },
         { key: 'grossAmount', label: t('Gross Amount'), align: 'right', width: '120' },
-        { key: 'taxableAmt', label: t('Taxable'), align: 'right', width: '120' },
+        // { key: 'taxableAmt', label: t('Taxable'), align: 'right', width: '120' },
         { key: 'taxAmount', label: t('Tax Amount'), align: 'right', width: '120' },
         { key: 'amount', label: t('Total Amount'), align: 'right', width: '120' },
-        { key: 'BillPending', label: t('Status'), align: 'center', width: '100' }
+        // { key: 'BillPending', label: t('Status'), align: 'center', width: '100' }
     ], [t]);
 
     // Choose active columns based on mode
@@ -264,17 +312,19 @@ const DeliveryNoteDetailedReport = () => {
 
         if (filters.reportType === 'Summary') {
             return {
-                SNo: '',
-                date: '',
-                deliveryNoteNo: <strong>{t('Total')}</strong>,
-                customerName: '',
-                CostCentre: '',
-                totalAmount: sumOf('totalAmount').toFixed(decimalPart),
-                billDiscount: sumOf('billDiscount').toFixed(decimalPart),
-                taxableAmt: sumOf('taxableAmt', 'taxableAmount').toFixed(decimalPart),
-                totalTax: sumOf('totalTax').toFixed(decimalPart),
-                grandAmount: sumOf('grandAmount').toFixed(decimalPart),
-                BillPending: ''
+              SNo: "",
+              date: "",
+              deliveryNoteNo: <strong>{t("Total")}</strong>,
+              customerName: "",
+              CostCentre: "",
+              totalAmount: sumOf("totalAmount").toFixed(decimalPart),
+              billDiscount: sumOf("billDiscount").toFixed(decimalPart),
+              taxableAmt: sumOf("taxableAmt", "taxableAmount").toFixed(
+                decimalPart,
+              ),
+              totalTax: sumOf("totalTax").toFixed(decimalPart),
+              grandTotal: sumOf("grandTotal").toFixed(decimalPart),
+              BillPending: "",
             };
         }
 

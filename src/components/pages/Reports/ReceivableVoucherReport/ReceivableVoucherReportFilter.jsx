@@ -30,6 +30,7 @@ const ReceivableVoucherReportFilter = ({
                         name="fromDate"
                         value={filters.fromDate}
                         onChange={(e, value) => onFilterChange('fromDate', value)}
+                        max={new Date().toISOString().split(('T')[0])}
                         required
                         className='w-full'
                     />
@@ -49,7 +50,7 @@ const ReceivableVoucherReportFilter = ({
 
                 <div className="w-[160px]">
                     <SearchableDropdown
-                        label={t("reportFilters.selectLedger")}
+                        label={t("receivableReport.filters.selectLedger")}
                         name="ledgerId"
                         value={filters.ledgerId}
                         onChange={(value) => onFilterChange('ledgerId', value)}
@@ -62,13 +63,14 @@ const ReceivableVoucherReportFilter = ({
 
                 <div className="w-[140px]">
                     <SearchableDropdown
-                        label={t("reportFilters.paymentMode")}
+                        label={t("receivableReport.columns.PaymentMode")}
                         name="paymentMode"
                         value={filters.paymentMode}
                         onChange={(value) => onFilterChange('paymentMode', value)}
                         options={paymentModeOptions}
                         placeholder={t("All")}
                         searchPlaceholder={t("Search...")}
+                        clearable
                     />
                 </div>
 

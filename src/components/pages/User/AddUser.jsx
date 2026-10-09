@@ -10,7 +10,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Upload, FileText, User, Plus, SaveAll, Eraser } from "lucide-react";
+import { Upload, FileText, User, Plus, SaveAll, Eraser,X } from "lucide-react";
 import BreadCrumb from "@/components/common/BreadCrumb";
 import { useNavigate, useParams } from "react-router-dom";
 import axiosInstance from "@/lib/axiosConfig";
@@ -29,9 +29,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
 import { showToast } from "@/utils/toast";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const AddUser = () => {
     const { userId } = useParams();
+    
     const EditMode = Boolean(userId);
     const [alert, setAlert] = useState(null);
     const navigate = useNavigate();
@@ -41,7 +43,7 @@ const AddUser = () => {
     const { branchList, branchListLoading, branchListError } = useBranches();
 
     const { userGroupList, userGroupLoading, userGroupError } = useUserGroups();
-    const { selectedBranchId } = useAuth();
+    const { selectedBranchId , userId:logginedUserId} = useAuth();
     const { generalSettings } = useSelector((state) => state.settings);
 
     const [formData, setFormData] = useState({
@@ -100,19 +102,19 @@ const AddUser = () => {
             } 
         }
 
-        // Phone validation
-        if (!formData.phoneNo.trim()) {
-            newErrors.phoneNo = t('userList.form.form.errors.phoneNo');
-        } else if (!validatePhone(formData.phoneNo)) {
-            newErrors.phoneNo = t('userList.form.form.errors.phoneNoInvalid');
-        }
+        // // Phone validation
+        // if (!formData.phoneNo.trim()) {
+        //     newErrors.phoneNo = t('userList.form.form.errors.phoneNo');
+        // } else if (!validatePhone(formData.phoneNo)) {
+        //     newErrors.phoneNo = t('userList.form.form.errors.phoneNoInvalid');
+        // }
 
         // Email validation
-        if (!formData.email?.trim()) {
-            newErrors.email = t('userList.form.form.errors.email');
-        } else if (!validateEmail(formData.email)) {
-            newErrors.email = t('userList.form.form.errors.emailInvalid');
-        }
+        // if (!formData.email?.trim()) {
+        //     newErrors.email = t('userList.form.form.errors.email');
+        // } else if (!validateEmail(formData.email)) {
+        //     newErrors.email = t('userList.form.form.errors.emailInvalid');
+        // }
 
         // User role validation
         if (!formData.userRoleId) {
@@ -130,7 +132,14 @@ const AddUser = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
+        let updatedValue = value
+        if(["phoneNo"].includes(name)){
+            updatedValue = sanitize.numbers(value).slice(0,15)
+        }
+        if(["email"].includes(name)){
+            updatedValue = value.replace(/[^a-zA-Z0-9@._-]/g, "");
+        }
+        setFormData((prev) => ({ ...prev, [name]: updatedValue }));
 
         // Clear error for this field when user starts typing
         if (errors[name]) {
@@ -162,25 +171,25 @@ const AddUser = () => {
             //     }
             //     break;
 
-            case 'phoneNo':
-                if (!value.trim()) {
-                    newErrors.phoneNo = t('userList.form.form.errors.phoneNo');
-                } else if (!validatePhone(value)) {
-                    newErrors.phoneNo = t('userList.form.form.errors.phoneNoInvalid');
-                } else {
-                    delete newErrors.phoneNo;
-                }
-                break;
+            // case 'phoneNo':
+            //     if (!value.trim()) {
+            //         newErrors.phoneNo = t('userList.form.form.errors.phoneNo');
+            //     } else if (!validatePhone(value)) {
+            //         newErrors.phoneNo = t('userList.form.form.errors.phoneNoInvalid');
+            //     } else {
+            //         delete newErrors.phoneNo;
+            //     }
+            //     break;
 
-            case 'email':
-                if (!value.trim()) {
-                    newErrors.email = t('userList.form.form.errors.email');
-                } else if (!validateEmail(value)) {
-                    newErrors.email = t('userList.form.form.errors.emailInvalid');
-                } else {
-                    delete newErrors.email;
-                }
-                break;
+            // case 'email':
+            //     if (!value.trim()) {
+            //         newErrors.email = t('userList.form.form.errors.email');
+            //     } else if (!validateEmail(value)) {
+            //         newErrors.email = t('userList.form.form.errors.emailInvalid');
+            //     } else {
+            //         delete newErrors.email;
+            //     }
+            //     break;
 
             default:
                 break;
@@ -237,7 +246,7 @@ const AddUser = () => {
                     narration: userdata.Narration,
                     branchIds: userdata.branchIds,
                     userRoleId: userdata.UserRoleId,
-                    ActiveStatus: userdata.ActiveStatus, // ✅ add this line
+                    ActiveStatus: Number(userdata.ActiveStatus), // ✅ add this line
                 });
                 setPhotoPreview(userdata.profilePhoto);
             }
@@ -341,9 +350,9 @@ const AddUser = () => {
               data.append("ActiveStatus", formData.ActiveStatus); 
 
             if (EditMode) {
-                data.append("UpdatedUser", userId); // For updates
+                data.append("ModifiedUser", logginedUserId); // For updates
             } else {
-                data.append("CreatedUser", userId); // For new users
+                data.append("CreatedUser", logginedUserId); // For new users
             }
             // Use different endpoints for create vs update
             const apiUrl = EditMode ? `update-user/${userId}` : "save-user";
@@ -401,6 +410,10 @@ const AddUser = () => {
         setErrors({}); // Clear all errors
     };
 
+    const handleCancel = () => {
+         navigate('/user/users-list');
+    }
+
     if (branchListError || userGroupError) {
         return <div>
             <BreadCrumb
@@ -451,11 +464,18 @@ const AddUser = () => {
                actions={[
 
                     {
-                        label: EditMode ? t('userList.form.actions.reset') : t('userList.form.actions.cancel'),
+                        label:  t('userList.form.actions.reset') ,
                         icon:Eraser,
                         type: "secondary",
                         onClick: handleReset
                     },
+                    {
+        label: t('userList.form.actions.cancel'),
+        icon: X,
+        type: "secondary",
+        onClick: handleCancel
+    },
+                    
                     {
                         label: loading ?
                             (EditMode ? t('userList.form.actions.updating') : t('userList.form.actions.saving')) :
@@ -578,7 +598,7 @@ const AddUser = () => {
                                                 key={branchId}
                                                 className="flex items-center bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-xs"
                                             >
-                                                {branch?.branchName || "Unknown Branch"}
+                                                {branch?.branchCode || "Unknown Branch"}
                                                 <button
                                                     type="button"
                                                     onClick={() => handleBranchToggle(branchId)}

@@ -13,6 +13,7 @@ import TextInput from "@/components/elements/theme/TextInput";
 import TextArea from "@/components/elements/theme/TextArea";
 import DateInput from "@/components/elements/theme/DateInput";
 import NormalSelectInput from "@/components/elements/theme/NormalSelectInput";
+import { sanitize } from "@/lib/inputSanitizer";
 
 const GenaralReminderForm = () => {
   const { id } = useParams();
@@ -166,9 +167,13 @@ const GenaralReminderForm = () => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+    let updatedValue = value
+    if(["title"].includes(name)){
+      updatedValue = sanitize.alphaNumericSpace(value)
+    }
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: type === "checkbox" ? checked : updatedValue,
     }));
     if (errors[name]) {
       const newErrors = { ...errors };
@@ -190,6 +195,32 @@ const GenaralReminderForm = () => {
     }
   };
 
+  const validateEndDateTime = (data) => {
+  const newErrors = {};
+
+  if (
+    data.start_date &&
+    data.start_time &&
+    data.end_date &&
+    data.end_time
+  ) {
+    const start = new Date(`${data.start_date}T${data.start_time}`);
+    const end = new Date(`${data.end_date}T${data.end_time}`);
+
+    if (end <= start) {
+      newErrors.end_time =
+        "End date and time must be later than the start date and time.";
+    }
+  }
+
+  setErrors((prev) => ({
+    ...prev,
+    ...newErrors,
+  }));
+
+  return Object.keys(newErrors).length === 0;
+};
+
   async function handleSave() {
     if (!validateForm()) {
       setAlert({
@@ -198,6 +229,11 @@ const GenaralReminderForm = () => {
       });
       return;
     }
+
+     // Validate start/end date and time
+  if (!validateEndDateTime(formData)) {
+    return;
+  }
 
     setSubmitLoading(true);
     try {
@@ -327,6 +363,7 @@ const GenaralReminderForm = () => {
                     value={formData.start_date}
                     onChange={handleInputChange}
                     onBlur={() => validateFieldOnBlur("start_date")}
+                   max={new Date().toISOString().split('T')[0]}
                     error={errors.start_date}
                     required={true}
                   />
@@ -349,8 +386,12 @@ const GenaralReminderForm = () => {
                     label="End Date"
                     value={formData.end_date}
                     onChange={handleInputChange}
-                    onBlur={() => validateFieldOnBlur("end_date")}
+                   onBlur={() => {
+                    validateFieldOnBlur("end_date");
+                    validateEndDateTime();
+                    }}
                     error={errors.end_date}
+                    min={formData.start_date}
                     required={false}
                   />
                   <TextInput
@@ -360,7 +401,10 @@ const GenaralReminderForm = () => {
                     label="End Time"
                     value={formData.end_time}
                     onChange={handleInputChange}
-                    onBlur={() => validateFieldOnBlur("end_time")}
+                    onBlur={() => {
+                      validateFieldOnBlur("end_time");
+                      validateEndDateTime();
+                      }}
                     error={errors.end_time}
                     required={false}
                   />

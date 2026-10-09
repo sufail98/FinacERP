@@ -196,7 +196,11 @@ const splitIntoPagesByHeight = (array, firstPageBudget, middlePageRowCount, last
 const generateProformaInvoiceHTML = async (invoiceData, branchData, time, currentCurrency) => {
     const state = store.getState().settings;
     const generalSettings = state.generalSettings;
-    console.log(invoiceData);
+        const activateRoundoff = Boolean(generalSettings.RoundOff)
+    const salesSettings =state.saleSettings
+     const showLineDiscount = salesSettings?.showLineDiscount || false;
+
+    // console.log(invoiceData);
 
    
     // ✅ Get letterhead paths from Redux state
@@ -227,7 +231,17 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
         totalTax = 0,
         totalAmount = 0,
         customerData = {},
+        othercharge = 0,
+        roundOff = 0,
     } = invoiceData;
+
+       const calcLineDiscount = (item) => {
+        const qty = Number(item.qty || 0);
+        const rate = Number(item.rate || 0);
+        const grossAmt = qty * rate;
+        const discPercent = Number(item.discountPercentage || 0);
+        return grossAmt * (discPercent / 100);
+    };
 
     // ✅ Dynamic padding based on mode
     const HEADER_PAD = useFullLetterhead ? '140px' : (useSeparateHeaderFooter ? '160px' : '20px');
@@ -269,6 +283,18 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
 
                 <!-- ✅ Content wrapper — positioned over the white body area -->
                 <div class="content-wrapper" style="padding-top: ${HEADER_PAD}; padding-bottom: ${FOOTER_PAD};">
+                    <div class="print-timestamp">
+            <div class="timestamp-label">Printed on:</div>
+            <div class="timestamp-value">${new Date().toLocaleDateString('en-GB', { 
+                day: '2-digit', 
+                month: 'short', 
+                year: 'numeric' 
+            })} ${new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            })}</div>
+        </div>
                     ${isFirstPage ? `
                     <div class="invoice-header-row">
                         <div class="invoice-left">
@@ -388,6 +414,7 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
                             <div class="col-unit">وحدة<br>Unit</div>
                             <div class="col-qty">الكمية<br>Qty</div>
                             <div class="col-rate">سعر الوحدة<br>Rate</div>
+                            ${showLineDiscount ? `<div class="col-disc-amt">مبلغ الخصم<br>Disc Amt</div>` : ''}
                             <div class="col-total">المجموع<br>Net Value</div>
                             <div class="col-vat">ضريبة<br>VAT%</div>
                             <div class="col-vat-amt">مبلغ ضريبة<br>VAT Amount</div>
@@ -397,6 +424,8 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
                         <div class="product-rows">
                             ${pageProducts.length > 0 ? pageProducts.map((item, index) => {
                                 const globalIndex = pageStartIndex + index;
+                                 const discAmt = calcLineDiscount(item);
+                                const netAmt = (Number(item.qty || 0) * Number(item.rate || 0)) - discAmt;
                                 return `
                                     <div class="product-row">
                                         <div class="col-no">${globalIndex + 1}</div>
@@ -409,7 +438,8 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
                                         <div class="col-unit">${item.unitName || 'PCS'}</div>
                                         <div class="col-qty">${item.qty || 0}</div>
                                         <div class="col-rate">${Number(item.rate || 0).toFixed(generalSettings.decimalPart)}</div>
-                                        <div class="col-total">${Number((item.qty || 0) * (item.rate || 0)).toFixed(generalSettings.decimalPart)}</div>
+                                         ${showLineDiscount ? `<div class="text-right">${discAmt.toFixed(generalSettings.decimalPart)}</div>` : ''}
+                                        <div class="text-right">${netAmt.toFixed(generalSettings.decimalPart)}</div>
                                         <div class="col-vat">${item.taxRate || 0}%</div>
                                         <div class="col-vat-amt">${Number(item.taxAmount || 0).toFixed(generalSettings.decimalPart)}</div>
                                         <div class="col-amount">${Number(item.amount || 0).toFixed(generalSettings.decimalPart)}</div>
@@ -434,18 +464,45 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
                                     <td class="summary-value">${fmt(subTotal)}</td>
                                     <td class="summary-label-ar">الإجمالي غير شامل ضريبة القيمة المضافة</td>
                                 </tr>
-                                ${parseFloat(billDiscount) > 0 ? `
-                                <tr>
+                                ${Number(othercharge) !== 0 ? `
+                                     <tr>
+                                    <td class="summary-label">Other Charge:</td>
+                                    <td class="summary-value">${fmt(othercharge)}</td>
+                                    <td class="summary-label-ar"><span>رسوم اخرى</span> </td>
+                                    
+                                </tr> ` : ""}
+                               ${((salesSettings?.showBillDiscountAmount || salesSettings?.showBillDiscountPerc) && Number(billDiscount) !== 0)?`
+                                 <tr>
                                     <td class="summary-label">Discount:</td>
                                     <td class="summary-value">${fmt(billDiscount)}</td>
                                     <td class="summary-label-ar">الخصم</td>
-                                </tr>
+                                </tr> ` : ""}
+                                ${parseFloat(billDiscount) > 0 ? `
+                                
                                 ` : ''}
+                                 <tr>
+                                    <td class="summary-label">Taxable Amount:</td>
+                                    <td class="summary-value">
+                                            ${fmt(
+                                                Number(subTotal || 0) -
+                                                Number(invoiceData?.billDiscount || 0) +
+                                                Number(othercharge || 0)
+                                            )}
+                                    </td>
+                                      <td class="summary-label-ar">المبلغ الخاضع للضريبة</td>
+                                 </tr>
                                 <tr>
                                     <td class="summary-label">VAT Amount:</td>
                                     <td class="summary-value">${fmt(totalTax)}</td>
                                     <td class="summary-label-ar">ضريبة القيمة المضافة</td>
                                 </tr>
+                                ${activateRoundoff && Number(roundOff) !== 0 ? `
+                                            <tr>
+                                    <td class="summary-label">Round Off:</td>
+                                    <td class="summary-value">${fmt( roundOff|| 0)}</td>
+                                    <td class="summary-label-ar"><span>مبلغ الضريبة</span> </td>
+                                </tr>` : ""}
+                                
                                 <tr>
                                     <td class="summary-label grand-total">Amount Incl. VAT:</td>
                                     <td class="summary-value grand-total-value">${fmt(totalAmount)}</td>
@@ -533,6 +590,46 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
                     margin: 0 auto 10px;
                     page-break-after: always;
                 }
+                    .print-timestamp {
+    position: absolute;
+    bottom: 15mm;
+    right: 3mm;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 8px;
+    color: black;
+    z-index: 10;
+    display: flex;
+    gap: 3px;
+    opacity: 0.8;
+}
+
+.timestamp-label {
+    font-weight: bold;
+    color: #444;
+}
+
+.timestamp-value {
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+@media print {
+    body { background: white; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* Ensure timestamp prints */
+    .print-timestamp {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
                 .page:last-child { margin-bottom: 0; }
 
                 /* ✅ Full Letterhead background */
@@ -662,8 +759,10 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
                 }
 
                 .product-header {
-                    display: grid;
-                    grid-template-columns: 28px 55px auto 38px 35px 50px 50px 38px 50px 50px;
+                   display: grid;
+                    grid-template-columns: ${showLineDiscount
+                        ? '28px 55px auto 38px 35px 50px 50px 50px 38px 50px 50px'
+                        : '28px 55px auto 38px 35px 50px 50px 38px 50px 50px'};
                     gap: 0;
                     background: #c0c0c0;
                     border-bottom: 1px solid gray;
@@ -688,8 +787,10 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
                 }
 
                 .product-row {
-                    display: grid;
-                    grid-template-columns: 28px 55px auto 38px 35px 50px 50px 38px 50px 50px;
+                      display: grid;
+                    grid-template-columns: ${showLineDiscount
+                        ? '28px 55px auto 38px 35px 50px 50px 50px 38px 50px 50px'
+                        : '28px 55px auto 38px 35px 50px 50px 38px 50px 50px'};
                     gap: 0;
                     padding: 0;
                 }
@@ -766,6 +867,10 @@ const generateProformaInvoiceHTML = async (invoiceData, branchData, time, curren
 
                 .col-amount {
                     text-align: right;
+                    width: 50px;
+                }
+                .col-disc-amt {
+                  text-align: right;
                     width: 50px;
                 }
 

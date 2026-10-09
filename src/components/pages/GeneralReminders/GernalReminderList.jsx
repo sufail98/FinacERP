@@ -24,7 +24,7 @@ const GernalReminderList = () => {
   const [alert, setAlert] = useState(null);
   const [reminders, setReminders] = useState([]);
 
-  const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("GeneralReminders");
+  const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Reminders");
 
   useEffect(() => {
     if (hasAccess && !privilegeLoading) {

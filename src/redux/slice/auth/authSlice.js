@@ -29,27 +29,7 @@ const saveBranchId = (branchId) => {
   }
 };
 
-// Helper function to get saved dbNameEncrypted from localStorage
-const getSavedDbNameEncrypted = () => {
-  try {
-    return localStorage.getItem('dbNameEncrypted');
-  } catch (error) {
-    return null;
-  }
-};
 
-// Helper function to save dbNameEncrypted to localStorage
-// const saveDbNameEncrypted = (dbNameEncrypted) => {
-//   try {
-//     if (dbNameEncrypted) {
-//       localStorage.setItem('dbNameEncrypted', dbNameEncrypted);
-//     } else {
-//       localStorage.removeItem('dbNameEncrypted');
-//     }
-//   } catch (error) {
-//     console.warn('Failed to save dbNameEncrypted to localStorage:', error);
-//   }
-// };
 
 // Helper function to get branch default data (financial year, currency, etc.)
 const getBranchDefaultData = (defaultData, branchId) => {

@@ -14,7 +14,7 @@ import { refreshProductsByType } from '@/redux/slice/productSlice';
 // Utility function to extract sales price from product
 const extractSalesPrice = (product, selectedUnitId = null) => {
     if (!product) return 0;
-    
+
     // If salesPrice is an array, find the matching unit or use first entry
     if (Array.isArray(product.salesPrice) && product.salesPrice.length > 0) {
         if (selectedUnitId) {
@@ -26,12 +26,12 @@ const extractSalesPrice = (product, selectedUnitId = null) => {
         // Default to first entry
         return parseFloat(product.salesPrice[0].amount || product.salesPrice[0].salesPrice || 0);
     }
-    
+
     // If salesPrice is a scalar
     if (typeof product.salesPrice === 'number' || typeof product.salesPrice === 'string') {
         return parseFloat(product.salesPrice || 0);
     }
-    
+
     // Fallback to maximumSellingPrice
     return parseFloat(product.maximumSellingPrice || 0);
 };
@@ -40,7 +40,7 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
     const { t } = useTranslation();
     const location = useLocation();
     const { approveMode } = location.state || {};
-    
+
     const [editProductModalOpen, setEditProductModalOpen] = useState(false);
     const [selectedProductCode, setSelectedProductCode] = useState(null);
     const { selectedBranchId, } = useAuth();
@@ -52,13 +52,14 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
     const suggestionRef = useRef(null);
     const inputRefs = useRef({});
     const [isInitialized] = useState(false);
-    const { inventoryProducts:allProducts, loading: productsLoading } = useSelector((state) => state.products);
-        const [scrollPosition, setScrollPosition] = useState(0);
-    
+    const { inventoryProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products);
+    const [scrollPosition, setScrollPosition] = useState(0);
+
     const dispatch = useDispatch()
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState({});
     const [selectingProduct, setSelectingProduct] = useState({});
     const [productModalOpen, setProductModalOpen] = useState(false)
+    const [inputValues, setInputValues] = useState({});
     const [rows, setRows] = useState(() => {
 
         if (propRows && propRows.length > 0) {
@@ -304,7 +305,13 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
                     break;
             }
         }
-
+if (currentField === 'productName' && e.key === 'Enter') {
+    const row = rows.find(r => r.id === rowId);
+    if (!row?.productCode || row.productCode.trim() === '') {
+        e.preventDefault();
+        return; // do nothing — don't create a new row, don't move focus
+    }
+}
         const editableColumns = getEditableColumns();
         const currentRowIndex = rows.findIndex(row => row.id === rowId);
         const currentFieldIndex = editableColumns.indexOf(currentField);
@@ -379,27 +386,27 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
         }
     };
     useEffect(() => {
-    if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
-        const suggestionContainer = suggestionRef.current;
-        const activeItem = suggestionContainer?.querySelector(
-            `[data-suggestion-index="${selectedSuggestionIndex[activeSuggestionRow]}"]`
-        );
-        
-        if (activeItem && suggestionContainer) {
-            const containerRect = suggestionContainer.getBoundingClientRect();
-            const itemRect = activeItem.getBoundingClientRect();
-            const stickyButtonHeight = 42; // height of "Add New Product" button
-            
-            if (itemRect.bottom > containerRect.bottom - stickyButtonHeight) {
-                suggestionContainer.scrollTop += 
-                    itemRect.bottom - containerRect.bottom + stickyButtonHeight;
-            } else if (itemRect.top < containerRect.top) {
-                suggestionContainer.scrollTop -= 
-                    containerRect.top - itemRect.top;
+        if (activeSuggestionRow !== null && selectedSuggestionIndex[activeSuggestionRow] >= 0) {
+            const suggestionContainer = suggestionRef.current;
+            const activeItem = suggestionContainer?.querySelector(
+                `[data-suggestion-index="${selectedSuggestionIndex[activeSuggestionRow]}"]`
+            );
+
+            if (activeItem && suggestionContainer) {
+                const containerRect = suggestionContainer.getBoundingClientRect();
+                const itemRect = activeItem.getBoundingClientRect();
+                const stickyButtonHeight = 42; // height of "Add New Product" button
+
+                if (itemRect.bottom > containerRect.bottom - stickyButtonHeight) {
+                    suggestionContainer.scrollTop +=
+                        itemRect.bottom - containerRect.bottom + stickyButtonHeight;
+                } else if (itemRect.top < containerRect.top) {
+                    suggestionContainer.scrollTop -=
+                        containerRect.top - itemRect.top;
+                }
             }
         }
-    }
-}, [selectedSuggestionIndex, activeSuggestionRow]);
+    }, [selectedSuggestionIndex, activeSuggestionRow]);
     useEffect(() => {
         // Only set focus after products have finished loading
         if (!productsLoading && allProducts?.length > 0) {
@@ -653,7 +660,7 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
 
 
     const selectProduct = async (rowId, product, selectedUnitId) => {
-        
+
 
         try {
             // Find the selected unit from the product data
@@ -664,7 +671,6 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
                 p.productCode === product.productCode && p.unitId === selectedUnitId
             );
 
-            const unitSalesPrice = extractSalesPrice(productWithUnit || product, selectedUnitId);
 
             const updatedRows = rows.map((row) => {
                 if (row.id === rowId) {
@@ -705,7 +711,11 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
             setTimeout(() => {
                 focusInput(rowId, 'qty');
             }, 100);
-
+            setInputValues(prev => {
+                const s = { ...prev };
+                delete s[`${rowId}-productName`];
+                return s;
+            });
         } catch (err) {
             console.error("Error fetching product details:", err);
         }
@@ -777,7 +787,11 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
             setTimeout(() => {
                 focusInput(rowId, 'qty');
             }, 100);
-
+            setInputValues(prev => {
+                const s = { ...prev };
+                delete s[`${rowId}-productName`];
+                return s;
+            });
         } catch (err) {
             console.error("Error fetching product by barcode:", err);
             Swal.fire({
@@ -808,21 +822,21 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
     };
 
     useEffect(() => {
-            if (activeSuggestionRow) {
-                setScrollPosition(window.scrollY);
-                setTimeout(() => {
-                    const activeRow = document.querySelector(`[data-suggestion-row="${activeSuggestionRow}"]`);
-                    if (activeRow) {
-                        const rect = activeRow.getBoundingClientRect();
-                        const scrollOffset = window.scrollY + rect.top - 100;
-                        window.scrollTo({ top: scrollOffset, behavior: 'smooth' });
-                    }
-                }, 100);
-            } else if (scrollPosition > 0) {
-                window.scrollTo({ top: scrollPosition, behavior: 'smooth' });
-                setScrollPosition(0);
-            }
-        }, [activeSuggestionRow]);
+        if (activeSuggestionRow) {
+            setScrollPosition(window.scrollY);
+            setTimeout(() => {
+                const activeRow = document.querySelector(`[data-suggestion-row="${activeSuggestionRow}"]`);
+                if (activeRow) {
+                    const rect = activeRow.getBoundingClientRect();
+                    const scrollOffset = window.scrollY + rect.top - 100;
+                    window.scrollTo({ top: scrollOffset, behavior: 'smooth' });
+                }
+            }, 100);
+        } else if (scrollPosition > 0) {
+            window.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+            setScrollPosition(0);
+        }
+    }, [activeSuggestionRow]);
 
     const handleInputChange = (id, field, value, updatedField = null) => {
         const updatedRows = rows.map(row => {
@@ -1008,7 +1022,7 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
                     </div>
 
                     {/* Scrollable Body Table */}
-                   <div ref={rowRef} className={`w-full custom-scrollbar ${activeSuggestionRow ? 'overflow-visible' : 'max-h-[250px] overflow-y-auto'}`}>
+                    <div ref={rowRef} className={`w-full custom-scrollbar ${activeSuggestionRow ? 'overflow-visible' : 'max-h-[250px] overflow-y-auto'}`}>
                         <table className="w-full border-collapse table-fixed">
                             <colgroup>
                                 <col className="w-[40px]" />
@@ -1061,8 +1075,30 @@ const GodownTransferTable = ({ formData, setFormData, editMode, rows: propRows, 
                                                 <input
                                                     ref={el => inputRefs.current[`${row.id}-productName`] = el}
                                                     type="text"
-                                                    value={row.productName}
-                                                    onChange={(e) => handleInputChange(row.id, 'productName', e.target.value)}
+                                                    value={
+                                                        inputValues[`${row.id}-productName`] !== undefined
+                                                            ? inputValues[`${row.id}-productName`]
+                                                            : row.productName
+                                                    }
+                                                    onFocus={() => {
+                                                        // Do NOT pre-populate — row.productName shows via fallback,
+                                                        // first onChange keystroke becomes the sole owner, no race.
+                                                    }}
+                                                    onChange={(e) => {
+                                                        const value = e.target.value;
+                                                        setInputValues(prev => ({
+                                                            ...prev,
+                                                            [`${row.id}-productName`]: value
+                                                        }));
+                                                        handleInputChange(row.id, 'productName', value);
+                                                    }}
+                                                    onBlur={() => {
+                                                        setInputValues(prev => {
+                                                            const s = { ...prev };
+                                                            delete s[`${row.id}-productName`];
+                                                            return s;
+                                                        });
+                                                    }}
                                                     onKeyDown={(e) => handleKeyDown(e, row.id, 'productName')}
                                                     className="w-full px-2 py-0.5 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded placeholder:text-muted dark:placeholder:text-muted"
                                                     placeholder={t("salesInvoice.form.gridSection.prodDetailsLabels.enterPrdNamePlaceHolder")}

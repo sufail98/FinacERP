@@ -193,7 +193,7 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
             columns.push('netValue');
         }
 
-        if (generalSettings?.ActivateTax) {
+        if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
             columns.push('tax');
         }
 
@@ -390,6 +390,26 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
     }, [formData.billDiscount]);
 
     useEffect(() => {
+    if (formData.quotationDetails && formData.quotationDetails.length > 0) {
+        let hasChanges = false;
+        const updatedRows = rows.map((row, index) => {
+            const detail = formData.quotationDetails[index];
+            if (
+                detail &&
+                detail.OtherChargeOnProduct !== undefined &&
+                parseFloat(detail.OtherChargeOnProduct) !== parseFloat(row.OtherChargeOnProduct || 0)
+            ) {
+                hasChanges = true;
+                return calculateRow({ ...row, OtherChargeOnProduct: parseFloat(detail.OtherChargeOnProduct) });
+            }
+            return row;
+        });
+        if (hasChanges) setRows(updatedRows);
+    }
+}, [formData.othercharge]);
+
+
+    useEffect(() => {
         const handleClickOutside = (event) => {
             if (suggestionRef.current && !suggestionRef.current.contains(event.target)) {
                 setActiveSuggestionRow(null);
@@ -431,7 +451,7 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
             productDEscription: row.productDetails.productDescription || "",
             billDiscOnProduct: row.billDiscOnProduct ?? null,
             AddCostOnProduct: null,
-            OtherChargeOnProduct: null,
+           OtherChargeOnProduct: row.OtherChargeOnProduct ?? null,
             salesManId: formData.employeeId,
             GodownId: row.GodownId || formData.GodownId || 1,
             RackId: null,
@@ -537,24 +557,46 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
                 descAmt = (gross * descPercentage) / 100;
                 netValue = gross - descAmt;
 
-                const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
-                const netValueAfterBillDisc = netValue - billDiscOnProduct;
+                // const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
+                // const netValueAfterBillDisc = netValue - billDiscOnProduct;
 
-                if (generalSettings?.ActivateTax) {
-                    taxAmt = (netValueAfterBillDisc * row.tax) / 100;
+                // if(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+                //     taxAmt = (netValueAfterBillDisc * row.tax) / 100;
+                // }
+                // amount = netValueAfterBillDisc + taxAmt;
+
+                // return {
+                //     ...row,
+                //     rate: parseFloat(calculatedRate),
+                //     grossAmount: parseFloat(inputGross.toFixed(generalSettings.decimalPart)),
+                //     desc: parseFloat(descPercentage.toFixed(generalSettings.decimalPart)),
+                //     descAmt: parseFloat(descAmt.toFixed(generalSettings.decimalPart)),
+                //     netValue: parseFloat(netValue.toFixed(generalSettings.decimalPart)),
+                //     taxAmt: parseFloat(taxAmt.toFixed(generalSettings.decimalPart)),
+                //     amount: parseFloat(amount.toFixed(generalSettings.decimalPart)),
+                //     billDiscOnProduct: parseFloat((row.billDiscOnProduct || 0).toFixed(generalSettings.decimalPart))
+                // };
+
+                const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
+                const OtherChargeOnProduct = parseFloat(row.OtherChargeOnProduct) || 0;
+                const netValueAfterAdjustments = netValue - billDiscOnProduct + OtherChargeOnProduct;
+
+                if(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+                    taxAmt = (netValueAfterAdjustments * row.tax) / 100;
                 }
-                amount = netValueAfterBillDisc + taxAmt;
+                amount = netValueAfterAdjustments + taxAmt;
 
                 return {
                     ...row,
-                    rate: parseFloat(calculatedRate.toFixed(generalSettings.decimalPart)),
+                    rate: parseFloat(calculatedRate),
                     grossAmount: parseFloat(inputGross.toFixed(generalSettings.decimalPart)),
                     desc: parseFloat(descPercentage.toFixed(generalSettings.decimalPart)),
                     descAmt: parseFloat(descAmt.toFixed(generalSettings.decimalPart)),
                     netValue: parseFloat(netValue.toFixed(generalSettings.decimalPart)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings.decimalPart)),
                     amount: parseFloat(amount.toFixed(generalSettings.decimalPart)),
-                    billDiscOnProduct: parseFloat((row.billDiscOnProduct || 0).toFixed(generalSettings.decimalPart))
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings.decimalPart)),
+                    OtherChargeOnProduct: parseFloat(OtherChargeOnProduct.toFixed(generalSettings.decimalPart))
                 };
             }
         }
@@ -573,23 +615,44 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
                 netValue = inputNetValue;
                 gross = calculatedGross;
 
-                const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
-                const netValueAfterBillDisc = netValue - billDiscOnProduct;
+                // const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
+                // const netValueAfterBillDisc = netValue - billDiscOnProduct;
 
-                if (generalSettings?.ActivateTax) {
-                    taxAmt = (netValueAfterBillDisc * row.tax) / 100;
+                // if(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+                //     taxAmt = (netValueAfterBillDisc * row.tax) / 100;
+                // }
+                // amount = netValueAfterBillDisc + taxAmt;
+
+                // return {
+                //     ...row,
+                //     rate: parseFloat(calculatedRate),
+                //     grossAmount: parseFloat(calculatedGross.toFixed(generalSettings.decimalPart)),
+                //     descAmt: parseFloat(descAmt.toFixed(generalSettings.decimalPart)),
+                //     netValue: parseFloat(netValue.toFixed(generalSettings.decimalPart)),
+                //     taxAmt: parseFloat(taxAmt.toFixed(generalSettings.decimalPart)),
+                //     amount: parseFloat(amount.toFixed(generalSettings.decimalPart)),
+                //     billDiscOnProduct: parseFloat((row.billDiscOnProduct || 0).toFixed(generalSettings.decimalPart))
+                // };
+
+                const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
+                const OtherChargeOnProduct = parseFloat(row.OtherChargeOnProduct) || 0;
+                const netValueAfterAdjustments = netValue - billDiscOnProduct + OtherChargeOnProduct;
+
+                if(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+                    taxAmt = (netValueAfterAdjustments * row.tax) / 100;
                 }
-                amount = netValueAfterBillDisc + taxAmt;
+                amount = netValueAfterAdjustments + taxAmt;
 
                 return {
                     ...row,
-                    rate: parseFloat(calculatedRate.toFixed(generalSettings.decimalPart)),
+                    rate: parseFloat(calculatedRate),
                     grossAmount: parseFloat(calculatedGross.toFixed(generalSettings.decimalPart)),
                     descAmt: parseFloat(descAmt.toFixed(generalSettings.decimalPart)),
                     netValue: parseFloat(netValue.toFixed(generalSettings.decimalPart)),
                     taxAmt: parseFloat(taxAmt.toFixed(generalSettings.decimalPart)),
                     amount: parseFloat(amount.toFixed(generalSettings.decimalPart)),
-                    billDiscOnProduct: parseFloat((row.billDiscOnProduct || 0).toFixed(generalSettings.decimalPart))
+                    billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings.decimalPart)),
+                    OtherChargeOnProduct: parseFloat(OtherChargeOnProduct.toFixed(generalSettings.decimalPart))
                 };
             }
         }
@@ -607,14 +670,35 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
 
         netValue = gross - descAmt;
 
-        const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
-        const netValueAfterBillDisc = netValue - billDiscOnProduct;
+        // const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
+        // const netValueAfterBillDisc = netValue - billDiscOnProduct;
 
-        if (generalSettings?.ActivateTax) {
-            taxAmt = (netValueAfterBillDisc * row.tax) / 100;
+        // if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+        //     taxAmt = (netValueAfterBillDisc * row.tax) / 100;
+        // }
+
+        // amount = netValueAfterBillDisc + taxAmt;
+
+        // return {
+        //     ...row,
+        //     grossAmount: parseFloat(gross.toFixed(generalSettings.decimalPart)),
+        //     desc: parseFloat(descPercentage.toFixed(generalSettings.decimalPart)),
+        //     netValue: parseFloat(netValue.toFixed(generalSettings.decimalPart)),
+        //     taxAmt: parseFloat(taxAmt.toFixed(generalSettings.decimalPart)),
+        //     amount: parseFloat(amount.toFixed(generalSettings.decimalPart)),
+        //     descAmt: parseFloat(descAmt.toFixed(generalSettings.decimalPart)),
+        //     billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings.decimalPart))
+        // };
+
+        const billDiscOnProduct = parseFloat(row.billDiscOnProduct) || 0;
+        const OtherChargeOnProduct = parseFloat(row.OtherChargeOnProduct) || 0;
+        const netValueAfterAdjustments = netValue - billDiscOnProduct + OtherChargeOnProduct;
+
+        if (generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') {
+            taxAmt = (netValueAfterAdjustments * row.tax) / 100;
         }
 
-        amount = netValueAfterBillDisc + taxAmt;
+        amount = netValueAfterAdjustments + taxAmt;
 
         return {
             ...row,
@@ -624,8 +708,10 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
             taxAmt: parseFloat(taxAmt.toFixed(generalSettings.decimalPart)),
             amount: parseFloat(amount.toFixed(generalSettings.decimalPart)),
             descAmt: parseFloat(descAmt.toFixed(generalSettings.decimalPart)),
-            billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings.decimalPart))
-        };
+            billDiscOnProduct: parseFloat(billDiscOnProduct.toFixed(generalSettings.decimalPart)),
+            OtherChargeOnProduct: parseFloat(OtherChargeOnProduct.toFixed(generalSettings.decimalPart))
+        
+    };
     };
 
     const scrollSuggestionIntoView = (rowId, index) => {
@@ -896,7 +982,9 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
             )
         );
     };
-
+useEffect(() => {
+    setRows(prevRows => prevRows.map(row => calculateRow(row)));
+}, [formData.taxType]);
     const handleInputChange = (id, field, value, updatedField = null) => {
         const updatedRows = rows.map(row => {
             if (row.id === id) {
@@ -1035,7 +1123,7 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
     const calculateTotals = () => {
         const totalDiscount = rows.reduce((sum, row) => sum + (parseFloat(row.descAmt) || 0), 0);
         const totalNetValue = rows.reduce((sum, row) => sum + (parseFloat(row.netValue) || 0), 0);
-        const totalTax = generalSettings?.ActivateTax
+        const totalTax =(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product')
             ? rows.reduce((sum, row) => sum + (parseFloat(row.taxAmt) || 0), 0)
             : 0;
         const grandTotal = totalNetValue;
@@ -1085,7 +1173,7 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
                                     </>
                                 )}
                                 <col className="w-[100px]" />
-                                {generalSettings?.ActivateTax && (
+                                {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                     <>
                                         <col className="w-[70px]" />
                                         <col className="w-[50px]" />
@@ -1146,7 +1234,7 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
                                     <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[100px]">
                                         {t("salesInvoice.form.gridSection.columns.netValue")}
                                     </th>
-                                    {generalSettings?.ActivateTax && (
+                                    {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                         <>
                                             <th className="p-1 text-left text-xs font-semibold border border-themed dark:border-themed w-[70px]">
                                                 {t("salesInvoice.form.gridSection.columns.tax%")}
@@ -1476,7 +1564,7 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
                                                 }}
                                                 onBlur={(e) => {
                                                     const value = parseFloat(e.target.value) || 0;
-                                                    handleInputChange(row.id, 'rate', value.toFixed(generalSettings.decimalPart));
+                                                    handleInputChange(row.id, 'rate', value);
                                                 }}
                                                 onKeyDown={(e) => handleKeyDown(e, row.id, 'rate')}
                                                 className="w-full px-2 py-1 text-sm border-0 text-primary dark:text-primary focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded text-right"
@@ -1597,7 +1685,7 @@ const PurchaseQuotationTable = ({ godowns, formData, setFormData, editMode, rows
                                             )}
                                         </td>
 
-                                        {generalSettings?.ActivateTax && (
+                                        {(generalSettings?.ActivateTax && formData?.taxType === 'Applicable to product') && (
                                             <>
                                                 <td className="p-0.2 border border-themed dark:border-themed">
                                                     <select

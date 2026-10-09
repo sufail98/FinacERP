@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import DateInput from '@/components/elements/theme/DateInput';
+import NormalSelectInput from '@/components/elements/theme/NormalSelectInput';
 import { Search, RefreshCcw, X, Eye, User } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
@@ -35,6 +36,8 @@ const DateFilterSection = ({
     onClearCustomerSearch,
     customerSearchPlaceholder,
     customerSearchLabel,
+    taxType = 'Applicable to product',
+    onTaxTypeChange,
 }) => {
     const { t } = useTranslation();
     const { currentFinancialYear } = useAuth();
@@ -42,13 +45,32 @@ const DateFilterSection = ({
 
     // Determine if dates should be restricted based on financial year
     const shouldRestrictDates = financeSettings?.ShowAllTransactions === false;
-    const minDateFromFinance = shouldRestrictDates && currentFinancialYear?.fromDate 
-        ? currentFinancialYear.fromDate.split(' ')[0] 
+    const minDateFromFinance = shouldRestrictDates && currentFinancialYear?.fromDate
+        ? currentFinancialYear.fromDate.split(' ')[0]
         : null;
-    const maxDateFromFinance = shouldRestrictDates && currentFinancialYear?.toDate 
-        ? currentFinancialYear.toDate.split(' ')[0] 
+    const maxDateFromFinance = shouldRestrictDates && currentFinancialYear?.toDate
+        ? currentFinancialYear.toDate.split(' ')[0]
         : null;
 
+    const today = new Date().toISOString().split("T")[0];
+
+const maxDate =
+  maxDateFromFinance && maxDateFromFinance < today
+    ? maxDateFromFinance
+    : today;
+
+    const [showTaxType, setShowTaxType] = useState(false);
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.altKey && e.key === 'F10') {
+                e.preventDefault();
+                setShowTaxType(prev => !prev);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
     return (
         <div className={`flex flex-wrap items-end gap-4 mb-4 ${className}`}>
             {/* Voucher Code Search - Auto search on type */}
@@ -153,7 +175,7 @@ const DateFilterSection = ({
                     onChange={onFromDateChange}
                     disabled={disableDates}
                     min={minDateFromFinance}
-                    max={maxDateFromFinance}
+                    max={maxDate}
                 />
             </div>
 
@@ -164,11 +186,28 @@ const DateFilterSection = ({
                     label={toDateLabel || t("common.toDate") || "To Date"}
                     value={toDate}
                     onChange={onToDateChange}
-                    min={minDateFromFinance || fromDate}
+                    min={fromDate}
                     max={maxDateFromFinance}
                     disabled={disableDates}
                 />
             </div>
+            {showTaxType && (
+                <NormalSelectInput
+                    name="taxType"
+                    label={t('salesInvoice.form.label.formHeaderSection.taxtype')}
+                    value={taxType}
+                    className="min-w-40"
+                    onChange={(e) =>
+                        onTaxTypeChange?.(e.target.value || null)
+                    }
+                    options={[
+                        { value: null, label: "All" },
+                        { value: "NA", label: "NA" },
+                        { value: "Applicable to product", label: "Applicable to product" },
+                    ]}
+                    placeholder="All"
+                />
+            )}
 
             {/* Show Button - Only for date filtering */}
             <button

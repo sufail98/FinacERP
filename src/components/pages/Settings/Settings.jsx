@@ -6,8 +6,9 @@ import InventorySettings from "./InventorySettings"
 import FinanceSettings from "./FinanceSettings"
 import PurchaseSettings from "./PurchaseSettings"
 import SalesSettings from "./SalesSettings"
+import QuickAccessCustemaization from "./QuickAccessCustemaization"
 import PrinterSettings from "./PrinterSettings"
-import SystemSettings from "./SystemSettings"
+import BarcodeAligmentSettings from "./BarcodeAligmentSettings"
 import ZatcaSettings from "./ZatcaSettings"
 import { useSelector } from "react-redux"
 
@@ -27,6 +28,8 @@ const Settings = () => {
             : []),
 
         { id: 'printer', label: 'Printer Settings', icon: Download },
+        { id: 'barcodeAlignment', label: 'Barcode Print Settings', icon: ScreenShare },
+        { id: 'quickActions', label: 'Quick Access Customization', icon: Settings2 },
     ];
 
     const renderTabContent = () => {
@@ -48,14 +51,16 @@ const Settings = () => {
 
             case 'printer':
                 return <PrinterSettings />;
-
-            case 'systemSettings':
-                return <SystemSettings />;
+            case 'barcodeAlignment':
+                return <BarcodeAligmentSettings />;
 
             case 'zatcaSettings':
                 return generalSettings.zatcaType === 'Phase 2'
                     ? <ZatcaSettings />
                     : null;
+            case 'quickActions':
+                return <QuickAccessCustemaization />;
+
 
             default:
                 return null;

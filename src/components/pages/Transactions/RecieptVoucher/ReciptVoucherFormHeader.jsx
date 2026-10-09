@@ -9,19 +9,29 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import AddEmployeeModal from '../SalesInvoice/AddEmployeeModal';
+import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal';
 import AddBankModal from './AddBankModal';
 import DateInput from '@/components/elements/theme/DateInput';
+import DocumentUpload from '../../../common/DocumentUpload'
+import usePrivileges from '@/lib/hooks/usePrivileges';
 
-const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, editMode, handleFormChange, existingReciptNo, bankCash, setBankCash, employees, setEmplyees, costCenters }) => {
+
+const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, editMode, handleFormChange, existingReciptNo, bankCash, setBankCash, employees, setEmplyees, costCenters ,documents, setDocuments, existingDocuments, setExistingDocuments,
+    removedDocuments, setRemovedDocuments, currency = [], currencyConvertionData = [], financeSettings }) => {
     const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
     const [bankModalOpen, setBankModalOpen] = useState(false);
+    const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
     const [loadingBankCash, setLoadingBankCash] = useState(false);
     const [loadingEmployees, setLoadingEmployees] = useState(false);
-    const [loadingCostCenters, setLoadingCostCenters] = useState(false); // ← ADD THIS
-    const { generalSettings, financeSettings } = useSelector((state) => state.settings);
+    const [loadingCostCenters, setLoadingCostCenters] = useState(false);
+    const { generalSettings, financeSettings: financeSettingsFromStore } = useSelector((state) => state.settings);
+    const effectiveFinanceSettings = financeSettings ?? financeSettingsFromStore;
     const { t } = useTranslation();
-    const { selectedBranchId, currentCurrency ,currentFinancialYear} = useAuth();
+    const { selectedBranchId, currentCurrency, currentCurrencyConversion,currentFinancialYear } = useAuth();
     const [ledgerBalance, setLedgerBalance] = useState(null);
+    const { organizationData } = useSelector((state) => state.organization);
+    const isBsicPlan = Number(organizationData?.subscriptionPlan === 'Basic');
+    const { hasAccess: hasEmployeeAccess, } =usePrivileges(isBsicPlan ? "Sales Man" : "Employee");
 
 
     const fetchLedgerBalance = async (ledgerId) => {
@@ -73,7 +83,8 @@ const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, edi
 
     return (
         <div>
-            <div className='grid gap-1 grid-cols-4'>
+            {/* Responsive grid: 1 col on mobile, 2 on small tablets, 4 on large screens */}
+            <div className='grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'>
                 <div>
                     <TextInput
                         label={t('recieptVoucher.form.label.RecieptNo')}
@@ -95,7 +106,7 @@ const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, edi
                             max={currentFinancialYear?.toDate}
                         />
                     </div>
-                    <div className='flex gap-0.5 lg:gap-1 items-end '>
+                    <div className='flex gap-1 sm:gap-0.5 lg:gap-1 items-end'>
                         <div className='flex-1 min-w-0'>
                             <SearchableDropdown
                                 name="ledgerId"
@@ -115,7 +126,7 @@ const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, edi
                                 loading={loadingBankCash}
                             />
                             {financeSettings?.showLedgerbalance && formData.ledgerId && ledgerBalance !== null && (
-                                <div className="flex text-[10px] sm:text-sm text-secondary dark:text-secondary mt-1">
+                                <div className="flex flex-wrap text-[10px] sm:text-xs lg:text-sm text-secondary dark:text-secondary mt-1">
                                     {t('contraVoucher.form.label.ledgerBalance') || 'Balance'}:{" "}
                                     <span className="font-semibold text-primary dark:text-primary ml-1">
                                         {Number(ledgerBalance).toFixed(generalSettings?.decimalPart ?? 2)}
@@ -134,7 +145,8 @@ const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, edi
                 </div>
 
                 <div>
-                    <div className='flex gap-0.5 lg:gap-1 items-end '>
+                  {hasEmployeeAccess&&(
+                      <div className='flex gap-1 sm:gap-0.5 lg:gap-1 items-end'>
                         <div className='flex-1 min-w-0'>
                             <SearchableDropdown
                                 name="employeeId"
@@ -159,8 +171,8 @@ const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, edi
                             />
                         </div>
                     </div>
+                  )}
 
-                    {/* ← ADD COST CENTRE DROPDOWN HERE */}
                     {generalSettings?.costCentre && (
                         <SearchableDropdown
                             name="costCentreId"
@@ -189,7 +201,7 @@ const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, edi
                     />
                 </div>
 
-                <div>
+                <div className='sm:col-span-2 lg:col-span-2'>
                     <div className='w-full'>
                         <DateInput
                             label={t('recieptVoucher.form.label.ReferenceDate')}
@@ -200,8 +212,30 @@ const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, edi
                             format={generalSettings.dateformat}
                         />
                     </div>
+                    <div className='w-full mt-1'>
+                        <DocumentUpload
+                            documents={documents}
+                            setDocuments={setDocuments}
+                            existingDocuments={existingDocuments}
+                            setExistingDocuments={setExistingDocuments}
+                            removedDocuments={removedDocuments}
+                            setRemovedDocuments={setRemovedDocuments}
+                        />
+                    </div>
                 </div>
             </div>
+
+            {/* Currency Link */}
+            {effectiveFinanceSettings?.multiCurrency && (
+                <div className='flex flex-wrap gap-2 text-xs mt-2'>
+                    <p
+                        className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+                        onClick={() => setCurrencyModalOpen(true)}
+                    >
+                        Currency: {formData?.currencyName || currentCurrency?.currencyName || 'Select Currency'}
+                    </p>
+                </div>
+            )}
 
             <AddEmployeeModal
                 open={employeeModalOpen}
@@ -213,6 +247,16 @@ const ReciptVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, edi
                 handleClose={() => setBankModalOpen(false)}
                 onSuccess={fetchBrankCash}
             />
+            {effectiveFinanceSettings?.multiCurrency && (
+                <SelecteCurrecyModal
+                    open={currencyModalOpen}
+                    handleClose={() => setCurrencyModalOpen(false)}
+                    formData={formData}
+                    currency={currency}
+                    handleChange={(field, value) => handleFormChange(field, value)}
+                    currencyConvertionData={currencyConvertionData}
+                />
+            )}
         </div>
     )
 }

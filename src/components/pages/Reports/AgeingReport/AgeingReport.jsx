@@ -14,6 +14,35 @@ import AgeingReportFilter from './AgeingReportFilter';
 import AgeingReportGrid from './AgeingReportGrid';
 import useReportExport from '@/hooks/useReportExport';
 
+// ── Ageing helpers (inline) ──
+const pick = (row, keys, fallback = '') => {
+    for (const k of keys) {
+        if (row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k];
+    }
+    return fallback;
+};
+
+const pickNum = (row, keys) => parseFloat(pick(row, keys, 0)) || 0;
+
+const normalizeAgeingRow = (row, index) => ({
+    slNo: pick(row, ['SlNO', 'Sl NO', 'SlNo'], index + 1),
+    accountLedger: pick(row, ['AccountLedger', 'Account Ledger'], '-'),
+    ledgerId: row.ledgerId,
+    masterId: row.masterId,
+    lastPaymentDate: pick(row, ['LastRcptPaymentDate', 'LastPaymentDate', 'lastPaymentDate']),
+    date: pick(row, ['DocDate', 'Date', 'date']),
+    voucherType: pick(row, ['VoucherType', 'Voucher Type', 'voucherType'], '-'),
+    voucherNo: pick(row, ['VoucherNo', 'Voucher No', 'voucherNo'], '-'),
+    refNo: pick(row, ['RefNo', 'Ref No', 'refNo'], '-'),
+    billAmount: pickNum(row, ['BillAmount', 'Bill Amount']),
+    days1to30: pickNum(row, ['1to30', '1 to 30']),
+    days31to60: pickNum(row, ['31to60', '31 to 60']),
+    days61to90: pickNum(row, ['61to90', '61 to 90']),
+    days91to120: pickNum(row, ['91to120', '91 to 120']),
+    above120: pickNum(row, ['120above', '120 above']),
+    narration: pick(row, ['Narration', 'narration'], '-')
+});
+
 const AgeingReport = () => {
     const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
@@ -65,11 +94,11 @@ const AgeingReport = () => {
         try {
             const [customersRes, suppliersRes, salesmenRes] = await Promise.all([
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Customer"],
+                    ledgerTypes: ["Customer","Customer&Supplier"],
                     branchId: selectedBranchId
                 }),
                 axiosInstance.post("customer-supplier-account-ledgers", {
-                    ledgerTypes: ["Supplier"],
+                    ledgerTypes: ["Supplier","Customer&Supplier"],
                     branchId: selectedBranchId
                 }),
                 axiosInstance.get("employees")
@@ -126,10 +155,10 @@ const AgeingReport = () => {
 
             const response = await axiosInstance.post(endpoint, payload);
 
-            const data = response.data.data || response.data;
+             const rawData = response.data.data || response.data;
             
 
-            if (!data || (Array.isArray(data) && data.length === 0)) {
+            if (!rawData || (Array.isArray(rawData) && rawData.length === 0)) {
                 setAlert({
                     id: Date.now(),
                     type: 'info',
@@ -137,7 +166,7 @@ const AgeingReport = () => {
                 });
                 setReportData([]);
             } else {
-                setReportData(data);
+                setReportData(rawData.map((row, i) => normalizeAgeingRow(row, i)));
             }
         } catch (error) {
 
@@ -159,22 +188,18 @@ const AgeingReport = () => {
             return null;
         }
 
-        const decimalPart = generalSettings?.decimalPart || 2;
+       const decimalPart = generalSettings?.decimalPart || 2;
 
-        const calculateSum = (key) => {
-            return reportData.reduce((sum, row) => {
-                const value = parseFloat(row[key]) || 0;
-                return sum + value;
-            }, 0);
-        };
+       const sum = (key) => reportData.reduce((s, row) => s + (row[key] || 0), 0);
 
-        const days1to30 = calculateSum('1to30');
-        const days31to60 = calculateSum('31to60');
-        const days61to90 = calculateSum('61to90');
-        const days91to120 = calculateSum('91to120');
-        const above120 = calculateSum('120above');
+    
+        const days1to30 = sum('days1to30');
+        const days31to60 = sum('days31to60');
+        const days61to90 = sum('days61to90');
+        const days91to120 = sum('days91to120');
+        const above120 = sum('above120');
         const total = days1to30 + days31to60 + days61to90 + days91to120 + above120;
-        const billAmount = calculateSum('Bill Amount') || calculateSum('BillAmount') || 0;
+        const billAmount = sum('billAmount');
 
         return {
             total: total.toFixed(decimalPart),
@@ -234,42 +259,35 @@ const AgeingReport = () => {
         const formatNum = (num) => Number(num || 0).toFixed(decimalPart);
 
         // Build export data based on report type
-        const exportData = reportData.map((row, index) => {
+             const exportData = reportData.map((row, index) => {
             if (isVoucher) {
                 return {
                     SlNo: index + 1,
-                    AccountLedger: row['Account Ledger'] || row['AccountLedger'] || '',
-                    Date: row['Date'] || row['date'] || '',
-                    VoucherType: row['Voucher Type'] || row['voucherType'] || '',
-                    VoucherNo: row['Voucher No'] || row['voucherNo'] || '',
-                    RefNo: row['Ref No'] || row['refNo'] || '',
-                    BillAmount: formatNum(row['Bill Amount'] || row['BillAmount']),
-                    Days1to30: formatNum(row['1to30']),
-                    Days31to60: formatNum(row['31to60']),
-                    Days61to90: formatNum(row['61to90']),
-                    Days91to120: formatNum(row['91to120']),
-                    Days120Above: formatNum(row['120above']),
-                    Narration: row['Narration'] || row['narration'] || ''
+                    AccountLedger: row.accountLedger,
+                    Date: row.date,
+                    VoucherType: row.voucherType,
+                    VoucherNo: row.voucherNo,
+                    RefNo: row.refNo,
+                    BillAmount: formatNum(row.billAmount),
+                    Days1to30: formatNum(row.days1to30),
+                    Days31to60: formatNum(row.days31to60),
+                    Days61to90: formatNum(row.days61to90),
+                    Days91to120: formatNum(row.days91to120),
+                    Days120Above: formatNum(row.above120),
+                    Narration: row.narration
                 };
             } else {
-                // Ledger wise
-                const rowTotal = (
-                    parseFloat(row['1to30'] || 0) +
-                    parseFloat(row['31to60'] || 0) +
-                    parseFloat(row['61to90'] || 0) +
-                    parseFloat(row['91to120'] || 0) +
-                    parseFloat(row['120above'] || 0)
-                );
+                const rowTotal = row.days1to30 + row.days31to60 + row.days61to90 + row.days91to120 + row.above120;
                 return {
                     SlNo: index + 1,
-                    AccountLedger: row['Account Ledger'] || row['AccountLedger'] || '',
-                    LastPaymentDate: row['LastRcptPaymentDate'] || row['LastPaymentDate'] || '',
-                    Days1to30: formatNum(row['1to30']),
-                    Days31to60: formatNum(row['31to60']),
-                    Days61to90: formatNum(row['61to90']),
-                    Days91to120: formatNum(row['91to120']),
-                    Days120Above: formatNum(row['120above']),
-                    TotalAmount: formatNum(row['TotalAmt'] || rowTotal)
+                    AccountLedger: row.accountLedger,
+                    LastPaymentDate: row.lastPaymentDate,
+                    Days1to30: formatNum(row.days1to30),
+                    Days31to60: formatNum(row.days31to60),
+                    Days61to90: formatNum(row.days61to90),
+                    Days91to120: formatNum(row.days91to120),
+                    Days120Above: formatNum(row.above120),
+                    TotalAmount: formatNum(row.totalAmt ?? rowTotal)
                 };
             }
         });

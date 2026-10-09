@@ -20,7 +20,8 @@ const SearchableDropdown = ({
   required = false,
   readOnly = false,
   onBlur,
-  multiple = false, // New prop for multiple selection
+  multiple = false,
+  onEnter,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,8 +31,7 @@ const SearchableDropdown = ({
   const inputRef = useRef(null);
   const optionRefs = useRef([]);
 
-  // Normalize value to array for multiple selection
-  const selectedValues = multiple 
+  const selectedValues = multiple
     ? (Array.isArray(value) ? value : (value ? [value] : []))
     : value;
 
@@ -44,7 +44,6 @@ const SearchableDropdown = ({
   const getDisplayValue = () => {
     if (multiple) {
       if (!selectedValues || selectedValues.length === 0) return '';
-      
       const selectedLabels = selectedValues.map(val => {
         const selectedOption = options.find(option => {
           const optionValue = typeof option === 'string' ? option : option?.value;
@@ -54,7 +53,6 @@ const SearchableDropdown = ({
           ? (typeof selectedOption === 'string' ? selectedOption : selectedOption?.label || '')
           : val;
       });
-      
       return selectedLabels.join(', ');
     } else {
       if (!value) return '';
@@ -79,18 +77,15 @@ const SearchableDropdown = ({
   const handleOptionSelect = (option) => {
     if (readOnly) return;
     const optionValue = typeof option === 'string' ? option : option?.value;
-    
+
     if (multiple) {
       let newValues;
       if (selectedValues.includes(optionValue)) {
-        // Remove if already selected
         newValues = selectedValues.filter(v => v !== optionValue);
       } else {
-        // Add if not selected
         newValues = [...selectedValues, optionValue];
       }
       onChange(newValues);
-      // Keep dropdown open for multiple selection
       setSearchTerm('');
     } else {
       onChange(optionValue);
@@ -115,13 +110,21 @@ const SearchableDropdown = ({
     setHighlightedIndex(-1);
   };
 
+  const handleOkClick = (e) => {
+    e.stopPropagation();
+    if (onEnter) onEnter(selectedValues);
+    setIsOpen(false);
+    setSearchTerm('');
+    setHighlightedIndex(-1);
+  };
+
   const handleKeyDown = (e) => {
     if (!isOpen) return;
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setHighlightedIndex(prev => 
+        setHighlightedIndex(prev =>
           prev < filteredOptions.length - 1 ? prev + 1 : prev
         );
         break;
@@ -131,7 +134,12 @@ const SearchableDropdown = ({
         break;
       case 'Enter':
         e.preventDefault();
-        if (highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
+        if (multiple && onEnter && selectedValues.length > 0) {
+          onEnter(selectedValues);
+          setIsOpen(false);
+          setSearchTerm('');
+          setHighlightedIndex(-1);
+        } else if (highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
           handleOptionSelect(filteredOptions[highlightedIndex]);
         }
         break;
@@ -161,7 +169,6 @@ const SearchableDropdown = ({
         setHighlightedIndex(-1);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
@@ -180,12 +187,10 @@ const SearchableDropdown = ({
     }
   }, [error]);
 
-  // Reset highlighted index when search term changes
   useEffect(() => {
     setHighlightedIndex(-1);
   }, [searchTerm]);
 
-  // Scroll highlighted option into view
   useEffect(() => {
     if (highlightedIndex >= 0 && optionRefs.current[highlightedIndex]) {
       optionRefs.current[highlightedIndex].scrollIntoView({
@@ -217,11 +222,11 @@ const SearchableDropdown = ({
       )}
 
       <div ref={dropdownRef} className="relative">
-        <input 
-          type="hidden" 
-          name={name} 
-          value={multiple ? JSON.stringify(selectedValues) : (value || '')} 
-          onBlur={onBlur} 
+        <input
+          type="hidden"
+          name={name}
+          value={multiple ? JSON.stringify(selectedValues) : (value || '')}
+          onBlur={onBlur}
         />
 
         <div
@@ -254,7 +259,6 @@ const SearchableDropdown = ({
         >
           <div className="flex-1 flex flex-wrap gap-1 items-center min-w-0">
             {multiple && selectedValues.length > 0 ? (
-              // Show tags for multiple selection
               <>
                 {selectedValues.map((val, idx) => (
                   <span
@@ -274,7 +278,7 @@ const SearchableDropdown = ({
               </>
             ) : (
               <span className={hasValue
-                ? 'text-gray-900 dark:text-gray-100 '
+                ? 'text-gray-900 dark:text-gray-100'
                 : 'text-gray-400 dark:text-gray-500 font-[300] italic'
               }>
                 {getDisplayValue() || placeholder}
@@ -297,8 +301,9 @@ const SearchableDropdown = ({
         </div>
 
         {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-[#1e1e1e] border border-gray-300 dark:border-gray-600 rounded-md shadow-lg dark:shadow-gray-900/50 max-h-60 overflow-hidden">
-            <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-[#1e1e1e] border border-gray-300 dark:border-gray-600 rounded-md shadow-lg dark:shadow-gray-900/50 max-h-60 overflow-hidden flex flex-col">
+            {/* Search input */}
+            <div className="p-2 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
               <div className="relative">
                 <Search
                   size={16}
@@ -311,7 +316,7 @@ const SearchableDropdown = ({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="w-full pl-8 pr-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm 
+                  className="w-full pl-8 pr-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm
                     bg-white dark:bg-[#242424]
                     text-gray-900 dark:text-gray-100
                     placeholder:text-gray-400 dark:placeholder:text-gray-500
@@ -322,12 +327,12 @@ const SearchableDropdown = ({
 
             {/* Select All / Clear All for multiple */}
             {multiple && filteredOptions.length > 0 && (
-              <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex gap-2">
+              <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex gap-2 flex-shrink-0">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    const allValues = filteredOptions.map(opt => 
+                    const allValues = filteredOptions.map(opt =>
                       typeof opt === 'string' ? opt : opt?.value
                     );
                     onChange(allValues);
@@ -350,7 +355,8 @@ const SearchableDropdown = ({
               </div>
             )}
 
-            <div className="max-h-48 overflow-y-auto custom-scrollbar">
+            {/* Options list */}
+            <div className="overflow-y-auto custom-scrollbar flex-1">
               {loading ? (
                 <div className="flex items-center justify-center px-3 py-2">
                   <div className="w-4 h-4 border-2 border-blue-500 dark:border-blue-400 border-t-transparent rounded-full animate-spin"></div>
@@ -378,7 +384,7 @@ const SearchableDropdown = ({
                         }
                       `}
                     >
-                      <span className="">{optionLabel}</span>
+                      <span>{optionLabel}</span>
                       {multiple && isSelected && (
                         <Check size={16} className="flex-shrink-0 text-blue-600 dark:text-blue-400" />
                       )}
@@ -392,10 +398,21 @@ const SearchableDropdown = ({
               )}
             </div>
 
-            {/* Selected count for multiple */}
+            {/* Footer: count + OK button — only in multiple mode */}
             {multiple && selectedValues.length > 0 && (
-              <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
-                {selectedValues.length} item{selectedValues.length > 1 ? 's' : ''} selected
+              <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {selectedValues.length} item{selectedValues.length > 1 ? 's' : ''} selected
+                </span>
+                {onEnter && (
+                  <button
+                    type="button"
+                    onClick={handleOkClick}
+                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white text-xs font-medium rounded transition-colors"
+                  >
+                    OK
+                  </button>
+                )}
               </div>
             )}
           </div>

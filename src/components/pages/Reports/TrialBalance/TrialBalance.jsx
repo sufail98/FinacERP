@@ -1,13 +1,12 @@
 // src/components/pages/Reports/TrialBalance/TrialBalance.jsx
+import React, { useMemo, useState } from 'react';
 import BreadCrumb from '@/components/common/BreadCrumb';
-import ContentTable from '@/components/common/ContentTable';
 import NoAcessComponent from '@/components/common/NoAcessComponent';
 import Preloader from '@/components/common/Preloader';
 import axiosInstance from '@/lib/axiosConfig';
 import usePrivileges from '@/lib/hooks/usePrivileges';
 import useAuth from '@/redux/hook/auth/useAuth';
 import { Scale } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import TrialBalanceFilter from './TrialBalanceFilter';
@@ -17,9 +16,21 @@ const TrialBalance = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState(null);
-  const { selectedBranchId, currentCurrency } = useAuth();
+  const { selectedBranchId, currentCurrency, selectedBranchDetails } = useAuth();
   const { loading: privilegeLoading, hasAccess, message } = usePrivileges("Trial Balance");
   const { generalSettings } = useSelector((state) => state.settings);
+
+  const [expandedGroups, setExpandedGroups] = useState({});
+
+  const toggleGroup = (groupId) => {
+    setExpandedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
+
+  const formatNumber = (value, decimalPart) =>
+    Number(value || 0).toLocaleString('en-IN', {
+      minimumFractionDigits: decimalPart,
+      maximumFractionDigits: decimalPart,
+    });
 
   // Use the unified export hook
   const {
@@ -29,7 +40,7 @@ const TrialBalance = () => {
   } = useReportExport();
 
   const [filters, setFilters] = useState({
-    fromDate: new Date(new Date().getFullYear(), 3, 1).toISOString().split('T')[0], // April 1st of current year
+    fromDate: new Date().toISOString().split('T')[0], // April 1st of current year
     toDate: new Date().toISOString().split('T')[0],
     reportType: 'condensed', // condensed | detailed
   });
@@ -42,8 +53,8 @@ const TrialBalance = () => {
       const payload = {
         fromDate: filters.fromDate,
         toDate: filters.toDate,
-        branchId: Number(selectedBranchId),
-        groupId: 44,
+        branchId: selectedBranchDetails?.mainBranch ? null : Number(selectedBranchId),
+        groupId: null,
         currencyId: currentCurrency?.currencyId || 30,
         ledgerName: "",
         reportType: filters.reportType === 'condensed' ? 'Condensed' : 'Detailed',
@@ -53,8 +64,8 @@ const TrialBalance = () => {
         "profit-and-loss/analysis-detailed-trial-balance",
         payload
       );
-      
-      setReportData(res.data.data || res.data);
+
+      setReportData(res.data);
     } catch (error) {
       console.error("Error fetching trial balance report:", error);
       setReportData(null);
@@ -65,64 +76,22 @@ const TrialBalance = () => {
 
   /* ------------------------------ Computed Data ------------------------------ */
 
-  const processedData = useMemo(() => {
-    if (!reportData || !Array.isArray(reportData)) return [];
-
-    const decimalPart = generalSettings?.decimalPart || 2;
-
-    return reportData.map((row, index) => {
-      const debit = Number(row.Debit || row.debit || 0);
-      const credit = Number(row.Credit || row.credit || 0);
-
-      return {
-        ...row,
-        SNo: row.SNo || row.sNo || index + 1,
-        LedgerName: row.LedgerName || row.ledgerName || row.AccountName || row.accountName || '',
-        LedgerCode: row.LedgerCode || row.ledgerCode || row.AccountCode || row.accountCode || '',
-        GroupName: row.GroupName || row.groupName || row.AccountGroup || row.accountGroup || '',
-        DebitFormatted: debit.toFixed(decimalPart),
-        CreditFormatted: credit.toFixed(decimalPart),
-        DebitValue: debit,
-        CreditValue: credit,
-      };
-    });
-  }, [reportData, generalSettings?.decimalPart]);
+  const groupedData = useMemo(() => {
+    if (!reportData || !Array.isArray(reportData.data)) return [];
+    return reportData.data;
+  }, [reportData]);
 
   const { totalDebit, totalCredit } = useMemo(() => {
-    if (!processedData || processedData.length === 0) {
+    if (!reportData || !reportData.grandTotal) {
       return { totalDebit: 0, totalCredit: 0 };
     }
-
-    return processedData.reduce(
-      (totals, row) => ({
-        totalDebit: totals.totalDebit + row.DebitValue,
-        totalCredit: totals.totalCredit + row.CreditValue,
-      }),
-      { totalDebit: 0, totalCredit: 0 }
-    );
-  }, [processedData]);
-
-  const difference = useMemo(() => {
-    return totalDebit - totalCredit;
-  }, [totalDebit, totalCredit]);
-
-  const footerData = useMemo(() => {
-    if (!reportData || !Array.isArray(reportData) || reportData.length === 0) return null;
-
-    const decimalPart = generalSettings?.decimalPart || 2;
-
     return {
-      label: t('Total'),
-      Debit: totalDebit.toFixed(decimalPart),
-      Credit: totalCredit.toFixed(decimalPart),
-      Difference:
-        difference === 0
-          ? '0.00'
-          : difference > 0
-            ? `${Math.abs(difference).toFixed(decimalPart)} Dr`
-            : `${Math.abs(difference).toFixed(decimalPart)} Cr`,
+      totalDebit: Number(reportData.grandTotal.Debit || 0),
+      totalCredit: Number(reportData.grandTotal.Credit || 0),
     };
-  }, [reportData, totalDebit, totalCredit, difference, generalSettings?.decimalPart, t]);
+  }, [reportData]);
+
+  const difference = useMemo(() => totalDebit - totalCredit, [totalDebit, totalCredit]);
 
   /* ------------------------------ Export Configuration ------------------------------ */
 
@@ -130,21 +99,36 @@ const TrialBalance = () => {
     const decimalPart = generalSettings?.decimalPart || 2;
     const reportTypeLabel = filters.reportType === 'condensed' ? 'Condensed' : 'Detailed';
 
-    const exportData = processedData.map((row, index) => ({
-      SlNo: row.SNo || index + 1,
-      LedgerCode: row.LedgerCode || '',
-      LedgerName: row.LedgerName || '',
-      GroupName: row.GroupName || '',
-      Debit: row.DebitFormatted,
-      Credit: row.CreditFormatted,
-    }));
+    const exportData = [];
+    groupedData.forEach((group) => {
+      exportData.push({
+        LedgerName: group.groupName,
+        LedgerCode: '',
+        GroupName: '',
+        Opening: '',
+        Debit: formatNumber(group.groupDebit, decimalPart),
+        Credit: formatNumber(group.groupCredit, decimalPart),
+        isGroup: true,
+      });
+      (group.ledgers || []).forEach((ledger) => {
+        exportData.push({
+          LedgerName: ledger.ledgerName,
+          LedgerCode: ledger.ledgerId,
+          GroupName: group.groupName,
+          Opening: ledger.Opening,
+          Debit: formatNumber(ledger.Debit, decimalPart),
+          Credit: formatNumber(ledger.Credit, decimalPart),
+          isGroup: false,
+        });
+      });
+    });
 
     const formattedDifference =
       difference === 0
         ? '0.00'
         : difference > 0
-          ? `${Math.abs(difference).toFixed(decimalPart)} Dr`
-          : `${Math.abs(difference).toFixed(decimalPart)} Cr`;
+          ? `${formatNumber(Math.abs(difference), decimalPart)} Dr`
+          : `${formatNumber(Math.abs(difference), decimalPart)} Cr`;
 
     return {
       fileName: `Trial_Balance_${reportTypeLabel}_${filters.fromDate}_to_${filters.toDate}`,
@@ -155,26 +139,24 @@ const TrialBalance = () => {
       toDate: filters.toDate,
       data: exportData,
       footer: {
-        label: t('Total'),
-        Debit: totalDebit.toFixed(decimalPart),
-        Credit: totalCredit.toFixed(decimalPart),
+        label: t('Grand Total'),
+        Debit: formatNumber(totalDebit, decimalPart),
+        Credit: formatNumber(totalCredit, decimalPart),
         Difference: formattedDifference,
       },
       theme: 'professional',
       decimalPlaces: decimalPart,
       columns: [
-        { key: 'SlNo', label: '#', align: 'center', width: 8 },
-        { key: 'LedgerCode', label: t('trialBalance.columns.ledgerCode') || 'Code', align: 'center', width: 12 },
-        { key: 'LedgerName', label: t('trialBalance.columns.ledgerName') || 'Ledger Name', align: 'left', width: 25 },
-        { key: 'GroupName', label: t('trialBalance.columns.groupName') || 'Group', align: 'left', width: 20 },
-        { key: 'Debit', label: t('trialBalance.columns.debit') || 'Debit', align: 'right', width: 16, type: 'currency' },
-        { key: 'Credit', label: t('trialBalance.columns.credit') || 'Credit', align: 'right', width: 16, type: 'currency' },
+        { key: 'LedgerName', label: t('trialBalance.columns.ledgerName') || 'Ledger / Group', align: 'left', width: 30 },
+        { key: 'Opening', label: t('trialBalance.columns.opening') || 'Opening', align: 'right', width: 15 },
+        { key: 'Debit', label: t('trialBalance.columns.debit') || 'Debit', align: 'right', width: 18, type: 'currency' },
+        { key: 'Credit', label: t('trialBalance.columns.credit') || 'Credit', align: 'right', width: 18, type: 'currency' },
       ],
     };
   };
 
   const handleExportExcel = () => {
-    if (!processedData || processedData.length === 0) {
+    if (!groupedData || groupedData.length === 0) {
       alert(t('No data to export'));
       return;
     }
@@ -182,7 +164,7 @@ const TrialBalance = () => {
   };
 
   const handleExportPdf = () => {
-    if (!processedData || processedData.length === 0) {
+    if (!groupedData || groupedData.length === 0) {
       alert(t('No data to export'));
       return;
     }
@@ -190,7 +172,7 @@ const TrialBalance = () => {
   };
 
   const handleExportCsv = () => {
-    if (!processedData || processedData.length === 0) {
+    if (!groupedData || groupedData.length === 0) {
       alert(t('No data to export'));
       return;
     }
@@ -210,71 +192,6 @@ const TrialBalance = () => {
       reportType: 'condensed',
     });
     setReportData(null);
-  };
-
-  /* ------------------------------ Columns ------------------------------ */
-
-  const columns = useMemo(() => {
-    const baseCols = [
-      { key: 'SNo', label: t('trialBalance.columns.sNo') || '#' },
-      { key: 'LedgerCode', label: t('trialBalance.columns.ledgerCode') || 'Code' },
-      { key: 'LedgerName', label: t('trialBalance.columns.ledgerName') || 'Ledger Name' },
-      { key: 'GroupName', label: t('trialBalance.columns.groupName') || 'Group' },
-      { key: 'Debit', label: t('trialBalance.columns.debit') || 'Debit', align: 'right' },
-      { key: 'Credit', label: t('trialBalance.columns.credit') || 'Credit', align: 'right' },
-    ];
-
-    return baseCols;
-  }, [t]);
-
-  /* ------------------------------ Render Cell ------------------------------ */
-
-  const renderCell = (key, row) => {
-    const decimalPart = generalSettings?.decimalPart || 2;
-
-    if (key === 'Debit') {
-      const value = Number(row.Debit || row.debit || 0);
-      return (
-        <div className="text-sm">
-          <div className="flex items-center justify-end gap-1">
-            <span className={value > 0 ? 'text-green-600 font-medium' : ''}>
-              {value.toFixed(decimalPart)}
-            </span>
-          </div>
-        </div>
-      );
-    }
-
-    if (key === 'Credit') {
-      const value = Number(row.Credit || row.credit || 0);
-      return (
-        <div className="text-sm">
-          <div className="flex items-center justify-end gap-1">
-            <span className={value > 0 ? 'text-red-600 font-medium' : ''}>
-              {value.toFixed(decimalPart)}
-            </span>
-          </div>
-        </div>
-      );
-    }
-
-    if (key === 'LedgerName') {
-      return (
-        <div className="text-sm font-medium text-gray-800">
-          {row.LedgerName || '-'}
-        </div>
-      );
-    }
-
-    if (key === 'GroupName') {
-      return (
-        <div className="text-sm text-gray-600">
-          {row.GroupName || '-'}
-        </div>
-      );
-    }
-
-    return row[key] ?? '-';
   };
 
   /* ------------------------------ Loading / Access Guard ------------------------------ */
@@ -320,7 +237,7 @@ const TrialBalance = () => {
         ]}
         heading={{ icon: Scale, title: t('trialBalance.breadcrumb.title') || 'Trial Balance' }}
         exportConfig={
-          processedData && processedData.length > 0
+          groupedData && groupedData.length > 0
             ? {
                 onExportExcel: handleExportExcel,
                 onExportPdf: handleExportPdf,
@@ -340,13 +257,88 @@ const TrialBalance = () => {
       />
 
       <div className="px-1">
-        <ContentTable
-          columns={columns}
-          data={processedData}
-          loading={loading}
-          footerData={footerData}
-          renderCell={renderCell}
-        />
+        {loading ? (
+          <Preloader />
+        ) : (
+          <div className="overflow-x-auto border rounded-md">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-xs uppercase text-gray-500 border-b">
+                  <th className="text-left px-4 py-3">{t('trialBalance.columns.ledgerName') || 'Ledger / Group'}</th>
+                  <th className="text-left px-4 py-3">{t('opening') || 'Opening'}</th>
+                  <th className="text-right px-4 py-3">{t('trialBalance.columns.debit') || 'Debit'}</th>
+                  <th className="text-right px-4 py-3">{t('trialBalance.columns.credit') || 'Credit'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedData.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-8 text-gray-400">
+                      {t('No data available')}
+                    </td>
+                  </tr>
+                ) : (
+                  groupedData.map((group) => {
+                    const decimalPart = generalSettings?.decimalPart || 2;
+                    const isExpanded = !!expandedGroups[group.groupId];
+                    return (
+                      <React.Fragment key={group.groupId}>
+                        <tr
+                          className="bg-blue-50/50 hover:bg-blue-50 cursor-pointer border-b"
+                          onClick={() => toggleGroup(group.groupId)}
+                        >
+                          <td className="px-4 py-2.5 font-medium text-blue-700">
+                            <span className="inline-flex items-center gap-2">
+                              <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                                ▶
+                              </span>
+                              {group.groupName}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-400">—</td>
+                          <td className="px-4 py-2.5 text-right text-red-500 font-medium">
+                            {formatNumber(group.groupDebit, decimalPart)}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-green-600 font-medium">
+                            {formatNumber(group.groupCredit, decimalPart)}
+                          </td>
+                        </tr>
+
+                        {isExpanded &&
+                          (group.ledgers || []).map((ledger) => (
+                            <tr key={ledger.ledgerId} className="border-b last:border-b-0">
+                              <td className="px-4 py-2 pl-10 text-gray-700">{ledger.ledgerName}</td>
+                              <td className="px-4 py-2 text-gray-500">{ledger.Opening}</td>
+                              <td className="px-4 py-2 text-right text-gray-700">
+                                {formatNumber(ledger.Debit, decimalPart)}
+                              </td>
+                              <td className="px-4 py-2 text-right text-gray-700">
+                                {formatNumber(ledger.Credit, decimalPart)}
+                              </td>
+                            </tr>
+                          ))}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+              {groupedData.length > 0 && (
+                <tfoot>
+                  <tr className="bg-slate-800 text-white font-semibold">
+                    <td className="px-4 py-3">{t('Grand Total')}</td>
+                    <td className="px-4 py-3"></td>
+                    <td className="px-4 py-3 text-right text-red-300">
+                      {formatNumber(totalDebit, generalSettings?.decimalPart || 2)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-green-300">
+                      {formatNumber(totalCredit, generalSettings?.decimalPart || 2)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

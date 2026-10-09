@@ -8,11 +8,16 @@ import useAuth from '@/redux/hook/auth/useAuth';
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
+import DocumentUpload from '../../../common/DocumentUpload'
+import SelecteCurrecyModal from '../SalesInvoice/SelecteCurrecyModal';
 
-const JournalVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, editMode, handleFormChange, existingJournalNo, costCenters: costCentres }) => {
 
-    const { generalSettings } = useSelector((state) => state.settings);
-    const { currentFinancialYear } = useAuth();
+const JournalVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, editMode, handleFormChange, existingJournalNo, costCenters: costCentres, documents, setDocuments, existingDocuments, setExistingDocuments,
+    removedDocuments, setRemovedDocuments, currency = [], currencyConvertionData = [], financeSettings: financeSettingsProp }) => {
+    const [currencyModalOpen, setCurrencyModalOpen] = useState(false);
+    const { generalSettings, financeSettings: financeSettingsFromStore } = useSelector((state) => state.settings);
+    const effectiveFinanceSettings = financeSettingsProp ?? financeSettingsFromStore;
+    const { currentFinancialYear, currentCurrency } = useAuth();
 
     const { t } = useTranslation();
 
@@ -49,10 +54,10 @@ const JournalVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, ed
 
                 {/* Second Column */}
                 <TextInput
-                    name='ReferenceNo'
+                    name='referenceNo'
                     label={t('journalVoucher.form.label.ReferenceNo')}
-                    value={formData.ReferenceNo}
-                    onChange={(e) => handleFormChange('ReferenceNo', e)}
+                    value={formData.referenceNo}
+                    onChange={(e) => handleFormChange('referenceNo', e)}
                     placeholder={t('journalVoucher.form.placeholders.ReferenceNo')}
                     className='w-full'
                 />
@@ -61,30 +66,40 @@ const JournalVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, ed
 
                     <DateInput
                         label={t('journalVoucher.form.label.ReferenceDate')}
-                        name='date'
+                        name='referenceDate'
                         required
-                        value={formData.ReferenceDate}
-                        onChange={(value) => handleFormChange('ReferenceDate', value)}
+                        value={formData.referenceDate}
+                        onChange={(value) => handleFormChange('referenceDate', value)}
                         className="w-full"
                         format={generalSettings.dateformat}
-                        error={errors.date}
+                        error={errors.referenceDate}
                     />
                 </div>
                 {generalSettings?.costCentre && (
-                    <SearchableDropdown
-                        name="costCentreId"
-                        value={formData.costCentreId || ""}
-                        onChange={(value) => handleFormChange('costCentreId', value)}
-                        label={t('journalVoucher.form.placeholders.costCentre')}
-                        placeholder={t('journalVoucher.form.placeholders.costCentre')}
-                        searchPlaceholder={t('journalVoucher.form.placeholders.costCentre')}
-                        clearable={true}
-                        className="w-full"
-                        options={costCentres?.map((data) => ({
-                            value: data.costCentreId,
-                            label: data.CostCentre || "",
-                        }))}
-                    />
+                    <div>
+                        <SearchableDropdown
+                            name="costCentreId"
+                            value={formData.costCentreId || ""}
+                            onChange={(value) => handleFormChange('costCentreId', value)}
+                            label={t('journalVoucher.form.placeholders.costCentre')}
+                            placeholder={t('journalVoucher.form.placeholders.costCentre')}
+                            searchPlaceholder={t('journalVoucher.form.placeholders.costCentre')}
+                            clearable={true}
+                            className="w-full mb-1"
+                            options={costCentres?.map((data) => ({
+                                value: data.costCentreId,
+                                label: data.CostCentre || "",
+                            }))}
+                        />
+                        <DocumentUpload
+                            documents={documents}
+                            setDocuments={setDocuments}
+                            existingDocuments={existingDocuments}
+                            setExistingDocuments={setExistingDocuments}
+                            removedDocuments={removedDocuments}
+                            setRemovedDocuments={setRemovedDocuments}
+                        />
+                    </div>
                 )}
 
                 <TextArea
@@ -105,6 +120,28 @@ const JournalVoucherFormHeader = ({ voucherNo, errors, formData, setFormData, ed
                         ⚠️ {t('journalVoucher.form.messages.debitCreditMismatch')}
                     </p>
                 </div>
+            )}
+             {/* Currency Link */}
+            {effectiveFinanceSettings?.multiCurrency && (
+                <div className='flex flex-wrap gap-2 text-xs mt-2'>
+                    <p
+                        className='text-blue-600 border-b border-blue-600 w-fit cursor-pointer hover:text-blue-700'
+                        onClick={() => setCurrencyModalOpen(true)}
+                    >
+                        Currency: {formData?.currencyName || currentCurrency?.currencyName || 'Select Currency'}
+                    </p>
+                </div>
+            )}
+
+            {effectiveFinanceSettings?.multiCurrency && (
+                <SelecteCurrecyModal
+                    open={currencyModalOpen}
+                    handleClose={() => setCurrencyModalOpen(false)}
+                    formData={formData}
+                    currency={currency}
+                    handleChange={(field, value) => handleFormChange(field, value)}
+                    currencyConvertionData={currencyConvertionData}
+                />
             )}
         </div>
     )

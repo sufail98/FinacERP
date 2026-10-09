@@ -8,8 +8,9 @@ import useAuth from '@/redux/hook/auth/useAuth';
 import Swal from 'sweetalert2';
 import { useSelector } from 'react-redux';
 import AlertBox from '@/components/common/AlertBox';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import Preloader from '@/components/common/Preloader';
+import ConvertMenu from '@/components/common/ConvertMenu';
 import useFormValidation from '@/lib/hooks/useFormValidation';
 import proformaInvoicePrintOne from '@/utils/prints/proformaInvoicePrints/profrmaInvoicePrintOne';
 import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
@@ -17,11 +18,19 @@ import { formatDateWithTime, parseDateFromAPI } from '@/lib/dateFormat';
 import PrintDropdown from '@/components/common/PrintDropdown';
 import { Checkbox } from '@/components/ui/checkbox';
 import PopupPreloader from '@/components/common/PopupPreloader';
+import HelpShortcuts from '@/components/common/HelpShortcuts';
 import { showToast } from '@/utils/toast';
 import proformInvoicePrintTwo from '@/utils/prints/proformaInvoicePrints/proformInvoicePrintTwo';
 import proformInvoicePrintThree from '@/utils/prints/proformaInvoicePrints/proformInvoicePrintThree';
+import printProformaInvoiceLogismart from '@/utils/prints/proformaInvoicePrints/proformaInvoiceLogiSmart';
+import { isElectron } from '@/utils/electronPrint';
+import usePrivileges from '@/lib/hooks/usePrivileges';
+import NoAcessComponent from '@/components/common/NoAcessComponent';
 
 const PerformaInvoiceSkin = () => {
+    const { privileges, loading: privilegeLoading, hasAccess, message } = usePrivileges("Proforma Invoice");
+
+    const [isPrinting, setIsPrinting] = useState(false);
     const { errors, validateForm, handleBlur, setErrors } = useFormValidation();
     const [voucherNoGenarating, setVoucherNumberGenarating] = useState(false)
     const { proformaInvoiceId } = useParams();
@@ -29,6 +38,10 @@ const PerformaInvoiceSkin = () => {
     const [isEditMode, setIsEditMode] = useState(Boolean(proformaInvoiceId));
     const [canEdit, setCanEdit] = useState(!Boolean(proformaInvoiceId));
     const [isInEditMode, setIsInEditMode] = useState(Boolean(proformaInvoiceId));
+    const location = useLocation()
+    const { salesProducts: allProducts, loading: productsLoading } = useSelector((state) => state.products);
+
+    const [bankDetails, setBankDetails] = useState({});
 
     const [fetchLoading, setFetchLoading] = useState(false)
     const navigate = useNavigate()
@@ -61,9 +74,26 @@ const PerformaInvoiceSkin = () => {
     const [restoredHeldInvoiceId, setRestoredHeldInvoiceId] = useState(null);
     const decimalPart = generalSettings?.decimalPart ?? 2;
     const [taxData, setTaxData] = useState([])
+    const [updateCustomerId, setUpdateCustomerId] = useState(null);
 
+    // add near other useState hooks
+    const [helpOpen, setHelpOpen] = useState(false);
     const [resetTableKey, setResetTableKey] = useState(0);
-
+    const handleConvert = useCallback((type) => {
+        switch (type) {
+            case 'order':
+                navigate(`/transaction/sales-order?fromProforma=${proformaInvoiceId}`, { state: { againstProforma: true, masterId: proformaInvoiceId } });
+                break;
+            case 'deliveryNote':
+                navigate(`/transaction/delivery-note?fromProforma=${proformaInvoiceId}`, { state: { againstProforma: true, masterId: proformaInvoiceId } });
+                break;
+            case 'sale':
+                navigate(`/transaction/sales-invoice?fromProforma=${proformaInvoiceId}`, { state: { againstProforma: true, masterId: proformaInvoiceId } });
+                break;
+            default:
+                break;
+        }
+    }, [navigate, proformaInvoiceId]);
     useEffect(() => {
         const updateTime = () => {
             const now = new Date();
@@ -100,7 +130,7 @@ const PerformaInvoiceSkin = () => {
         employeeId: '',
         currencyConversionId: currentCurrencyConversion?.currencyConversionId,
         taxType: generalSettings.taxType,
-        BatchId: '',
+        BatchId: null,
         partyName: '',
         costCentreId: 1,
         partyAddress: '',
@@ -112,7 +142,7 @@ const PerformaInvoiceSkin = () => {
         deliveryDate: "",
         exchangeRate: currentCurrencyConversion?.rate,
         exchangeDate: currentCurrencyConversion?.date,
-        quotationMasterId: "",
+        quotationMasterId:null,
         AgainstNo: "",
         lrNo: "",
         transportCompany: "",
@@ -162,25 +192,38 @@ const PerformaInvoiceSkin = () => {
             }
         ]
     });
+    // ===== HOLD INVOICE: Load from localStorage per branch =====
     useEffect(() => {
         const savedHeldInvoices = localStorage.getItem('heldProformaInvoices');
         if (savedHeldInvoices) {
             const allHeld = JSON.parse(savedHeldInvoices);
-            setHeldInvoices(allHeld.filter(inv => inv.branchId === selectedBranchId));
+            const branchHeldInvoices = allHeld.filter(inv => inv.branchId === selectedBranchId);
+            const deduped = Array.from(
+                new Map(branchHeldInvoices.map(inv => [inv.id, inv])).values()
+            );
+            setHeldInvoices(deduped);
         }
     }, [selectedBranchId]);
 
+    // ===== HOLD INVOICE: Sync to localStorage whenever heldInvoices changes =====
     useEffect(() => {
         const saved = localStorage.getItem('heldProformaInvoices');
         const all = saved ? JSON.parse(saved) : [];
         const otherBranch = all.filter(inv => inv.branchId !== selectedBranchId);
-        const updated = [...otherBranch, ...heldInvoices];
+
+        const dedupedHeldInvoices = Array.from(
+            new Map(heldInvoices.map(inv => [inv.id, inv])).values()
+        );
+
+        const updated = [...otherBranch, ...dedupedHeldInvoices];
         if (updated.length > 0) {
             localStorage.setItem('heldProformaInvoices', JSON.stringify(updated));
         } else {
             localStorage.removeItem('heldProformaInvoices');
         }
     }, [heldInvoices, selectedBranchId]);
+
+    // ===== HOLD INVOICE: Hold current invoice =====
     const holdCurrentInvoice = useCallback(() => {
         const hasData = formData.invoiceDetails.some(d => d.productCode && d.qty > 0);
         if (!hasData) {
@@ -198,7 +241,10 @@ const PerformaInvoiceSkin = () => {
             branchId: selectedBranchId,
             formData: { ...formData },
         };
-        setHeldInvoices(prev => [...prev, heldInvoice]);
+        setHeldInvoices(prev => {
+            if (prev.some(inv => inv.id === heldInvoice.id)) return prev;
+            return [...prev, heldInvoice];
+        });
         showToast.success(`Invoice held successfully. Total held: ${heldInvoices.length + 1}`);
         clearForm(true);
     }, [formData, invoiceId, heldInvoices.length, selectedBranchId]);
@@ -221,7 +267,11 @@ const PerformaInvoiceSkin = () => {
         } else {
             setHeldInvoices(prev => prev.filter(inv => inv.id !== heldInvoice.id));
         }
-        setFormData(heldInvoice.formData);
+        setFormData({
+            ...heldInvoice.formData,
+            date: new Date(),
+            billTime: time,
+        });
         setInvoiceId(heldInvoice.invoiceId);
         setResetTableKey(prev => prev + 1);
         setShowHeldInvoices(false);
@@ -330,7 +380,7 @@ const PerformaInvoiceSkin = () => {
             PaymentTerms: '',
             status: 'Pending',
             selectedQuotationMasterId: '',
-            BatchId: '',
+            BatchId: null,
             partyName: '',
             partyAddress: '',
             partyMobile: '',
@@ -342,7 +392,7 @@ const PerformaInvoiceSkin = () => {
             deliveryDate: "",
             exchangeRate: currentCurrencyConversion?.rate,
             exchangeDate: currentCurrencyConversion?.date,
-            quotationMasterId: "",
+            quotationMasterId: null,
             AgainstNo: "",
             lrNo: "",
             transportCompany: "",
@@ -413,11 +463,6 @@ const PerformaInvoiceSkin = () => {
         setResetTableKey(prev => prev + 1);
     };
 
-    useEffect(() => {
-        if (editMode) {
-            getSalesById()
-        }
-    }, [editMode])
 
     const [baseDataloading, setBaseDataloading] = useState(false)
 
@@ -477,7 +522,7 @@ const PerformaInvoiceSkin = () => {
         const getSalesRequiredData = async () => {
             setBaseDataloading(true)
             try {
-                const res = await axiosInstance.post('all-sales-data', { voucherType: "Proforma Invoice", branchId: selectedBranchId, yearId: currentFinancialYear.yearId, ledgerTypes: ["Customer"], ledgerId: formData.ledgerId, currencyId: currentCurrency.currencyId })
+                const res = await axiosInstance.post('all-sales-data', { voucherType: "Proforma Invoice", branchId: selectedBranchId, yearId: currentFinancialYear.yearId, ledgerTypes: ["Customer", "Customer&Supplier"], ledgerId: formData.ledgerId, currencyId: currentCurrency.currencyId })
                 const data = res?.data?.data
 
 
@@ -492,12 +537,16 @@ const PerformaInvoiceSkin = () => {
                 setCostCenters(data?.costcentre)
                 setCurrentLedgerBalance(data?.LedgerBalance?.currentbal)
                 setSalesAccount(data?.salesAccount)
-
+                setUpdateCustomerId(financeSettings.defaultSalesAccount || null)
                 const filteredCurrencies = data?.currencywithConversion?.filter(
                     c => c.branchid_conversion == selectedBranchId
                 ) || [];
                 setCurrencies(filteredCurrencies);
                 setTaxData(data?.taxMaster)
+                if (editMode) {
+
+                    getSalesById(data?.taxMaster)
+                }
 
                 if (data?.salesAccount.length > 0 && !formData.salesAccount) {
                     setFormData(prev => ({
@@ -509,7 +558,7 @@ const PerformaInvoiceSkin = () => {
                 setFormData(prev => ({
                     ...prev,
                     customerData: data?.customeraddress,
-                    BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : ''
+                    BatchId: data?.transactionbatch?.length > 0 ? data.transactionbatch[0].transactionbatchid : null,
                 }));
 
                 const defaultShipping = Array.isArray(data?.customeraddress?.shipping_address)
@@ -551,6 +600,39 @@ const PerformaInvoiceSkin = () => {
         getSalesRequiredData()
     }, [])
 
+    const fetchBankDetails = async (id) => {
+        if (!id) return;
+        try {
+            const response = await axiosInstance.get(`get-account-ledger-byId/${id}`);
+            if (response.data?.data) {
+                const data = response.data.data;
+                const details = {
+                    ledgerCode: data.ledgerCode || "",
+                    ledgerName: data.ledgerName || "",
+                    groupId: data.groupId?.toString() || "",
+                    accountNo: data.accountNo || "",
+                    bankaccname: data.bankaccname || "",
+                    bankname: data.bankname || "",
+                    ibanno: data.ibanno || "",
+                    bankBranchName: data.bankBranchName || "",
+                    bankSwiftCode: data.bankSwiftCode || "",
+                };
+                setBankDetails(details);
+                setFormData(prev => ({
+                    ...prev,
+                    bankDetails: details
+                }));
+            }
+        } catch (error) {
+            console.error("Error fetching bank ledger data:", error);
+        }
+    };
+    useEffect(() => {
+        if (financeSettings?.DefaultBankAccount) {
+            fetchBankDetails(financeSettings.DefaultBankAccount);
+        }
+    }, [financeSettings?.DefaultBankAccount]);
+
     useEffect(() => {
         if (editMode) return;
 
@@ -580,7 +662,7 @@ const PerformaInvoiceSkin = () => {
         });
     }, [time, editMode]);
 
-    const getSalesById = async () => {
+    const getSalesById = async (taxMaster) => {
         setFetchLoading(true)
         try {
             const response = await axiosInstance.get(`get-proforma-invoice-byId/${proformaInvoiceId}`);
@@ -606,8 +688,8 @@ const PerformaInvoiceSkin = () => {
                         productDescription: item.productDescription || '',
                         UnitName: ''
                     };
-
-                    const taxInfo = taxData.find(t => t.taxId === item.taxId);
+                    const freshtaxdata = taxMaster || taxData;
+                    const taxInfo = freshtaxdata.find(t => t.taxId === item.taxId);
                     const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
 
                     if (item.productCode) {
@@ -651,6 +733,7 @@ const PerformaInvoiceSkin = () => {
                         inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
                         lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -782,7 +865,7 @@ const PerformaInvoiceSkin = () => {
     const fetchCustomer = async () => {
         setLoading(prev => ({ ...prev, customers: true }));
         try {
-            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer"], branchId: selectedBranchId });
+            const { data } = await axiosInstance.post("customer-supplier-account-ledgers", { ledgerTypes: ["Customer", "Customer&Supplier"], branchId: selectedBranchId });
             setCustomers(data.data);
         } catch (err) {
             console.error("Failed to fetch customers:", err);
@@ -807,10 +890,25 @@ const PerformaInvoiceSkin = () => {
         return errors;
     };
 
-    const fetchProformaDataUsingQuotationId = async (quotationMasterId) => {
-        setFetchLoading(true)
+    useEffect(() => {
+        if (location.state && location.state.againstQuotation && location.state.masterId && taxData.length > 0) {
+            fetchProformaDataUsingQuotationId(location.state.masterId, taxData);
+        }
+    }, [location.state, taxData]);
+
+    const fetchProformaDataUsingQuotationId = async (quotationMasterIds, taxMaster) => {
+        // ✅ normalize: accept both single value and array
+        const idsArray = Array.isArray(quotationMasterIds)
+            ? quotationMasterIds
+            : [Number(quotationMasterIds)];
+
+        if (idsArray.length === 0) return;
+
+        setFetchLoading(true);
         try {
-            const response = await axiosInstance.post(`get-quotation-for-proforma`, { quotationMasterId })
+            const response = await axiosInstance.post(`get-quotation-for-proforma`, {
+                quotationMasterId: idsArray  // ✅ send array to backend
+            });
             const data = response.data.data;
 
 
@@ -832,7 +930,8 @@ const PerformaInvoiceSkin = () => {
                         UnitName: ''
                     };
 
-                    const taxInfo = taxData.find(t => t.taxId === item.taxId);
+                    const freshtaxdata = taxMaster || taxData;
+                    const taxInfo = freshtaxdata.find(t => t.taxId === item.taxId);
                     const taxRate = taxInfo ? parseFloat(taxInfo.rate) : 0;
 
                     if (item.productCode) {
@@ -874,6 +973,7 @@ const PerformaInvoiceSkin = () => {
                         lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
                         inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
                         unitId: item.unitId,
+                        unitName: productDetails.UnitName || item.unitName || item.UnitName || '',
                         discountPercentage: parseFloat(item.discountPercentage) || 0,
                         taxId: item.taxId,
                         taxRate: taxRate,
@@ -920,18 +1020,18 @@ const PerformaInvoiceSkin = () => {
                 status: 'Pending',
                 BatchId: data.BatchId,
                 costCentreId: data.costCentreId,
-                partyName: data.partyName,
-                partyAddress: data.partyAddress,
-                partyMobile: data.partyMobile,
-                partyVatNo: data.partyVatNo,
+                partyName: data.customerName,
+                partyAddress: data.CustomerAddress,
+                partyMobile: data.CustomerPhone,
+                partyVatNo: data.CustomerVatNo,
                 partyRefNo: data.partyRefNo,
                 partyRefDate: data.partyRefDate ? new Date(data.partyRefDate) : "",
                 dueDate: data.dueDate ? new Date(data.dueDate) : "",
                 deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : "",
                 exchangeRate: data.exchangeRate,
                 exchangeDate: data.exchangeDate ? new Date(data.exchangeDate) : "",
-                quotationMasterId: data.quotationMasterId,
-                AgainstNo: data.AgainstNo,
+                quotationMasterId: idsArray,
+                AgainstNo: data.voucherNo,
                 lrNo: data.lrNo,
                 printType: data.printType || invoicePrintConfig?.printType || 'Type 2',
                 transportCompany: data.transportCompany,
@@ -949,6 +1049,9 @@ const PerformaInvoiceSkin = () => {
                 billDiscountWithTax: data?.billDiscountWithTax,
                 taxType: data.taxType || generalSettings.taxType,
                 invoiceDetails: salesDetailsWithProducts,
+                othercharge: data.othercharge || '',           // ← ADD THIS
+                OtherChargeRemark: data.OtherChargeRemark || '', // ← ADD THIS
+                otherChargeLedgerId: data.otherChargeLedgerId || '', // ← ADD THIS
             }));
 
             setResetTableKey((prev) => prev + 1);
@@ -966,16 +1069,41 @@ const PerformaInvoiceSkin = () => {
 
     // ===== PRINT HELPERS =====
 
-    const buildInvoiceDataForPrint = useCallback((invoiceNumber) => ({
-        ...formData,
-        invoiceNo: invoiceNumber,
-        date: formData.date,
-        salesDetails: formData.invoiceDetails || formData.salesDetails,
-        // ✅ Explicitly pass address data
-        customerData: formData.customerData,
-        billingAddress: billingAddress,
-        shippingAddress: shippingAdderess,
-    }), [formData, billingAddress, shippingAdderess]); // ✅ add to deps
+    const buildInvoiceDataForPrint = useCallback((invoiceNumber, overrideData) => {
+        const base = overrideData || formData;
+        const mergedCustomerData = {
+            ...(formData.customerData || {}),
+            ...(base.customerData || {}),
+        };
+
+        const rawDetails = base.invoiceDetails || base.salesDetails || [];
+
+        // ✅ Enrich with productName / productNameArb from allProducts by matching productCode
+        const enrichedDetails = rawDetails.map((detail, idx) => {
+            const matchedProduct = allProducts?.find(
+                (p) => p.productCode === detail.productCode
+            );
+
+            return {
+                ...detail,
+                productName: detail.productName || matchedProduct?.productName || '',
+                productNameArb: detail.productNameArb || matchedProduct?.productNameArb || '',
+                unitName: detail.unitName || formData.invoiceDetails?.[idx]?.unitName || formData.salesDetails?.[idx]?.unitName || detail.UnitName || matchedProduct?.unitName || '',
+            };
+        });
+
+        return {
+            ...base,
+            invoiceNo: invoiceNumber,
+            date: base.date,
+            salesDetails: enrichedDetails,
+            invoiceDetails: enrichedDetails,
+            customerData: mergedCustomerData,
+            billingAddress: billingAddress,
+            shippingAddress: shippingAdderess,
+            bankDetails: bankDetails,
+        };
+    }, [formData, billingAddress, shippingAdderess, allProducts]);
 
 
     const handlePrintByType = (invoiceDataForPrint) => {
@@ -985,6 +1113,8 @@ const PerformaInvoiceSkin = () => {
             return proformInvoicePrintTwo(invoiceDataForPrint, selectedBranchDetails, undefined, undefined, currentCurrency);
         } else if (formData.printType === 'Type 3') {
             return proformInvoicePrintThree(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency, undefined,);
+        } else if (formData.printType === 'LS') {
+            return printProformaInvoiceLogismart(invoiceDataForPrint, selectedBranchDetails, undefined, currentCurrency, undefined,);
         } else {
             return proformInvoicePrintTwo(invoiceDataForPrint, selectedBranchDetails, undefined, undefined, currentCurrency);
         }
@@ -1003,6 +1133,11 @@ const PerformaInvoiceSkin = () => {
     // ===== SAVE HANDLER =====
     const handleSave = useCallback(async () => {
         if (!validateForm(formData, validationRules)) return;
+
+        if (formData.totalAmount <= 0) {
+            showToast.error(t("purchaseInvoice.form.messages.totalAmountError"));
+            return;
+        }
 
         const validationErrors = validateFormData();
         if (validationErrors.length > 0) {
@@ -1032,7 +1167,17 @@ const PerformaInvoiceSkin = () => {
         try {
             const dataToSave = {
                 ...formData,
-                date: formatDateWithTime(formData.date)
+                date: formatDateWithTime(formData.date),
+                duedate: formatDateWithTime(formData.date),
+                vatLedgerId: generalSettings?.taxLedgerId,
+                ModifiedUser: isInEditMode ? userId : null,
+                CreatedUser: userId,
+                CreatedDate: new Date(),
+                invoiceDetails: (formData.invoiceDetails || []).map((detail) => ({
+                    ...detail,
+                    ModifiedUser: isInEditMode ? userId : detail?.ModifiedUser ?? null,
+                    CreatedUser: isInEditMode ? detail?.CreatedUser ?? userId : userId,
+                })),
             };
             const api = isInEditMode ? `update-proforma-invoice/${proformaInvoiceId}` : 'save-proforma-invoice'
             const response = await axiosInstance.post(api, dataToSave);
@@ -1044,8 +1189,9 @@ const PerformaInvoiceSkin = () => {
                     setRestoredHeldInvoiceId(null);
                 }
                 showToast.success(response.data.message || (isInEditMode ? t("UpdateSuccess") : t('SaveSuccess')));
+                const printData = response?.data?.data?.payload?.proformaMaster;
 
-                const invoiceDataForPrint = buildInvoiceDataForPrint(editMode ? existingInvoiceNo : invoiceId);
+                const invoiceDataForPrint = buildInvoiceDataForPrint(editMode ? existingInvoiceNo : printData?.proformaNo, printData);
 
                 // ✅ NEW PRINT LOGIC — matches Sales Invoice pattern
                 if (formData.printAfterSave) {
@@ -1056,7 +1202,7 @@ const PerformaInvoiceSkin = () => {
                 } else {
                     // Checkbox OFF → Ask if they want PDF
                     const pdfResult = await Swal.fire({
-                        title: t('print As Pdf') || 'Print as PDF?',
+                        title: t('Print as PDF') || 'Print as PDF?',
                         text: t('Do you want to download this invoice as a PDF?') || 'Do you want to download this proforma invoice as a PDF?',
                         icon: 'question',
                         showCancelButton: true,
@@ -1076,7 +1222,7 @@ const PerformaInvoiceSkin = () => {
                 }
 
                 if (saleSettings.CloseAfterSave) {
-                    setTimeout(() => { navigate('/transaction/proforma-invoice/proforma-invoice-list'); }, formData.printAfterSave ? 1500 : 500);
+                    navigate('/transaction/proforma-invoice/proforma-invoice-list');
                 }
                 if (!editMode) {
                     genarateSalesInvoiceId();
@@ -1084,31 +1230,166 @@ const PerformaInvoiceSkin = () => {
                 }
             }
         } catch (error) {
-            console.error('Error saving sales:', error);
+            console.error('Error saving proforma invoice:', error);
+
+            // ✅ AUTO-HOLD INVOICE ON ERROR
+            const hasValidData = formData.invoiceDetails.some(d => d.productCode && d.qty > 0);
+
+            if (hasValidData) {
+                const heldInvoice = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    invoiceId: invoiceId,
+                    customerName: formData.partyName || 'Unknown Customer',
+                    customerAddress: formData.partyAddress || '',
+                    totalAmount: formData.totalAmount || 0,
+                    itemCount: formData.invoiceDetails.filter(d => d.productCode).length,
+                    branchId: selectedBranchId,
+                    formData: { ...formData },
+                    errorHeld: true
+                };
+
+                setHeldInvoices(prev => {
+                    if (prev.some(inv => inv.id === heldInvoice.id)) return prev;
+                    return [...prev, heldInvoice];
+                });
+
+                showToast.warning(
+                    `Save failed. Invoice has been automatically held. Total held: ${heldInvoices.length + 1}`
+                );
+            }
+
             Swal.fire({
                 icon: 'error',
                 title: t('Error') || 'Error',
-                text:
-                    error.response?.data?.message ||
-                    t('SaveFailed') ||
-                    'Failed to save Proforma Invoice',
+                html: `
+                    <div class="text-left">
+                        <p class="mb-2">${error.response?.data?.message || t('SaveFailed') || 'Failed to save Proforma Invoice'}</p>
+                        ${hasValidData ? '<p class="text-sm text-blue-600">Your invoice data has been automatically held and can be restored later.</p>' : ''}
+                    </div>
+                `,
+                confirmButtonColor: '#3085d6',
+                confirmButtonText: 'OK'
             });
         } finally {
             setIsSaving(false);
         }
-    }, [formData, time, saleSettings, generalSettings, editMode, invoiceId, buildInvoiceDataForPrint, printToPrinterFn, printToPdfFn]);
+    }, [
+        formData,
+        generalSettings,
+        t,
+        isInEditMode,
+        proformaInvoiceId,
+        saleSettings,
+        invoiceId,
+        buildInvoiceDataForPrint,
+        printToPrinterFn,
+        printToPdfFn,
+        currentFinancialYear,
+        financeSettings,
+        invoicePrintConfig,
+        currentCurrencyConversion,
+        selectedBranchId,
+        userId,
+        restoredHeldInvoiceId,
+        heldInvoices.length,
+        editMode,
+        existingInvoiceNo,
+        navigate
+    ]);
+    const fetchProformaDataForPrint = useCallback(async () => {
+        const response = await axiosInstance.get(`get-proforma-invoice-byId/${proformaInvoiceId}`);
+        const data = response.data.data;
 
+        const resolvedTaxData = taxData;
+
+        const salesDetailsWithProducts = (data?.invoiceDetails || []).map((item) => {
+            const taxInfo = resolvedTaxData?.find(t => t.taxId === item?.taxId);
+            const taxRate = taxInfo ? parseFloat(taxInfo?.rate) : 0;
+
+            return {
+                ...item,
+                productName: item?.productname || item?.productName || '',
+                productNameArb: item?.productNameArb || '',
+                unitName: item?.unitName || item?.UnitName || '',
+                qty: parseFloat(item.qty) || 0,
+                freeQty: item.freeQty ? parseFloat(item.freeQty) : null,
+                rate: parseFloat(item.rate) || 0,
+                inclusiveRate: item.inclusiveRate ? parseFloat(item.inclusiveRate) : null,
+                lineDiscountWithTax: parseFloat(item.lineDiscountWithTax) || 0,
+                discountPercentage: parseFloat(item.discountPercentage) || 0,
+                taxRate,
+                PurchaseRate: parseFloat(item.PurchaseRate) || 0,
+                taxAmount: parseFloat(item.taxAmount) || 0,
+                grossAmount: parseFloat(item.grossAmount) || 0,
+                netAmount: parseFloat(item.netAmount) || 0,
+                amount: parseFloat(item.amount) || 0,
+            };
+        });
+
+        return {
+            ...data,
+            date: parseDateFromAPI(data.date),
+            LPODate: parseDateFromAPI(data.LPODate),
+            partyRefDate: parseDateFromAPI(data.partyRefDate),
+            dueDate: parseDateFromAPI(data.dueDate),
+            deliveryDate: parseDateFromAPI(data.deliveryDate),
+            exchangeDate: parseDateFromAPI(data.exchangeDate),
+            invoiceDetails: salesDetailsWithProducts,
+            salesDetails: salesDetailsWithProducts,
+            bankDetails: bankDetails,
+        };
+    }, [proformaInvoiceId, taxData]);
     // ===== EDIT MODE: Print to Printer =====
-    const handleReprintToPrinter = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo);
-        printToPrinterFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn]);
+    const handleReprintToPrinter = useCallback(async () => {
+        if (generalSettings?.askConfirmationPrint) {
+            const result = await Swal.fire({
+                title: t('ConfirmPrintTitle') || 'Confirm Print',
+                text: t('ConfirmPrintText') || 'Are you sure you want to print this invoice?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: t('YesPrint') || 'Yes, Print',
+                cancelButtonText: t('Cancel'),
+            });
+            if (!result.isConfirmed) return;
+        }
 
-    // ===== EDIT MODE: Print as PDF =====
-    const handleReprintToPdf = useCallback(() => {
-        const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo);
-        printToPdfFn(invoiceDataForPrint);
-    }, [buildInvoiceDataForPrint, existingInvoiceNo, printToPdfFn]);
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchProformaDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData);
+            printToPrinterFn(invoiceDataForPrint);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching proforma for reprint:', error);
+            showToast.error('Failed to fetch invoice data for printing');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [generalSettings, t, fetchProformaDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPrinterFn, isElectron]);
+
+    const handleReprintToPdf = useCallback(async () => {
+        setIsPrinting(true);
+        try {
+            const freshData = await fetchProformaDataForPrint();
+            const invoiceDataForPrint = buildInvoiceDataForPrint(existingInvoiceNo, freshData);
+            printToPdfFn(invoiceDataForPrint);
+
+            if (isElectron) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error('Error fetching proforma for PDF reprint:', error);
+            showToast.error('Failed to fetch invoice data for PDF');
+        } finally {
+            setIsPrinting(false);
+        }
+    }, [fetchProformaDataForPrint, buildInvoiceDataForPrint, existingInvoiceNo, printToPdfFn, isElectron]);
 
     // Keyboard shortcut: Ctrl+S
     useEffect(() => {
@@ -1131,7 +1412,7 @@ const PerformaInvoiceSkin = () => {
             onClick: () => navigate("/transaction/proforma-invoice/proforma-invoice-list"),
         },
         !isEditMode && {
-            label: `Hold Invoice${heldInvoices.length > 0 ? ` (${heldInvoices.length})` : ''}`,
+            label: `Hold${heldInvoices.length > 0 ? ` (${heldInvoices.length})` : ''}`,
             icon: Archive,
             type: "secondary",
             onClick: holdCurrentInvoice,
@@ -1166,7 +1447,53 @@ const PerformaInvoiceSkin = () => {
         },
     ].filter(Boolean);
 
-    if (fetchLoading || baseDataloading) {
+    const proformaInvoiceShortcuts = [
+        {
+            heading: 'General',
+            items: [
+                { keys: ['Ctrl', 'S'], description: 'Save / update proforma invoice' },
+                { keys: ['Ctrl', 'H'], description: 'Hold current proforma invoice' },
+                { keys: ['Alt', '/'], description: 'Open help and shortcuts panel' },
+            ],
+        },
+        {
+            heading: 'Product Grid',
+            items: [
+                { keys: ['Enter'], description: 'Move to next field or add a new row' },
+                { keys: ['←', '→'], description: 'Move between editable columns' },
+                { keys: ['↑', '↓'], description: 'Move between rows' },
+            ],
+        },
+    ];
+
+    const proformaInvoiceManual = [
+        {
+            heading: 'Creating a New Proforma Invoice',
+            steps: [
+                'Select the customer and fill in the required header details such as reference numbers and delivery information.',
+                'Add products from the grid by typing the product name or scanning a barcode.',
+                'Set quantity and rate, then review the totals before saving.',
+                'Press Ctrl+S to save or update the proforma invoice.',
+            ],
+        },
+        {
+            heading: 'Holding & Restoring Invoices',
+            steps: [
+                'Press Ctrl+H or click Hold Invoice to temporarily save the current proforma invoice and start a new one.',
+                'Use Restore to view held proforma invoices and bring one back into the form.',
+            ],
+        },
+        {
+            heading: 'Printing & Conversion',
+            steps: [
+                'Choose a print layout from the Print Type dropdown before printing or saving as PDF.',
+                'Use the Print dropdown in edit mode to reprint or download a PDF.',
+                'Convert the proforma invoice into related documents such as a sales order, delivery note, or sales invoice using the Convert menu.',
+            ],
+        },
+    ];
+
+    if (fetchLoading || baseDataloading || privilegeLoading) {
         return (
             <div className="bg-primary dark:bg-primary">
                 <BreadCrumb
@@ -1181,14 +1508,15 @@ const PerformaInvoiceSkin = () => {
             </div>
         );
     }
+    if (!hasAccess) return <NoAcessComponent message={message} />
 
     return (
         <div className='bg-primary dark:bg-primary'>
             <PopupPreloader
-                isOpen={isSaving}
+                isOpen={isSaving || isPrinting}
                 state="loading"
-                title={t("loadingText")}
-                subtitle={t("loadingDesc")}
+                title={isPrinting ? t("Printing") || "Preparing Print..." : t("loadingText")}
+                subtitle={isPrinting ? t("printingDesc") || "Please wait while we prepare your invoice for printing..." : t("loadingDesc")}
             />
             <HeldInvoicesPanel />
             <BreadCrumb
@@ -1220,31 +1548,36 @@ const PerformaInvoiceSkin = () => {
                                 </label>
                             </div>
                         )}
-                        <select
-                            name="printType"
-                            id="printType"
-                            className='border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none'
-                            value={formData.printType}
-                            onChange={(e) => {
-                                setFormData(prev => ({ ...prev, printType: e.target.value }));
-                                localStorage.setItem('printType', e.target.value);
-                            }}
-                        >
-                            {
-                                invoiceTypes.map(type => (
-                                    <option key={type} value={type}>{type}</option>
-                                ))
-                            }
-                        </select>
+                        {invoiceTypes.length > 0 && (
+                            <select
+                                name="printType"
+                                id="printType"
+                                className='border rounded px-2 py-1 text-sm bg-primary dark:bg-primary text-primary dark:text-primary border-themed dark:border-themed focus:outline-none'
+                                value={formData.printType}
+                                onChange={(e) => {
+                                    setFormData(prev => ({ ...prev, printType: e.target.value }));
+                                    localStorage.setItem('printType', e.target.value);
+                                }}
+                            >
+                                {
+                                    invoiceTypes.map(type => (
+                                        <option key={type} value={type}>{type}</option>
+                                    ))
+                                }
+                            </select>
+                        )}
                         {/* Print Dropdown — EDIT MODE ONLY */}
                         {isEditMode && !fetchLoading && (
                             <PrintDropdown
                                 onPrintToPrinter={handleReprintToPrinter}
                                 onPrintToPdf={handleReprintToPdf}
+                                loading={isPrinting}
                             />
                         )}
+                        {isEditMode && <ConvertMenu onConvert={handleConvert} page="proforma" />}
                     </div>
                 }
+                onHelpClick={() => setHelpOpen(true)}
             />
 
             <FormSectionMain
@@ -1279,7 +1612,20 @@ const PerformaInvoiceSkin = () => {
                 setBlillingAddress={setBlillingAddress}
                 setShippingAddress={setShippingAddress}
                 currency={currency}
+                updateCustomerId={updateCustomerId}
+                setUpdateCustomerId={setUpdateCustomerId}
                 otherChargeLedgers={otherChargeLedgers}
+                taxData={taxData}
+
+            />
+            <HelpShortcuts
+                title="Proforma Invoice Help"
+                groups={proformaInvoiceShortcuts}
+                manual={proformaInvoiceManual}
+                buttonPosition="bottom-6 right-22"
+                showFloatingButton={false}
+                open={helpOpen}
+                onOpenChange={setHelpOpen}
 
             />
         </div>
